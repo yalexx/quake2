@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Quake 2 demo game data (licensed, large) - do not commit
+/public/qwasm2/pak0.pak
