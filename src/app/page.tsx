@@ -8,7 +8,7 @@ export default function Home() {
         <p className={styles.subtitle}>
           Unofficial WebAssembly port of the id Tech 2 engine
         </p>
-        <a className={styles.launch} href="/qwasm2/index.html">
+        <a className={styles.launch} href="qwasm2/index.html">
           Launch game
         </a>
       </div>
