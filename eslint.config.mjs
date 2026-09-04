@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Static/vendored assets (third-party game engine + data) are not source:
+    "public/**",
   ]),
 ]);
 
