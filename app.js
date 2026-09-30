@@ -20,6 +20,16 @@ var Module;
   // Saved games and config.cfg: server.js keeps them (the page's sandbox has
   // no IndexedDB or localStorage).
   const USERDATA_URL = "userdata/";
+  // Yamagi lists and loads a save slot only while its server.ssv exists.
+  const SLOT_FILE = "server.ssv";
+  // Startup downloads: tries per file, and the first pause between them.
+  const RESTORE_TRIES = 4;
+  const RESTORE_RETRY_MS = 500;
+  // A failed push is retried after 1 s, 2 s, 4 s, … up to 30 s, until it lands.
+  const PUSH_RETRY_MS = 1000;
+  const PUSH_RETRY_MAX_MS = 30000;
+  // Browsers cap keepalive request bodies at 64 KiB in flight.
+  const KEEPALIVE_MAX_BYTES = 60 * 1024;
   // Matches Emscripten-style progress, e.g. "Downloading data... (123/456)".
   const PROGRESS_RE = /([^(]+)\((\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?|\?)\)/;
   // How long the canvas must stay hidden after showConsole before we treat it
@@ -34,9 +44,16 @@ var Module;
   const detailElement = document.getElementById("detail");
 
   let pakDict = {};
-  let userFiles = null; // path -> Uint8Array from the server, until the engine restores them
-  let syncedFiles = {}; // path -> mtime of the copy the server holds
-  let syncQueue = Promise.resolve();
+  let userStore = null; // what the server keeps, from boot until the engine restores it
+  let userRoot = null; // the engine's IDBFS mount point (/qwasm2)
+  let serverFiles = {}; // relPath -> fingerprint of the copy the server holds
+  let keptFiles = new Set(); // on the server but never downloaded: never deleted there
+  let refusedFiles = {}; // relPath -> fingerprint of a copy the server refused for good
+  let pushWaiters = []; // syncfs callbacks the next push answers
+  let pushRunning = false;
+  let pushFailures = 0; // failed pushes in a row
+  let pushRetryTimer = 0;
+  let pageHiding = false; // the page is going away: small requests use keepalive
   let engineRunning = false; // set once the runtime is up; later statuses are only logged
   let messageShown = false; // an error/exit message owns the indicator
   let lastStatus = { time: 0, text: null };
@@ -125,95 +142,269 @@ var Module;
   // (FS.syncfs(false)). IndexedDB is denied in the box's sandboxed iframe, so
   // both directions go to server.js instead: the files are downloaded before
   // the engine starts and uploaded whenever the mount changes.
+  //
+  // A push uploads every file whose size or content hash differs from the
+  // server's copy and deletes what the game deleted. For each directory it
+  // touches, the server's server.ssv goes first and the new one is uploaded
+  // last, so a push cut short leaves an empty slot, never a mix of two saves.
 
   function userDataUrl(relPath) {
     return USERDATA_URL + relPath.split("/").map(encodeURIComponent).join("/");
   }
 
-  // Resolves to { relPath: Uint8Array } for every file the server keeps, or
-  // to null when the server has no save storage (the engine then keeps its
-  // own IndexedDB sync, which works outside the sandbox).
+  // The console log changes all the time and is no use after a reload.
+  function isSyncedPath(relPath) {
+    return !/\.log$/i.test(relPath);
+  }
+
+  function slotFileOf(dir) {
+    return dir ? dir + "/" + SLOT_FILE : SLOT_FILE;
+  }
+
+  function dirOf(relPath) {
+    const slash = relPath.lastIndexOf("/");
+    return slash < 0 ? "" : relPath.slice(0, slash);
+  }
+
+  // Size plus 32-bit FNV-1a: a rewrite in the same millisecond keeps the
+  // mtime, so only the content tells it apart.
+  function fingerprint(data) {
+    let hash = 0x811c9dc5;
+    for (let i = 0; i < data.length; i++) hash = Math.imul(hash ^ data[i], 0x01000193);
+    return data.length + ":" + (hash >>> 0).toString(16);
+  }
+
+  // 2xx: done. 4xx other than 408/429: refused for good. Anything else (5xx,
+  // 408, 429, no answer at all) may pass on a retry.
+  function isRefusal(status) {
+    return status >= 400 && status < 500 && status !== 408 && status !== 429;
+  }
+
+  function wait(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  // GETs url, retrying what may pass. Resolves to { status, body }: body is
+  // the ArrayBuffer of a 2xx answer, null for a refusal. Rejects once every
+  // try failed.
+  async function fetchWithRetry(url) {
+    for (let attempt = 1; ; attempt++) {
+      let failure;
+      try {
+        const response = await fetch(url, { cache: "no-store" });
+        if (response.ok) return { status: response.status, body: await response.arrayBuffer() };
+        if (isRefusal(response.status)) return { status: response.status, body: null };
+        failure = "HTTP " + response.status;
+      } catch (error) {
+        failure = "network error: " + error.message;
+      }
+      if (attempt >= RESTORE_TRIES) throw new Error(failure + ", " + attempt + " tries");
+      await wait(RESTORE_RETRY_MS * 2 ** (attempt - 1));
+    }
+  }
+
+  // Resolves to { files: { relPath: Uint8Array }, missed: [relPath] } for
+  // what the server keeps, or to null when it has no save storage (the
+  // engine then keeps its own IndexedDB sync, which works outside the
+  // sandbox). `missed` lists the files that never downloaded.
   async function downloadUserData() {
     let listing;
     try {
-      const response = await fetch(USERDATA_URL, { cache: "no-store" });
-      if (!response.ok) throw new Error("HTTP " + response.status);
-      listing = (await response.json()).files;
-      if (!Array.isArray(listing)) throw new Error("unexpected listing");
+      const answer = await fetchWithRetry(USERDATA_URL);
+      if (!answer.body) throw new Error("HTTP " + answer.status);
+      try {
+        listing = JSON.parse(new TextDecoder().decode(answer.body)).files;
+      } catch (error) {
+        listing = null;
+      }
+      if (!Array.isArray(listing)) throw new Error("not a file listing");
     } catch (error) {
-      console.warn("No save storage on the server; saved games will not survive a reload.", error);
+      console.warn("Saved games: no save storage at " + USERDATA_URL + " (" + error.message + "); saved games will not survive a reload.");
       return null;
     }
     const files = {};
+    const missed = [];
     await Promise.all(listing.map(async function (entry) {
+      const relPath = entry && entry.path;
+      if (typeof relPath !== "string" || !isSyncedPath(relPath)) return;
       try {
-        const response = await fetch(userDataUrl(entry.path), { cache: "no-store" });
-        if (!response.ok) throw new Error("HTTP " + response.status);
-        files[entry.path] = new Uint8Array(await response.arrayBuffer());
+        const answer = await fetchWithRetry(userDataUrl(relPath));
+        if (answer.body) files[relPath] = new Uint8Array(answer.body);
+        // A 404 means it was deleted since the listing: nothing left to keep.
+        else if (answer.status !== 404) throw new Error("HTTP " + answer.status);
       } catch (error) {
-        console.warn("Could not restore " + entry.path + ":", error);
+        missed.push(relPath);
+        console.warn("Saved games: could not download " + relPath + " (" + error.message + "); the server's copy is left alone.");
       }
     }));
-    return files;
+    return { files: files, missed: missed };
   }
 
-  // Every regular file under dir, as relPath -> mtime.
-  function listMountFiles(dir, prefix, out) {
+  // Every synced regular file under dir, as relPath -> contents.
+  function readMountFiles(dir, prefix, out) {
     for (const name of FS.readdir(dir)) {
       if (name === "." || name === "..") continue;
-      const stat = FS.stat(dir + "/" + name);
-      if (FS.isDir(stat.mode)) listMountFiles(dir + "/" + name, prefix + name + "/", out);
-      else if (FS.isFile(stat.mode)) out[prefix + name] = stat.mtime.getTime();
+      const path = dir + "/" + name;
+      const stat = FS.stat(path);
+      if (FS.isDir(stat.mode)) readMountFiles(path, prefix + name + "/", out);
+      else if (FS.isFile(stat.mode) && isSyncedPath(prefix + name)) out[prefix + name] = FS.readFile(path);
     }
     return out;
   }
 
   function restoreUserData(root) {
+    const store = userStore;
+    userStore = null;
+    if (!store) return;
+    for (const relPath of store.missed) keptFiles.add(relPath);
     let restored = 0;
-    for (const relPath in userFiles) {
+    for (const relPath in store.files) {
       const fullPath = root + "/" + relPath;
       try {
         FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf("/")));
-        FS.writeFile(fullPath, userFiles[relPath]);
-        syncedFiles[relPath] = FS.stat(fullPath).mtime.getTime();
+        FS.writeFile(fullPath, store.files[relPath]);
+        serverFiles[relPath] = fingerprint(store.files[relPath]);
         restored++;
       } catch (error) {
-        console.warn("Could not restore " + relPath + ":", error);
+        // Not in the mount, so a push must not read that as a deletion.
+        keptFiles.add(relPath);
+        console.warn("Saved games: could not restore " + relPath + ":", error);
       }
     }
-    console.info("Restored " + restored + " saved file(s) from the server.");
-    userFiles = null;
+    console.info("Saved games: restored " + restored + " file(s) from the server" +
+      (keptFiles.size ? "; " + keptFiles.size + " could not be restored and stay on the server untouched." : "."));
   }
 
   // No Content-Type and no custom headers: a "simple" CORS request, which the
-  // sandboxed page can send without a preflight. Resolves to false when the
-  // server refuses the file for good (e.g. 403 for `save .x`, a dot-named
-  // slot), so one such file cannot hold back every file after it.
+  // sandboxed page can send without a preflight. Resolves to the HTTP status
+  // once the server took the request or refused it for good (e.g. 403 for
+  // `save .x`, a dot-named slot); rejects when a retry may get it through.
   async function sendUserData(relPath, data) {
-    const response = await fetch(userDataUrl(relPath) + (data ? "" : "?delete"), { method: "POST", body: data });
-    if (response.ok) return true;
-    const status = response.status;
-    if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
-    throw new Error("HTTP " + status + " for " + relPath);
+    const what = (data ? "upload " : "delete ") + relPath;
+    const init = { method: "POST", body: data };
+    // A keepalive request outlives the page, within the browser's 64 KiB cap.
+    if (pageHiding && (!data || data.length < KEEPALIVE_MAX_BYTES)) init.keepalive = true;
+    let response;
+    try {
+      response = await fetch(userDataUrl(relPath) + (data ? "" : "?delete"), init);
+    } catch (error) {
+      throw new Error("could not " + what + " (network error: " + error.message + ")");
+    }
+    if (response.ok || isRefusal(response.status)) return response.status;
+    throw new Error("could not " + what + " (HTTP " + response.status + ")");
   }
 
-  // Uploads what changed under the mount since the last sync, then removes
-  // what the game deleted (Yamagi wipes a slot before it rewrites it).
-  async function pushUserData(root) {
-    const files = listMountFiles(root, "", {});
-    const uploads = [];
-    for (const relPath in files) {
-      if (syncedFiles[relPath] !== files[relPath]) uploads.push([relPath, FS.readFile(root + "/" + relPath)]);
+  async function uploadToServer(relPath, data, print, done) {
+    const status = await sendUserData(relPath, data);
+    if (isRefusal(status)) {
+      // Not retried until the game writes something else there.
+      refusedFiles[relPath] = print;
+      console.warn("Saved games: the server refused " + relPath + " (HTTP " + status + "); it will not survive a reload.");
+      return;
     }
-    const removals = Object.keys(syncedFiles).filter(function (relPath) { return !(relPath in files); });
-    for (const [relPath, data] of uploads) {
-      if (!(await sendUserData(relPath, data))) console.warn("The server refused " + relPath + "; it will not survive a reload.");
-      syncedFiles[relPath] = files[relPath];
+    serverFiles[relPath] = print;
+    keptFiles.delete(relPath);
+    delete refusedFiles[relPath];
+    done.uploaded++;
+  }
+
+  async function deleteFromServer(relPath, done) {
+    const status = await sendUserData(relPath, null);
+    // A path the server refuses (e.g. a dot-named slot) cannot be stored there.
+    if (isRefusal(status)) console.warn("Saved games: the server refused to delete " + relPath + " (HTTP " + status + ").");
+    else done.deleted++;
+    delete serverFiles[relPath];
+    keptFiles.delete(relPath);
+  }
+
+  // Brings the server in line with the mount. serverFiles follows every
+  // request that lands, so a push cut short resumes where it stopped.
+  // Resolves to a summary line, or to null when nothing had to change.
+  async function pushUserData(root) {
+    // Read everything first: the game may write again before the push ends.
+    const local = readMountFiles(root, "", {});
+    const prints = {};
+    const uploads = [];
+    const dirs = new Set();
+    for (const relPath in local) {
+      const print = fingerprint(local[relPath]);
+      prints[relPath] = print;
+      if (serverFiles[relPath] === print || refusedFiles[relPath] === print) continue;
+      uploads.push(relPath);
+      dirs.add(dirOf(relPath));
+    }
+    // Only files the server was seen to hold: keptFiles are never deleted.
+    const removals = Object.keys(serverFiles).filter(function (relPath) { return !(relPath in local); });
+    for (const relPath of removals) dirs.add(dirOf(relPath));
+    if (!dirs.size) return null;
+
+    const done = { uploaded: 0, deleted: 0 };
+    const slotFiles = new Set();
+    for (const dir of dirs) {
+      const slotFile = slotFileOf(dir);
+      const replaced = slotFile in local && refusedFiles[slotFile] !== prints[slotFile];
+      // A server.ssv that never downloaded is only taken off to be replaced.
+      if (slotFile in serverFiles || (replaced && keptFiles.has(slotFile))) await deleteFromServer(slotFile, done);
+      if (replaced) slotFiles.add(slotFile);
+    }
+    for (const relPath of uploads) {
+      if (!slotFiles.has(relPath)) await uploadToServer(relPath, local[relPath], prints[relPath], done);
     }
     for (const relPath of removals) {
-      await sendUserData(relPath, null);
-      delete syncedFiles[relPath];
+      if (relPath in serverFiles) await deleteFromServer(relPath, done);
     }
+    for (const slotFile of slotFiles) await uploadToServer(slotFile, local[slotFile], prints[slotFile], done);
+
+    return done.uploaded + " file(s) uploaded, " + done.deleted + " deleted in " +
+      Array.from(dirs, function (dir) { return dir || "."; }).join(", ");
+  }
+
+  // One push at a time. A syncfs call is answered by the first push that
+  // starts after it. A failed push is retried with backoff until it lands;
+  // a new syncfs call (the next `save`) retries straight away.
+  function requestPush(callback) {
+    if (callback) pushWaiters.push(callback);
+    if (pushRunning) return; // runPush starts the next one when it ends
+    clearTimeout(pushRetryTimer);
+    pushRetryTimer = 0;
+    runPush();
+  }
+
+  async function runPush() {
+    pushRunning = true;
+    const waiters = pushWaiters;
+    pushWaiters = [];
+    let error = null;
+    try {
+      const summary = await pushUserData(userRoot);
+      if (summary) console.info("Saved games: " + summary + (pushFailures ? " (after " + pushFailures + " failed tries)." : "."));
+      pushFailures = 0;
+    } catch (caught) {
+      error = caught;
+      pushFailures++;
+    }
+    pushRunning = false;
+    const retryMs = Math.min(PUSH_RETRY_MS * 2 ** (pushFailures - 1), PUSH_RETRY_MAX_MS);
+    if (error) {
+      console.warn("Saved games: " + error.message + "; retrying in " + retryMs / 1000 + " s.");
+      // Whoever asked meanwhile hears about it too; the retry takes their changes along.
+      waiters.push(...pushWaiters);
+      pushWaiters = [];
+    }
+    // A callback may ask for the next push at once (IDBFS's autoPersist does).
+    for (const callback of waiters) {
+      try {
+        callback(error);
+      } catch (callbackError) {
+        console.error(callbackError);
+      }
+    }
+    if (pushRunning || pushRetryTimer) return;
+    if (pushWaiters.length) runPush();
+    else if (error) pushRetryTimer = setTimeout(function () {
+      pushRetryTimer = 0;
+      requestPush(null);
+    }, retryMs);
   }
 
   function useServerStorage(idbfs) {
@@ -222,24 +413,27 @@ var Module;
     const mountFs = idbfs.mount;
     idbfs.mount = function (mount) {
       mount.opts = Object.assign({}, mount.opts, { autoPersist: true });
+      userRoot = mount.mountpoint;
       return mountFs(mount);
     };
     idbfs.syncfs = function (mount, populate, callback) {
+      userRoot = mount.mountpoint;
       if (populate) {
         restoreUserData(mount.mountpoint);
         callback(null);
         return;
       }
-      // One sync at a time, each diffing against what the last one sent.
-      const push = syncQueue.then(function () { return pushUserData(mount.mountpoint); });
-      syncQueue = push.catch(function () {});
-      push.then(function () {
-        callback(null);
-      }, function (error) {
-        console.warn("Could not save to the server:", error);
-        callback(error);
-      });
+      requestPush(callback);
     };
+    // Leaving or reloading the page: get whatever is still unsent on its way.
+    window.addEventListener("pagehide", function () {
+      if (!userRoot) return;
+      pageHiding = true;
+      requestPush(null);
+    });
+    window.addEventListener("pageshow", function () {
+      pageHiding = false;
+    });
   }
 
   // ---- Module: every callback the Qwasm2 engine uses ---------------------
@@ -313,7 +507,7 @@ var Module;
       }
       // MemFS holds its own copy now; drop ours so the buffers can be freed.
       pakDict = {};
-      if (userFiles && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
+      if (userStore && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
       engineRunning = true;
       hideIndicator();
     },
@@ -573,7 +767,7 @@ var Module;
       if (data) pakDict[name] = data;
     }
     Module.setStatus("Loading saved games...");
-    userFiles = await downloadUserData();
+    userStore = await downloadUserData();
     startEngine();
   }
 
