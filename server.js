@@ -46,14 +46,18 @@ const server = http.createServer((req, res) => {
 
   fs.stat(filePath, (err, st) => {
     if (err || !st.isFile()) {
-      res.writeHead(404, { "Content-Type": "text/plain" }).end("Not found");
+      res.writeHead(404, { "Content-Type": "text/plain", "Access-Control-Allow-Origin": "*" }).end("Not found");
       return;
     }
     const ext = path.extname(filePath).toLowerCase();
+    // The box frames the app with `CSP: sandbox` (no allow-same-origin), so the
+    // page's origin is opaque and every fetch() it makes is a CORS request.
     res.writeHead(200, {
       "Content-Type": MIME[ext] || "application/octet-stream",
       "Content-Length": st.size,
       "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=3600",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Expose-Headers": "Content-Length",
     });
     if (req.method === "HEAD") return res.end();
     fs.createReadStream(filePath).pipe(res);
