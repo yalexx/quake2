@@ -1,0 +1,7 @@
+{
+  "name": "Quake 2",
+  "description": "Quake 2 in the browser (Qwasm2 WebAssembly engine) - boots straight into the game.",
+  "kind": "server",
+  "port": 4231,
+  "start": "node server.js"
+}
