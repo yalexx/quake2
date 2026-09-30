@@ -17,6 +17,9 @@ var Module;
   const OPTIONAL_PAKS = ["pak1.pak", "pak2.pak"];
   const ENGINE_DIR = "engine/";
   const ENGINE_SCRIPT = ENGINE_DIR + "index.js";
+  // Saved games and config.cfg: server.js keeps them (the page's sandbox has
+  // no IndexedDB or localStorage).
+  const USERDATA_URL = "userdata/";
   // Matches Emscripten-style progress, e.g. "Downloading data... (123/456)".
   const PROGRESS_RE = /([^(]+)\((\d+(?:\.\d+)?)\/(\d+(?:\.\d+)?|\?)\)/;
   // How long the canvas must stay hidden after showConsole before we treat it
@@ -31,6 +34,9 @@ var Module;
   const detailElement = document.getElementById("detail");
 
   let pakDict = {};
+  let userFiles = null; // path -> Uint8Array from the server, until the engine restores them
+  let syncedFiles = {}; // path -> mtime of the copy the server holds
+  let syncQueue = Promise.resolve();
   let engineRunning = false; // set once the runtime is up; later statuses are only logged
   let messageShown = false; // an error/exit message owns the indicator
   let lastStatus = { time: 0, text: null };
@@ -113,6 +119,129 @@ var Module;
     return args;
   }
 
+  // ---- Saved games -------------------------------------------------------
+  // The engine writes saves and config.cfg under /qwasm2, an IDBFS mount it
+  // restores at startup (FS.syncfs(true)) and syncs after `save` and on quit
+  // (FS.syncfs(false)). IndexedDB is denied in the box's sandboxed iframe, so
+  // both directions go to server.js instead: the files are downloaded before
+  // the engine starts and uploaded whenever the mount changes.
+
+  function userDataUrl(relPath) {
+    return USERDATA_URL + relPath.split("/").map(encodeURIComponent).join("/");
+  }
+
+  // Resolves to { relPath: Uint8Array } for every file the server keeps, or
+  // to null when the server has no save storage (the engine then keeps its
+  // own IndexedDB sync, which works outside the sandbox).
+  async function downloadUserData() {
+    let listing;
+    try {
+      const response = await fetch(USERDATA_URL, { cache: "no-store" });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+      listing = (await response.json()).files;
+      if (!Array.isArray(listing)) throw new Error("unexpected listing");
+    } catch (error) {
+      console.warn("No save storage on the server; saved games will not survive a reload.", error);
+      return null;
+    }
+    const files = {};
+    await Promise.all(listing.map(async function (entry) {
+      try {
+        const response = await fetch(userDataUrl(entry.path), { cache: "no-store" });
+        if (!response.ok) throw new Error("HTTP " + response.status);
+        files[entry.path] = new Uint8Array(await response.arrayBuffer());
+      } catch (error) {
+        console.warn("Could not restore " + entry.path + ":", error);
+      }
+    }));
+    return files;
+  }
+
+  // Every regular file under dir, as relPath -> mtime.
+  function listMountFiles(dir, prefix, out) {
+    for (const name of FS.readdir(dir)) {
+      if (name === "." || name === "..") continue;
+      const stat = FS.stat(dir + "/" + name);
+      if (FS.isDir(stat.mode)) listMountFiles(dir + "/" + name, prefix + name + "/", out);
+      else if (FS.isFile(stat.mode)) out[prefix + name] = stat.mtime.getTime();
+    }
+    return out;
+  }
+
+  function restoreUserData(root) {
+    let restored = 0;
+    for (const relPath in userFiles) {
+      const fullPath = root + "/" + relPath;
+      try {
+        FS.mkdirTree(fullPath.slice(0, fullPath.lastIndexOf("/")));
+        FS.writeFile(fullPath, userFiles[relPath]);
+        syncedFiles[relPath] = FS.stat(fullPath).mtime.getTime();
+        restored++;
+      } catch (error) {
+        console.warn("Could not restore " + relPath + ":", error);
+      }
+    }
+    console.info("Restored " + restored + " saved file(s) from the server.");
+    userFiles = null;
+  }
+
+  // No Content-Type and no custom headers: a "simple" CORS request, which the
+  // sandboxed page can send without a preflight. Resolves to false when the
+  // server refuses the file for good (e.g. 403 for `save .x`, a dot-named
+  // slot), so one such file cannot hold back every file after it.
+  async function sendUserData(relPath, data) {
+    const response = await fetch(userDataUrl(relPath) + (data ? "" : "?delete"), { method: "POST", body: data });
+    if (response.ok) return true;
+    const status = response.status;
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+    throw new Error("HTTP " + status + " for " + relPath);
+  }
+
+  // Uploads what changed under the mount since the last sync, then removes
+  // what the game deleted (Yamagi wipes a slot before it rewrites it).
+  async function pushUserData(root) {
+    const files = listMountFiles(root, "", {});
+    const uploads = [];
+    for (const relPath in files) {
+      if (syncedFiles[relPath] !== files[relPath]) uploads.push([relPath, FS.readFile(root + "/" + relPath)]);
+    }
+    const removals = Object.keys(syncedFiles).filter(function (relPath) { return !(relPath in files); });
+    for (const [relPath, data] of uploads) {
+      if (!(await sendUserData(relPath, data))) console.warn("The server refused " + relPath + "; it will not survive a reload.");
+      syncedFiles[relPath] = files[relPath];
+    }
+    for (const relPath of removals) {
+      await sendUserData(relPath, null);
+      delete syncedFiles[relPath];
+    }
+  }
+
+  function useServerStorage(idbfs) {
+    // The engine only syncs after `save` (and on quit), not after the autosave
+    // on a level change, so let IDBFS sync after any write under the mount.
+    const mountFs = idbfs.mount;
+    idbfs.mount = function (mount) {
+      mount.opts = Object.assign({}, mount.opts, { autoPersist: true });
+      return mountFs(mount);
+    };
+    idbfs.syncfs = function (mount, populate, callback) {
+      if (populate) {
+        restoreUserData(mount.mountpoint);
+        callback(null);
+        return;
+      }
+      // One sync at a time, each diffing against what the last one sent.
+      const push = syncQueue.then(function () { return pushUserData(mount.mountpoint); });
+      syncQueue = push.catch(function () {});
+      push.then(function () {
+        callback(null);
+      }, function (error) {
+        console.warn("Could not save to the server:", error);
+        callback(error);
+      });
+    };
+  }
+
   // ---- Module: every callback the Qwasm2 engine uses ---------------------
 
   Module = {
@@ -184,6 +313,7 @@ var Module;
       }
       // MemFS holds its own copy now; drop ours so the buffers can be freed.
       pakDict = {};
+      if (userFiles && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
       engineRunning = true;
       hideIndicator();
     },
@@ -442,6 +572,8 @@ var Module;
       const data = await downloadPak(name, false);
       if (data) pakDict[name] = data;
     }
+    Module.setStatus("Loading saved games...");
+    userFiles = await downloadUserData();
     startEngine();
   }
 
