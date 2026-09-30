@@ -1,1 +1,75 @@
-html,body{margin:0;height:100%;background:#000;overflow:hidden}
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: #000;
+  overflow: hidden;
+}
+
+/* Game canvas: letterboxed to the engine's aspect ratio and centred
+   (sizing rules from the upstream Qwasm2 page; Module.winResized
+   rewrites them once the engine reports its real resolution). */
+canvas {
+  display: none;
+  border: 0;
+  background-color: #000;
+  width: calc(min(100vw, 100vh * 4 / 3));
+  height: calc(min(100vh, 100vw * 0.75));
+  margin-top: calc(0.5 * (100vh - (min(100vh, 100vw * 0.75))));
+  margin-left: auto;
+  margin-right: auto;
+  outline: none;
+}
+
+@supports (height: 1dvh) {
+  canvas {
+    width: calc(min(100dvw, 100dvh * 4 / 3));
+    height: calc(min(100dvh, 100dvw * 0.75));
+    margin-top: calc(0.5 * (100dvh - (min(100dvh, 100dvw * 0.75))));
+  }
+}
+
+/* Loading indicator / exit message, centred over the black page. */
+#loading {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 0 16px;
+  color: #c8c8c8;
+  font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  text-align: center;
+  pointer-events: none;
+  user-select: none;
+}
+
+#loading[hidden],
+#progress[hidden] {
+  display: none;
+}
+
+#progress {
+  width: min(320px, 70vw);
+  height: 2px;
+  background: #2a2a2a;
+  overflow: hidden;
+}
+
+#progress-bar {
+  width: 100%;
+  height: 100%;
+  background: #c8c8c8;
+  transform: scaleX(0);
+  transform-origin: left center;
+}
+
+#detail {
+  min-height: 1.4em;
+  color: #808080;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}

@@ -3,12 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,height=device-height,initial-scale=1">
+<meta name="color-scheme" content="dark">
 <title>Quake 2</title>
+<link rel="icon" href="favicon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- Placeholder: the coding agent replaces this with the auto-booting game page. -->
-<canvas id="canvas" tabindex="-1"></canvas>
+<div id="loading" role="status" aria-live="polite">
+  <div id="status">Loading…</div>
+  <div id="progress" hidden><div id="progress-bar"></div></div>
+  <div id="detail"></div>
+</div>
+<canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
 <script src="app.js"></script>
 </body>
 </html>
