@@ -366,12 +366,12 @@ var Module;
     try {
       response = await fetch(url);
     } catch (error) {
-      if (required) throw new Error("network error fetching " + url);
+      if (required) throw new Error("Could not reach the server for " + url + ".", { cause: error });
       console.warn("Skipping " + url + ":", error);
       return null;
     }
     if (!response.ok) {
-      if (required) throw new Error(url + " returned HTTP " + response.status);
+      if (required) throw new Error("The server answered HTTP " + response.status + " for " + url + ".");
       if (response.status !== 404) console.warn("Skipping " + url + ": HTTP " + response.status);
       return null;
     }
@@ -402,7 +402,7 @@ var Module;
         Module.setStatus(label + " (" + loaded + "/" + (total && loaded <= total ? total : "?") + ")");
       }
       if (buffer) {
-        if (loaded !== buffer.length) throw new Error("download of " + url + " was cut short");
+        if (loaded !== buffer.length) throw new Error("cut short at " + loaded + " of " + buffer.length + " bytes");
         return buffer;
       }
       const data = new Uint8Array(loaded);
@@ -413,7 +413,7 @@ var Module;
       }
       return data;
     } catch (error) {
-      if (required) throw error;
+      if (required) throw new Error("The download of " + url + " was interrupted.", { cause: error });
       console.warn("Skipping " + url + ":", error);
       return null;
     }
@@ -435,7 +435,7 @@ var Module;
       pakDict[REQUIRED_PAK] = await downloadPak(REQUIRED_PAK, true);
     } catch (error) {
       console.error("Could not download game data:", error);
-      showMessage("Could not download the game data.", error.message + " — reload the page to try again.");
+      showMessage("Could not download the game data.", error.message + " Reload the page to try again.");
       return;
     }
     for (const name of OPTIONAL_PAKS) {
