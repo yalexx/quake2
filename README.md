@@ -18,7 +18,8 @@ engine files in `engine/` were copied from the project's public site
 | `index.html`, `style.css`, `app.js` | The page: a full-viewport canvas that boots the engine immediately |
 | `engine/` | `index.js` (Emscripten loader), `index.wasm`, `index.data`, `game_baseq2.wasm`, `ref_gles3.wasm`, `ref_gl1.wasm`, `ref_soft.wasm`, `license.txt` |
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
-| `server.js` | Zero-dependency Node static server, 127.0.0.1:4231, serves `/` and `/apps/quake2/` |
+| `server.js` | Zero-dependency Node static server, 127.0.0.1:4231, serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` |
+| `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -43,6 +44,17 @@ engine files in `engine/` were copied from the project's public site
   `requestPointerLock()` inside a user gesture, so fall back to locking on the
   next keydown/click (see the reference `_lockPointerOnKey`).
 - Renderer can be forced with `Module.arguments = ['+set','vid_renderer','gles3']`.
+- Saves: the engine writes everything it saves (`save/…`, `config.cfg`) to
+  `/qwasm2/baseq2`, an Emscripten IDBFS mount it restores with
+  `FS.syncfs(true)` at startup and syncs with `FS.syncfs(false)` after `save`
+  and on quit. The box frames the page as an opaque-origin sandbox, where
+  IndexedDB is denied, so `app.js` swaps IDBFS's `syncfs` for one backed by
+  `server.js`. It downloads `userdata/` before the engine starts, restores it
+  into the mount, and uploads changed files (and deletes removed ones) after
+  every write, including the level-change autosave, which the engine never
+  syncs itself. Uploads are plain `POST`s with no custom headers, so the
+  sandboxed page needs no CORS preflight. If the server has no `userdata/`,
+  the engine's own IndexedDB sync is left alone.
 
 ## Run
 
