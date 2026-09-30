@@ -186,10 +186,15 @@ var Module;
   }
 
   // No Content-Type and no custom headers: a "simple" CORS request, which the
-  // sandboxed page can send without a preflight.
+  // sandboxed page can send without a preflight. Resolves to false when the
+  // server refuses the file for good (e.g. 403 for `save .x`, a dot-named
+  // slot), so one such file cannot hold back every file after it.
   async function sendUserData(relPath, data) {
     const response = await fetch(userDataUrl(relPath) + (data ? "" : "?delete"), { method: "POST", body: data });
-    if (!response.ok) throw new Error("HTTP " + response.status + " for " + relPath);
+    if (response.ok) return true;
+    const status = response.status;
+    if (status >= 400 && status < 500 && status !== 408 && status !== 429) return false;
+    throw new Error("HTTP " + status + " for " + relPath);
   }
 
   // Uploads what changed under the mount since the last sync, then removes
@@ -202,7 +207,7 @@ var Module;
     }
     const removals = Object.keys(syncedFiles).filter(function (relPath) { return !(relPath in files); });
     for (const [relPath, data] of uploads) {
-      await sendUserData(relPath, data);
+      if (!(await sendUserData(relPath, data))) console.warn("The server refused " + relPath + "; it will not survive a reload.");
       syncedFiles[relPath] = files[relPath];
     }
     for (const relPath of removals) {
