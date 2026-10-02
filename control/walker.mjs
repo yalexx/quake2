@@ -50,16 +50,18 @@ const WALK_DEFAULTS = {
   maxJumpDown: 300,
   cell: 24,
   step: 4,
-  // How far down the route a single straight walk may aim. A route point with a
-  // clear line to it is worth walking at even when it is far off, but "clear
-  // line" only says no wall *stands* on the line -- it says nothing about the
-  // pockets the player's own sliding can carry them into on the way. Aiming at a
-  // point past one of those walks the player into it and the leg stalls there
-  // (demo1 has one at -427 111: the line from the spawn room to the far west is
-  // clear, and the walk slides into the dead end instead of taking the corridor
-  // a few units to the south). Capping the aim keeps the walk on the corridor the
-  // route actually planned.
-  maxLegDistance: 360,
+  // How far down the route a single straight walk may aim -- a guard rail, not a
+  // leash. The trap it guards is real: demo1 has a dead-end pocket at -427 111,
+  // and the line from the start room to the far west runs right past it, so a leg
+  // aimed far off can slide in and stall. But a *tight* cap is worse than the
+  // trap: measured against demo1, capping at 360 stalled every walk in the first
+  // corridor (2043, 2049, 2032 and 2022 units short of the exit), because every
+  // leg that ends at a wall costs a re-plan, while a long leg carries the player
+  // out of the start room and 3,286 units down the level -- 1407 units from the
+  // exit -- before the soldiers kill them. What keeps a walk pointed forwards is
+  // the nearest-point rule in #farthestVisible; this is only here so that one leg
+  // cannot aim the length of the level.
+  maxLegDistance: 1200,
 };
 
 export class RouteWalker {
