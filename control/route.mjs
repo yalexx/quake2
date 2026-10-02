@@ -74,7 +74,8 @@ const PAK_ENTRY_BYTES = 64; // char name[56], int offset, int length
 // Honouring it here confined the whole of demo1 to a 128k-voxel bubble around
 // the spawn and reported spawn -> exit as NO_ROUTE, against a player who
 // demonstrably walks out of that bubble. So the player's mask is solid|window;
-// PLAYERCLIP stays exported for a caller that wants the stock mask back.
+// CONTENTS_PLAYERCLIP and STOCK_PLAYER_SOLID are exported so a caller can ask
+// for the stock mask back.
 const CONTENTS_SOLID = 1;
 const CONTENTS_WINDOW = 2;
 const CONTENTS_LAVA = 8;

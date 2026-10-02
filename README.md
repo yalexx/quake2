@@ -686,8 +686,11 @@ Two traps are worth knowing before reading any single run's "furthest position":
   at `y -80` (which reaches `-929 420`) and sometimes the dead-end pocket at
   `-427 111`. That -- not a bad reading -- is why one run printed a furthest
   position near `-1007 495` and another stopped at `-427 111`: both positions are
-  real, and the `-1007 495` one is the corridor. `walker.mjs`'s `maxLegDistance`
-  and its forward-only leg selection exist to keep a walk on the planned corridor.
+  real, and the `-1007 495` one is the corridor. `walker.mjs`'s forward-only leg
+  selection exists to keep a walk heading down the corridor instead of back up it;
+  `maxLegDistance` is only a guard rail against one leg aiming the length of the
+  level, because a *tight* cap (360) was measured to stall walks sooner rather
+  than later.
 
 The save slots say the same thing. `save1` is a demo1 save whose player stood at
 `-928 855 5`, on that corridor; `current` and `save0` are level-start autosaves

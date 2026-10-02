@@ -141,10 +141,12 @@ console.log("every jump a route takes is inside maxJump");
 // waiting. It is pinned rather than searched for because finding it costs 73 A*
 // runs and five minutes; the coordinates are the level's, not the test's.
 //
-// The step-up budget here is 18 -- Quake 2's own STEPSIZE, the height a player
-// walks up -- and not the walker's 45. That matters: 45 is the height a *jump*
-// clears, and with it the floor grid can climb this gap a step at a time, so the
-// route takes no jump and there is nothing to measure. At 18 the gap is a gap.
+// Two budgets here are tighter than the walker's, and both are load-bearing.
+// maxStepUp is 18 -- Quake 2's own STEPSIZE, the height a player walks up -- not
+// the walker's 45, which is the height a *jump* clears; and maxDrop is 64, not
+// the walker's 300. With either one at the walker's value the floor grid climbs
+// or descends this gap a step at a time and the route takes no jump at all (both
+// 18/300 and 45/300 measure jumps=[]), so there would be nothing to measure.
 const jumpFrom = { x: -2112, y: 1280, z: 192 };
 const jumpTo = { x: -1232, y: 1504, z: 280 };
 const jumpOptions = { maxStepUp: 18, maxDrop: 64, cell: 16 };
