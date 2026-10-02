@@ -20,7 +20,9 @@ engine files in `engine/` were copied from the project's public site
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store) and `e2e-saves.js` (the real game in headless Chromium), see [Tests](#tests) |
+| `control/` | `bridge.mjs` (drives the running game over CDP) and `server.mjs` (an HTTP front door to it on 127.0.0.1:4233), see [Control interface](#control-interface) |
+| `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as five tools, see [The MCP server](#the-mcp-server) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium) and `quake-control-test.sh` (the live game over CDP), see [Tests](#tests) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -267,18 +269,209 @@ tab still believes the server holds what it last pushed. Use your
 - Wipe everything: `rm -r userdata`. A missing store lists as empty, and the
   next save creates it again.
 
+## Control interface
+
+An external agent on the box -- OpenClaw, or anything that speaks HTTP or MCP --
+can play the game the kiosk Chromium is showing. Nothing is added to the page:
+the control code drives the live game over the Chrome DevTools Protocol (CDP)
+that the kiosk browser already exposes at `http://127.0.0.1:18801`, so
+`server.js`, the save store and `app.js` are untouched.
+
+| Path | What |
+|---|---|
+| `control/bridge.mjs` | The driver: a zero-dependency ESM module for Node 22+ (the built-in `WebSocket`, no `npm install`) that speaks CDP to the game |
+| `control/server.mjs` | A small HTTP API on `127.0.0.1:4233` (`CONTROL_PORT`) for anything that would rather use `curl` than MCP. A front door to the bridge only: it never serves game files and never touches the server on 4231 |
+| `mcp/server.mjs` | A Model Context Protocol server (JSON-RPC 2.0 over stdin/stdout) exposing the same five calls as tools |
+| `scripts/quake-control-test.sh` | The end-to-end proof against the live game |
+
+### Which frame it drives
+
+The box frames the app in the kiosk Chromium. CDP sees each frame as a target,
+and the input has to go to the game's own frame -- the target (or the child
+frame of the ClawBox page) whose URL contains `/apps/quake2/` -- because the
+top-level ClawBox page is a different document whose UI would swallow the keys
+and the engine would never see them. The bridge looks for the game frame by URL
+and nothing else; if it is not there it raises `GAME_NOT_RUNNING`, naming the
+endpoint and listing every target the browser did have, rather than quietly
+driving the wrong page.
+
+Every call that sends input -- `key`, `tap`, `typeText`, `mouseMove`, `click` --
+first focuses the canvas (`canvas.focus()`), and, when the game does not hold the
+pointer lock yet, sends a real click in the middle of the canvas: browsers only
+grant `requestPointerLock()` inside a user gesture, and a game that is not
+pointer-locked cannot be aimed. An already-locked game is not clicked, because a
+click is Quake's fire button. `status`, `screenshot` and `evaluate` send no input
+and so touch nothing.
+
+### Input really reaches the engine: no `app.js` hook needed
+
+The engine's input handlers are Emscripten/SDL ones registered on the game's own
+document, and a CDP `Input.dispatchKeyEvent` arrives there as a trusted browser
+event -- `isTrusted` is true and the target is the canvas -- so keys, mouse
+movement and clicks go straight in, and `app.js` was left alone. This is not
+taken on trust: `scripts/quake-control-test.sh` types a command into the in-game
+console over CDP and then reads the engine's own console transcript back out of
+the engine's file system (`condump` writes it, `FS.readFile` reads it), so the
+proof comes from the game, not from CDP's "ok". If a future engine build stops
+receiving CDP events, the same test fails at that step, and the fix is an
+in-page hook in `app.js` driven over `Runtime.evaluate`.
+
+Two consequences of driving someone else's browser are worth knowing:
+
+- **Pointer lock is what makes the mouse work.** A pointer-locked page reports
+  `movementX`/`movementY` as the change from the *previous* dispatch position, so
+  the bridge keeps its own cursor, starts it in the middle of the canvas and adds
+  each delta to it. The very first move after the browser has not seen a mouse
+  event for a while can be off by where the browser last thought the pointer was;
+  send one zero-length move (`quake2_mouse` with `dx: 0, dy: 0`) after connecting
+  and every move after it is exact.
+- **A key is a key.** The game is a first-person shooter with the game's own
+  bindings, so a stray keystroke does what it would do for a player at the
+  keyboard: `w` walks, `Escape` opens the menu and a click fires. The test closes
+  the console behind itself for that reason.
+
+### The bridge
+
+`control/bridge.mjs` exports `QuakeControl` (and `createControl`, which does the
+same) plus `ControlError` / `GameNotRunningError`. Every call resolves the game
+frame afresh and opens its own short-lived CDP socket, so a game that has
+reloaded under it is picked up rather than talked to on a stale handle.
+
+| Call | What it does |
+|---|---|
+| `key(key, down)` | Press (`true`) or release (`false`) one key: `"w"`, `"Space"`, `"Enter"`, `"Escape"`, `"F5"`, `"ArrowUp"`, `"Shift"`, `"`"`, `"-"` … Holding a modifier sets its bit on the events that follow, so `key("Shift", true)` then `tap("w")` sends a capital `W` |
+| `tap(key)` | Press and release |
+| `mouseMove(dx, dy)` | Turn/look by a delta. `dx` turns right, `dy` looks down |
+| `click(button)` | `"left"` (fire), `"right"` or `"middle"` |
+| `status()` | What the game is showing: the frame's URL, the engine's state, the canvas size, focus and pointer lock, and the CDP target behind it |
+| `screenshot()` | A PNG of the game frame as a `Buffer` (cropped to the frame when the game is framed) |
+| `typeText(text)` | Type a whole string, one key at a time: how a console command is entered |
+| `evaluate(expression)` | Run an expression inside the game frame and get its JSON value back (an escape hatch: read `FS`, poke `Module`) |
+
+Escape is the one key Chromium will not pass through from CDP: it is the key that
+leaves pointer lock and fullscreen, so the browser takes it before the page ever
+sees it. The bridge rebuilds that one inside the page, where the engine's
+handlers do not care that an event is untrusted, so `quake2_key` with `"Escape"`
+opens and shuts the game's menu like the real thing.
+
+```js
+import { QuakeControl } from "./control/bridge.mjs";
+const game = new QuakeControl();               // or new QuakeControl({ cdpUrl })
+await game.tap("`");                            // open the in-game console
+await game.typeText("god"); await game.tap("Enter");
+await fs.writeFile("screen.png", await game.screenshot());
+```
+
+Point it at another endpoint with `new QuakeControl({ cdpUrl })` or
+`QUAKE2_CDP_URL`; `QUAKE2_CDP_TIMEOUT_MS` bounds each CDP round trip (5 s).
+
+### The HTTP API
+
+`node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`) serves
+one game on `127.0.0.1:4233`. Every response has `Access-Control-Allow-Origin: *`
+and no caching. Bodies are JSON objects of at most 64 KiB.
+
+| Request | Answer |
+|---|---|
+| `POST /control/key` | `{"key":"w"}` taps it; `{"key":"w","down":true}` holds it and `false` releases it; `{"text":"map demo1","enter":true}` types a whole string and presses Enter |
+| `POST /control/mouse` | `{"dx":120,"dy":0}` turns the view |
+| `POST /control/click` | `{"button":"left"}` (the default), `"right"` or `"middle"` |
+| `POST /control/status` (also `GET`) | `200` with the game's state as JSON |
+| `GET /control/screenshot.png` (also `HEAD`) | `200`, `image/png` |
+| `OPTIONS` on any of them | `204`, with the CORS headers |
+
+```sh
+curl -s -X POST 127.0.0.1:4233/control/key -d '{"key":"Escape"}'      # tap Escape
+curl -s -X POST 127.0.0.1:4233/control/mouse -d '{"dx":60,"dy":0}'    # turn right
+curl -s -X POST 127.0.0.1:4233/control/status                          # what the game is showing
+curl -s 127.0.0.1:4233/control/screenshot.png -o screen.png
+```
+
+Failures are JSON: `400` for a bad request, `503` (`GAME_NOT_RUNNING`) when the
+app is not open, `502` when the browser cannot be reached, `500` otherwise. A
+route that does not exist is a `404`, and a wrong method a `405` with `Allow`.
+
+### The MCP server
+
+`mcp/server.mjs` is a stdio MCP server: JSON-RPC 2.0, one message per line on
+stdin and stdout, `initialize` / `tools/list` / `tools/call`, and nothing but
+protocol on stdout. It drives the bridge directly, so it needs no HTTP server
+and no other process running than the browser showing the game.
+
+| Tool | Arguments |
+|---|---|
+| `quake2_key` | `key` (a key to tap), or `down` to hold/release it, or `text` (a whole string to type) with `enter` to press Enter after it |
+| `quake2_mouse` | `dx`, `dy` |
+| `quake2_click` | `button`: `"left"`, `"right"`, `"middle"` |
+| `quake2_status` | -- |
+| `quake2_screenshot` | -- (answers with an image content block, `image/png`) |
+
+A failed call comes back as a normal tool result with `isError: true`, so the
+agent reads the reason rather than seeing the connection die.
+
+Register it with OpenClaw as a stdio server, pointing `command`/`args` at the
+app folder (its own MCP settings file -- this app does not touch gateway
+configuration):
+
+```json
+{
+  "mcpServers": {
+    "quake2": {
+      "command": "node",
+      "args": ["/home/yanko/Projects/quake2/mcp/server.mjs"],
+      "env": { "QUAKE2_CDP_URL": "http://127.0.0.1:18801" }
+    }
+  }
+}
+```
+
+`QUAKE2_CDP_URL` is optional -- it is the default, and the same value
+`control/server.mjs` and the bridge use. Use an absolute path for the script:
+an MCP client starts it with a working directory of its own choosing.
+
 ## Tests
 
-Both scripts use Node built-ins only (no `npm install`) and can be run from
-anywhere:
+The scripts use Node built-ins only (no `npm install`). The first two can be run
+from anywhere:
 
 ```
 node scripts/test-userdata.js    # the /userdata store: exit 0 pass, 1 fail
 node scripts/e2e-saves.js        # the real game: exit 0 pass, 1 fail, 77 skipped
+./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
 
-Each script starts its own `node server.js` on 127.0.0.1:4299, or on a port
-the OS picks when 4299 is taken, and never on 4231. `QUAKE2_DATA_DIR` points
+**`scripts/quake-control-test.sh`** is the one test that needs the game **open
+in the box's browser**, because that is what it drives: it starts nothing, stops
+nothing and writes no saved game. It prints `PASS`/`FAIL` for six steps with the
+raw evidence for each -- the CDP endpoint's target list, the game frame it
+picked, the status JSON, the engine's own console transcript, the PNG's
+signature and size, and the mouse deltas the frame reported -- and exits 0 only
+when all six passed. It goes, in order:
+
+1. The CDP endpoint answers, and the target list is printed.
+2. The game's own frame is there (never the top-level ClawBox page).
+3. The bridge reads the game's status.
+4. A keypress reaches the engine: the test types `echo <marker>` and
+   `condump <name>` into the in-game console over CDP key events, then reads the
+   file `condump` wrote out of the engine's file system and looks for the marker.
+   Those lines can only be there if the engine's input handlers really received
+   the keys.
+5. A screenshot comes back as a real PNG (signature, size, dimensions).
+6. Mouse movement arrives with exactly the delta that was asked for.
+
+It leaves the game playable: the console is shut again, taking the command it
+typed with it, and the dump is deleted from the engine's file system (so nothing
+is left in the save store either). It cannot start a game, and Quake 2 refuses to
+open its console while it has none running -- the attract demo it boots into ends
+after a few minutes and leaves the main menu up -- so when that is what happened,
+the test reloads the page to bring the engine back (`app.js`'s own way back, with
+the saved games restored from the server) and says so in its output before trying
+again. `QUAKE2_CDP_URL` picks another endpoint, `QUAKE_CONTROL_OUT_DIR` says
+where the screenshot goes (default: a new temp folder, kept and printed).
+
+Each of the two Node scripts starts its own `node server.js` on 127.0.0.1:4299,
+or on a port the OS picks when 4299 is taken, and never on 4231.
+`QUAKE2_DATA_DIR` points
 at a fresh folder in the OS temp dir (`$TMPDIR`, default `/tmp`). Each stops
 only the processes it started and deletes its temp folders. They never
 connect to port 4231, never stop or restart `quake2-app.service`, and never
