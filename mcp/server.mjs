@@ -254,14 +254,30 @@ async function handle(message) {
 // stdin is the transport: a line at a time, so a partial write can never be
 // mistaken for a whole message.
 let buffer = "";
+// True while the rest of an oversized, unterminated line is being thrown away.
+// The bytes of that line still on their way are not a message either: without
+// this they would be joined to the next real message and take it down with
+// them, which is a stream a client could no longer resynchronise.
+let droppingLine = false;
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
   buffer += chunk;
+  if (droppingLine) {
+    const newline = buffer.indexOf("\n");
+    if (newline < 0) {
+      buffer = "";
+      return;
+    }
+    buffer = buffer.slice(newline + 1);
+    droppingLine = false;
+  }
   // A line that grows past the cap without ever ending is not a message: drop
   // it and say so, rather than buffering without bound.
   if (buffer.length > MAX_LINE && !buffer.includes("\n")) {
     buffer = "";
+    droppingLine = true;
     replyError(null, -32700, "request line over " + MAX_LINE + " bytes");
+    return;
   }
   for (;;) {
     const newline = buffer.indexOf("\n");

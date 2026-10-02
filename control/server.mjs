@@ -30,8 +30,16 @@ import { QuakeControl, ControlError, GameNotRunningError } from "./bridge.mjs";
 
 // CONTROL_PORT, and never a bare PORT: the box sets PORT=4231 for the game
 // server, and inheriting it would put this API on top of the game's port.
-// Port 0 is honoured (the OS picks one) so tests can run without a fixed port.
-const PORT = Number(process.env.CONTROL_PORT ?? 4233);
+// Port 0 is honoured (the OS picks one) so tests can run without a fixed port;
+// an unset, empty or unparsable value is the default rather than a random port
+// (0) or a startup throw (NaN).
+function readPort(value, fallback) {
+  if (value === undefined || String(value).trim() === "") return fallback;
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : fallback;
+}
+
+const PORT = readPort(process.env.CONTROL_PORT, 4233);
 // Big enough for any command an agent sends, small enough to bound memory.
 const MAX_BODY = 64 * 1024;
 // The bridge bounds each CDP round trip at 5 s (QUAKE2_CDP_TIMEOUT_MS) and a

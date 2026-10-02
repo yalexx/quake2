@@ -404,8 +404,10 @@ whether the engine was asked. A `null` field here means the engine cannot answer
 it, not that a read came back empty.
 
 `probe: true` is input -- it focuses the canvas like any other control call and
-opens the console for about a second -- and it leaves the console shut behind
-it. Two engine habits are worth knowing:
+opens the console for about a second -- and it toggles the console shut again
+once it has read the answer. (The console is a plain toggle and the bridge
+remembers nothing between calls, so a probe the engine did not hear leaves the
+toggle wherever it found it.) Two engine habits are worth knowing:
 
 - The engine writes `qconsole.log` through C stdio, so the file lags behind by a
   few kilobytes of output, and the cheap read is only as fresh as that. The
@@ -576,7 +578,7 @@ reason (no game in the browser) rather than failed. When a game *is* open they
 run for real, with the least intrusive input there is -- a Shift tap (a modifier
 changes no binding), a zero mouse delta, and the middle button, which Quake 2
 leaves unbound -- plus the console probe `state` uses, which is read-only and
-leaves the console shut.
+toggles the console shut again once it has read the answer.
 
 **`scripts/mcp-smoke-test.mjs`** spawns `mcp/server.mjs` and speaks its real
 transport to it: `initialize` (protocol version and server name), a

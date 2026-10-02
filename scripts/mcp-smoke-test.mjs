@@ -226,6 +226,19 @@ try {
     return "-32700, then ping still answered";
   });
 
+  await step("a request line over the 1 MiB cap is a -32700, and the stream resynchronises after it", async () => {
+    // No newline at all: by the cap's own rule this is not a message yet, and
+    // the bytes still on their way must not be joined to the next real one.
+    child.stdin.write("x".repeat(1200 * 1024));
+    const answer = await awaitMessage((m) => m.error && m.error.code === -32700, "the oversized-line error");
+    assert.equal(answer.id, null, "an unparsable line must answer with a null id");
+    assert.match(answer.error.message, /over \d+ bytes/, "the error does not say the line was too long: " + answer.error.message);
+    child.stdin.write("\n"); // the client finally ends the line it overran
+    const after = await call("ping");
+    assert.ok(after.result, "the server stopped answering after an oversized line");
+    return "-32700, then the line ended and ping still answered";
+  });
+
   // -- stdout is protocol only, and stdin's end is a clean exit ------------
   await step("nothing but JSON-RPC ever reached stdout", async () => {
     for (const line of rawLines) {

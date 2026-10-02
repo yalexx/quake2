@@ -787,8 +787,10 @@ export class QuakeControl {
   // already said. With options.probe it also asks the engine directly -- which
   // can only happen through the engine's own console -- by opening the console,
   // typing its two queries, closing it and reading the answers back out of the
-  // log: input, exactly like every other control call, and it leaves the
-  // console shut behind it.
+  // log: input, exactly like every other control call, and it toggles the
+  // console shut again once it has read the answer. The console is a plain
+  // toggle and nothing is remembered between calls, so a probe the engine did
+  // not hear leaves the toggle wherever it found it.
   //
   // Quake 2 answers only part of the question, and the answer says which part:
   // `unavailable` lists the fields the engine has no way to print. See the note

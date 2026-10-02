@@ -267,12 +267,20 @@ try {
       assert.equal(body.probe.requested, true, "the probe was not requested");
       assert.equal(typeof body.probe.ran, "boolean", "the answer does not say whether the engine heard the probe");
       assert.ok(Array.isArray(body.probe.commands), "the answer does not say what was asked");
-      assert.ok(body.probe.commands.includes("viewpos"), "viewpos was not among the queries");
-      if (body.probe.ran) return "the engine answered viewpos/serverinfo (position " + JSON.stringify(body.player.position) + ")";
+      if (body.probe.ran) {
+        // Ran: the engine really answered, so the queries are named and the
+        // summary flag has to agree with it.
+        assert.ok(body.probe.commands.includes("viewpos"), "viewpos was not among the queries");
+        assert.equal(body.probed, true, "probed must be true when the engine answered");
+        return "the engine answered viewpos/serverinfo (position " + JSON.stringify(body.player.position) + ")";
+      }
       // The route behaved -- it opened the console, asked and read the dump back
       // -- but an engine that is mid-restart, or playing an attract-demo
-      // cinematic (Quake 2 ignores keys during one), cannot answer. That is the
-      // game's own state, not a failure of the route, and the route says so.
+      // cinematic (Quake 2 ignores keys during one), cannot answer, and then it
+      // names no commands. That is the game's own state, not a failure of the
+      // route, and the route says so.
+      assert.equal(body.probed, false, "probed must be false when the engine did not answer");
+      assert.equal(body.probe.commands.length, 0, "commands must be empty when the probe did not run");
       return "the engine did not answer the console probe (a restart or a demo cinematic); the route said so in probe.ran";
     });
   }
