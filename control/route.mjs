@@ -72,6 +72,38 @@ const CONTENTS_PLAYERCLIP = 0x10000;
 const BLOCKING = CONTENTS_SOLID | CONTENTS_WINDOW | CONTENTS_PLAYERCLIP;
 const HAZARDOUS = CONTENTS_LAVA | CONTENTS_SLIME;
 
+// ---- Inline brush models --------------------------------------------------
+//
+// A brush entity -- `func_door`, `func_wall`, `func_train` -- is not part of the
+// world model's node tree. Its brushes are a model of their own (the models
+// lump's `*n` entries), each with its own `headnode` into the *shared* node and
+// leaf lumps, and a `{ model "*n" }` key on the entity says which. That matters
+// because the engine collides with them separately: the world hull decides what
+// a point in the level is made of, and then every `SOLID_BSP` entity is traced
+// against on its own. Reading only the world tree therefore gets both halves
+// wrong -- a `func_wall` platform is a floor the level really has, and a
+// `func_door` filling a doorway is a wall the level really has until it opens.
+//
+// The two halves are not the same kind of thing, so they are not treated the
+// same way here:
+//
+//   static  -- a `func_wall`, `func_explosive` or `func_button` never moves.
+//              It is geometry, always. A point inside one is solid, and its top
+//              can be a floor.
+//   movers  -- a `func_door`, `func_plat`, `func_train` or `func_rotating` moves
+//              when the player opens, rides or triggers it. Its volume is
+//              *passable in principle*, so it is not treated as solid: a route
+//              may go through it, and path() reports every mover it crosses so
+//              the caller knows to press use or wait for the lift. Treating a
+//              closed door as solid would hide the only way into the next room;
+//              treating a lift shaft as solid would hide the only way up it.
+//
+// `func_areaportal` is neither: it is an invisible seal the engine opens for
+// visibility, never a collision volume.
+const STATIC_BRUSH = /^func_wall$|^func_explosive$|^func_breakable$/;
+const MOVING_BRUSH = /^func_door|^func_plat$|^func_train$|^func_rotating$|^func_button$/;
+const NON_SOLID_BRUSH = /^func_areaportal$|^trigger_/;
+
 export class RouteError extends Error {
   constructor(message, code) {
     super(message);
@@ -236,6 +268,14 @@ export function distanceBetween(a, b) {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 }
 
+// A number, or the fallback when the caller passed nothing sensible. Options
+// arrive from CLIs and HTTP bodies, so "unset", "" and "abc" all have to land on
+// the default rather than on NaN and a search that never terminates.
+function numberOr(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
 // ---- What a map is worth to an agent --------------------------------------
 
 // Entity classnames grouped by what an agent would want from them. The `kind`
@@ -295,11 +335,22 @@ export class RouteMap {
     this.entities = parseEntities(bsp.toString("latin1", header.lumps[LUMP_ENTITIES].offset, header.lumps[LUMP_ENTITIES].offset + header.lumps[LUMP_ENTITIES].length));
     this.described = this.entities.map(describeEntity);
     this.world = this.described.find((entity) => entity.classname === "worldspawn") || null;
+    // The world's brushes are model 0, whose tree starts at node 0. Every other
+    // model is a brush entity, and the entity that owns it is found by the
+    // `model "*n"` key rather than by `origin` -- a brush entity usually has no
+    // origin, and the marker a mapper leaves near one is not where it is.
+    this.models = this.#readModels();
     this.#bounds = this.#computeBounds();
+    // What the level is made of, which is the world *and* the brush entities
+    // that never move. Built once: the per-column scan calls it millions of
+    // times.
+    this.#staticSolids = this.models.filter((model) => model.kind === "static");
   }
 
   #bounds = null;
   #columnCache = null;
+  #staticSolids = [];
+  #columnsCache = null;
 
   // The map's extent, from the leaf boxes rather than the entities: an entity
   // only places a thing, a leaf is the space the level actually occupies.
@@ -482,16 +533,90 @@ export class RouteMap {
     }));
   }
 
+  // Every inline brush model, paired with the entity that owns it. Model 0 is
+  // the world and is left out: it is this.lumps[LUMP_MODELS]'s first record and
+  // the tree everything else is measured against.
+  #readModels() {
+    const models = this.lumps[LUMP_MODELS];
+    if (!models) return [];
+    const byRef = new Map();
+    for (const entity of this.described) if (entity.model) byRef.set(String(entity.model), entity);
+    const out = [];
+    for (let index = 1; (index + 1) * MODEL_BYTES <= models.length; index++) {
+      const at = models.offset + index * MODEL_BYTES;
+      const read = (field) => this.bsp.readFloatLE(at + field * 4);
+      const ref = "*" + index;
+      const owner = byRef.get(ref) || null;
+      // A brush entity that carries an `origin` was built at the origin and is
+      // *placed* by that key: qbsp writes the brushes around 0,0,0 and the
+      // engine adds the origin when it draws and collides. A brush entity
+      // without one was built where it stands, and its model is already in world
+      // coordinates. Getting this backwards puts a func_rotating in the wrong
+      // room entirely.
+      const placed = owner && owner.origin && Number.isFinite(owner.origin.x) ? owner.origin : null;
+      const shift = placed || { x: 0, y: 0, z: 0 };
+      const mins = { x: read(0) + shift.x, y: read(1) + shift.y, z: read(2) + shift.z };
+      const maxs = { x: read(3) + shift.x, y: read(4) + shift.y, z: read(5) + shift.z };
+      const classname = owner ? owner.classname : null;
+      const kind = !classname || NON_SOLID_BRUSH.test(classname) ? "none"
+        : MOVING_BRUSH.test(classname) ? "mover"
+        : STATIC_BRUSH.test(classname) ? "static" : "static";
+      out.push({
+        ref,
+        index,
+        classname,
+        targetname: owner ? owner.targetname : null,
+        target: owner ? owner.target : null,
+        spawnflags: owner ? owner.spawnflags : null,
+        kind,
+        // The model's own tree is in the model's local space; `origin` is what
+        // takes a local point to a world one.
+        origin: { ...shift },
+        headnode: this.bsp.readInt32LE(at + 36),
+        mins,
+        maxs,
+        centre: { x: (mins.x + maxs.x) / 2, y: (mins.y + maxs.y) / 2, z: (mins.z + maxs.z) / 2 },
+        size: { x: maxs.x - mins.x, y: maxs.y - mins.y, z: maxs.z - mins.z },
+      });
+    }
+    return out;
+  }
+
+  // Whether a point is inside a model's box at all. The tree walk is the truth,
+  // but a box test first is what keeps the per-column scan affordable: almost
+  // every point is outside almost every model.
+  #inBox(model, x, y, z) {
+    return x >= model.mins.x && x <= model.maxs.x && y >= model.mins.y && y <= model.maxs.y && z >= model.mins.z && z <= model.maxs.z;
+  }
+
+  // The contents of one inline model at a point, or 0 when the point is outside
+  // its box. Where the point is *inside* the box, the model's own tree is walked
+  // in the model's local space: a model with an `origin` was built around 0,0,0
+  // and the origin is what takes a local point to a world one, so it comes back
+  // off before the walk. A model without one is already in world coordinates --
+  // its `origin` is the zero vector and subtracting it changes nothing.
+  modelContentsAt(model, x, y, z) {
+    if (!this.#inBox(model, x, y, z)) return 0;
+    const leafs = this.lumps[LUMP_LEAFS];
+    const local = { x: x - model.origin.x, y: y - model.origin.y, z: z - model.origin.z };
+    return this.bsp.readInt32LE(leafs.offset + this.#leafFrom(model.headnode, local.x, local.y, local.z) * LEAF_BYTES);
+  }
+
   // ---- Geometry ------------------------------------------------------------
 
   // Which leaf a point falls in, by walking the BSP's node tree: each node is a
   // splitting plane, and a negative child is a leaf -- the Quake convention is
-  // that leaf n is encoded as -(n + 1).
-  leafIndexAt(x, y, z) {
+  // that leaf n is encoded as -(n + 1). `headnode` is where the walk starts:
+  // 0 is the world, and an inline model names its own.
+  leafIndexAt(x, y, z, headnode = 0) {
+    return this.#leafFrom(headnode, x, y, z);
+  }
+
+  #leafFrom(headnode, x, y, z) {
     const nodes = this.lumps[LUMP_NODES];
     const planes = this.lumps[LUMP_PLANES];
     const bsp = this.bsp;
-    let node = 0;
+    let node = headnode;
     // The tree is balanced, so this is ~20 steps; the cap only stops a corrupt
     // file from spinning forever.
     for (let step = 0; step < 4096; step++) {
@@ -508,9 +633,61 @@ export class RouteMap {
     throw new RouteError("the BSP node tree did not reach a leaf", "BAD_BSP");
   }
 
-  contentsAt(x, y, z) {
+  // What the world's own brushes make of a point, with no brush entity applied.
+  // Kept separate because "inside the rock" and "inside a func_wall standing in
+  // front of the rock" are different facts, and a caller looking at a blocker
+  // needs to tell them apart.
+  worldContentsAt(x, y, z) {
     const leafs = this.lumps[LUMP_LEAFS];
     return this.bsp.readInt32LE(leafs.offset + this.leafIndexAt(x, y, z) * LEAF_BYTES);
+  }
+
+  // What the level makes of a point: the world's brushes, or any brush entity
+  // that never moves. Movers are deliberately left out -- see the note above the
+  // brush class patterns.
+  contentsAt(x, y, z) {
+    let contents = this.worldContentsAt(x, y, z);
+    if (contents & BLOCKING) return contents;
+    for (const model of this.#staticSolids) {
+      if (!this.#inBox(model, x, y, z)) continue;
+      contents |= this.modelContentsAt(model, x, y, z);
+      if (contents & BLOCKING) return contents;
+    }
+    return contents;
+  }
+
+  // Every brush entity that moves, with the volume a route has to pass through.
+  // This is what a caller asks when it wants to know which doors to open or
+  // which lift to ride; `kind` is "mover" for all of them.
+  barriers() {
+    return this.models.filter((model) => model.kind === "mover").map((model) => ({
+      classname: model.classname,
+      model: model.ref,
+      targetname: model.targetname,
+      target: model.target,
+      centre: { ...model.centre },
+      mins: { ...model.mins },
+      maxs: { ...model.maxs },
+      size: { ...model.size },
+      // A door wants the use key; a platform or train wants the player to stand
+      // on it; a button wants to be shot or used.
+      action: /^func_door/.test(model.classname) ? "open"
+        : /^func_plat$|^func_train$/.test(model.classname) ? "ride"
+        : /^func_button$/.test(model.classname) ? "press"
+        : "wait",
+    }));
+  }
+
+  // The brushes whose volume contains a point, movers included: what a caller
+  // wants when it has a position and needs to know what is standing there.
+  brushesAt(x, y, z) {
+    return this.models.filter((model) => this.#inBox(model, x, y, z)).map((model) => ({
+      classname: model.classname,
+      model: model.ref,
+      kind: model.kind,
+      targetname: model.targetname,
+      centre: { ...model.centre },
+    }));
   }
 
   // Where a brush entity actually is. An entity with `model "*27"` is not placed
@@ -636,6 +813,12 @@ export class RouteMap {
     const step = options.step || 4;
     const maxStepUp = options.maxStepUp === undefined ? 24 : options.maxStepUp;
     const maxDrop = options.maxDrop === undefined ? 96 : options.maxDrop;
+    // Off by default: a step is a step, and a route that silently leaps a chasm
+    // is not the same promise as one that walks. A caller that wants the player
+    // to jump -- the walker does, over the gaps demo1's canyon has -- asks for it
+    // by naming a distance.
+    const maxJump = Math.max(0, numberOr(options.maxJump, 0));
+    const maxJumpDown = numberOr(options.maxJumpDown, Math.max(maxDrop, 200));
     const grid = this.floorGrid(cell, step);
     const indexOf = (point) => [Math.round((point.x - grid.minX) / cell), Math.round((point.y - grid.minY) / cell)];
     const key = (ix, iy, z) => ix + "," + iy + "," + z;
@@ -683,7 +866,21 @@ export class RouteMap {
       const goalScore = Math.hypot(ix - toCell.ix, iy - toCell.iy) * cell;
       if (goalScore < bestScore) { bestScore = goalScore; bestKey = current.key; }
       if (ix === toCell.ix && iy === toCell.iy) {
-        return { points: this.#reconstruct(best, grid, current.key), steps: expanded, cells: closed.size, cell, from: fromCell, to: toCell };
+        const points = this.#reconstruct(best, grid, current.key);
+        return {
+          points,
+          steps: expanded,
+          cells: closed.size,
+          cell,
+          from: fromCell,
+          to: toCell,
+          distance: pathLength(points),
+          // Every brush entity that moves and that the route walks through or
+          // over: what the caller has to open, press or ride. Reported in the
+          // order the route meets them, because a door early on gates everything
+          // after it.
+          crossings: this.#crossingsOn(points),
+        };
       }
       for (const [dx, dy] of neighbours) {
         const nx = ix + dx;
@@ -696,23 +893,60 @@ export class RouteMap {
           if (sideA === null || sideB === null) continue;
           if (Math.abs(sideA - z) > maxStepUp || Math.abs(sideB - z) > maxStepUp) continue;
         }
-        const level = this.#levelAt(grid, nx, ny, z);
-        if (level === null) continue;
-        const climb = level - z;
-        if (climb > maxStepUp || -climb > maxDrop) continue;
-        // A drop is free going down and impossible coming back; the search is
-        // one-way, so it is allowed, but a cell that blocks or burns is not.
-        const contents = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
-        if (contents & BLOCKING) continue;
-        const nextKey = key(nx, ny, level);
-        if (closed.has(nextKey)) continue;
-        const g = current.g + (diagonal ? cell * 1.414 : cell) + (contents & HAZARDOUS ? cell * 40 : 0) + Math.abs(climb) * 2;
-        const known = best.get(nextKey);
-        if (known && known.g <= g) continue;
-        best.set(nextKey, { g, prev: current.key });
-        open.push({ f: g + heuristic(nx, ny), key: nextKey, g });
+        // Every floor in the neighbour's column is a candidate, not just the one
+        // nearest the height the search is at. A column can hold several: a
+        // ledge over a floor, the top and bottom of a lift shaft, the storeys of
+        // a room. Offering only the nearest is what makes a search believe it
+        // cannot step down a level it has walked over.
+        for (const level of grid.floors.get(nx + "," + ny) || []) {
+          const climb = level - z;
+          if (climb > maxStepUp || -climb > maxDrop) continue;
+          // A drop is free going down and impossible coming back; the search is
+          // one-way, so it is allowed, but a cell that blocks or burns is not.
+          const contents = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
+          if (contents & BLOCKING) continue;
+          const nextKey = key(nx, ny, level);
+          if (closed.has(nextKey)) continue;
+          const g = current.g + (diagonal ? cell * 1.414 : cell) + (contents & HAZARDOUS ? cell * 40 : 0) + Math.abs(climb) * 2;
+          const known = best.get(nextKey);
+          if (known && known.g <= g) continue;
+          best.set(nextKey, { g, prev: current.key });
+          open.push({ f: g + heuristic(nx, ny), key: nextKey, g });
+        }
+      }
+      // Gaps: a floor the player can reach by jumping over open air. Only when
+      // the caller asked for it (maxJump > 0), because a jump is a risk the
+      // route should not take silently.
+      if (maxJump > 0) {
+        const reach = Math.ceil(maxJump / cell);
+        for (const [dx, dy] of neighbours) {
+          for (let r = 2; r <= reach; r++) {
+            // `maxJump` is a distance, not a number of cells: a diagonal run of
+            // r cells is r * 1.414 cells long, so counting cells alone would let
+            // a "160 unit" jump reach 237 units at 24-unit cells -- further than
+            // the option asked for and further than a run-and-leap carries.
+            if (Math.hypot(dx * r, dy * r) * cell > maxJump) continue;
+            const nx = ix + dx * r, ny = iy + dy * r;
+            for (const level of grid.floors.get(nx + "," + ny) || []) {
+              if (level - z > maxStepUp || z - level > maxJumpDown) continue;
+              const nextKey = key(nx, ny, level);
+              if (closed.has(nextKey)) continue;
+              if (!this.#clearLine(grid.minX + ix * cell, grid.minY + iy * cell, z, grid.minX + nx * cell, grid.minY + ny * cell, level)) continue;
+              const contents = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
+              if (contents & BLOCKING) continue;
+              const g = current.g + r * cell + Math.abs(level - z) * 2 + cell * 4; // a jump costs more than a step
+              const known = best.get(nextKey);
+              if (known && known.g <= g) continue;
+              best.set(nextKey, { g, prev: current.key, jump: r * cell });
+              open.push({ f: g + heuristic(nx, ny), key: nextKey, g });
+            }
+          }
+        }
       }
     }
+    const [cix, ciy, ciz] = bestKey.split(",").map(Number);
+    const reached = { x: grid.minX + cix * cell, y: grid.minY + ciy * cell, z: ciz };
+    const blockers = this.#blockersNear(reached);
     return {
       points: [],
       reason: expanded >= limit ? "NODE_LIMIT" : "NO_ROUTE",
@@ -720,8 +954,12 @@ export class RouteMap {
         ? "gave up after " + expanded + " cells (raise maxNodes)"
         : "the floor grid does not connect " + JSON.stringify({ x: grid.minX + fromCell.ix * cell, y: grid.minY + fromCell.iy * cell, z: fromCell.z }) +
           " to " + JSON.stringify({ x: grid.minX + toCell.ix * cell, y: grid.minY + toCell.iy * cell, z: toCell.z }) +
-          " on foot; the closest the search reached was " + bestScore.toFixed(0) + " units short",
-      closest: bestKey.split(",").map(Number),
+          " on foot; the closest the search reached was " + bestScore.toFixed(0) + " units short" +
+          (blockers.length ? ", and the brush entities nearest that point are " +
+            blockers.map((b) => b.classname + " " + b.model + " at " + b.distance.toFixed(0) + " units (" + b.why + ")").join(", ") : ""),
+      closest: [cix, ciy, ciz],
+      reached,
+      blockers,
       cells: closed.size,
       steps: expanded,
       cell,
@@ -738,24 +976,103 @@ export class RouteMap {
     let cursor = lastKey;
     while (cursor) {
       const [ix, iy, z] = cursor.split(",").map(Number);
-      points.push({ x: grid.minX + ix * grid.cell, y: grid.minY + iy * grid.cell, z });
       const node = best.get(cursor);
+      points.push({ x: grid.minX + ix * grid.cell, y: grid.minY + iy * grid.cell, z, jump: node && node.jump ? node.jump : 0 });
       cursor = node ? node.prev : null;
       if (points.length > grid.columnsX * grid.columnsY * 400) break; // a corrupt chain must not spin
     }
     points.reverse();
     // Collapse runs that travel in the same direction: a hundred identical steps
-    // are hard to read and no easier to follow.
+    // are hard to read and no easier to follow. A jump is never collapsed: it is
+    // the one step the follower has to treat differently.
     const simplified = [];
     for (let i = 0; i < points.length; i++) {
       if (i === 0 || i === points.length - 1) { simplified.push(points[i]); continue; }
       const previous = points[i - 1];
       const next = points[i + 1];
       const straight = (points[i].x - previous.x) * (next.y - points[i].y) === (points[i].y - previous.y) * (next.x - points[i].x);
-      if (!straight || points[i].z !== previous.z || points[i].z !== next.z) simplified.push(points[i]);
+      if (!straight || points[i].z !== previous.z || points[i].z !== next.z || points[i].jump) simplified.push(points[i]);
     }
     return simplified;
   }
+
+  // Can a player run from one spot to another through open air? Sampled at the
+  // body's height, because that is what a jump has to clear: the pit's lip, not
+  // the floor it lands on.
+  #clearLine(ax, ay, az, bx, by, bz) {
+    const span = Math.hypot(bx - ax, by - ay);
+    const steps = Math.max(2, Math.ceil(span / 8));
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const x = ax + (bx - ax) * t;
+      const y = ay + (by - ay) * t;
+      const z = az + (bz - az) * t;
+      for (const lift of [8, 24, 40, 52]) if (this.isSolid(x, y, z + lift)) return false;
+    }
+    return true;
+  }
+
+  // The brush entities a route walks through or over, in route order. A point is
+  // "in" a mover when it is inside its box with a little slack: the route's grid
+  // points stop at the floor, and a door's floor is the world's, not the door's.
+  #crossingsOn(points, slack = 24) {
+    const seen = new Set();
+    const crossings = [];
+    for (const point of points) {
+      for (const model of this.models) {
+        if (model.kind !== "mover" || seen.has(model.ref)) continue;
+        const inside =
+          point.x >= model.mins.x - slack && point.x <= model.maxs.x + slack &&
+          point.y >= model.mins.y - slack && point.y <= model.maxs.y + slack &&
+          point.z >= model.mins.z - slack && point.z <= model.maxs.z + slack;
+        if (!inside) continue;
+        seen.add(model.ref);
+        crossings.push({
+          classname: model.classname, model: model.ref, targetname: model.targetname, target: model.target,
+          centre: { ...model.centre },
+          action: /^func_door/.test(model.classname) ? "open" : /^func_plat$|^func_train$/.test(model.classname) ? "ride" : "press",
+          at: { x: point.x, y: point.y, z: point.z },
+        });
+      }
+    }
+    return crossings;
+  }
+
+  // The brush entities standing nearest a point where a search stopped. This is
+  // what turns "there is no route" into "there is no route, and a func_door is
+  // 30 units from where it gave up": a caller can then open the door, or say
+  // honestly that the level's static floor plan does not connect.
+  #blockersNear(point, radius = 192) {
+    const out = [];
+    for (const model of this.models) {
+      if (model.kind === "none") continue;
+      const distance = Math.max(0, distanceBetween(point, model.centre) - Math.max(model.size.x, model.size.y, model.size.z) / 2);
+      if (distance > radius) continue;
+      const contents = this.modelContentsAt(model, model.centre.x, model.centre.y, model.centre.z);
+      out.push({
+        classname: model.classname,
+        model: model.ref,
+        kind: model.kind,
+        targetname: model.targetname,
+        centre: { ...model.centre },
+        size: { ...model.size },
+        distance,
+        // Named, so the answer says *why* this one is in the way rather than
+        // just that something is.
+        why: model.kind === "mover"
+          ? "moves: the route may pass once it is opened, pressed or ridden"
+          : (contents & BLOCKING) !== 0 ? "static brush entity, solid" : "static brush entity, thin or hollow",
+      });
+    }
+    return out.sort((a, b) => a.distance - b.distance).slice(0, 8);
+  }
+}
+
+// How long a route is along the ground, jumps and all.
+function pathLength(points) {
+  let total = 0;
+  for (let i = 1; i < points.length; i++) total += distanceBetween(points[i - 1], points[i]);
+  return total;
 }
 
 // ---- Loading --------------------------------------------------------------
