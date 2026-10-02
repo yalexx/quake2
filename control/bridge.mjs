@@ -964,7 +964,13 @@ export class QuakeControl {
       this.#learnTurn(attempted, achieved);
       yaw = after.angles.yaw;
     }
-    return { facing: false, target, yaw, error: shortestTurn(target - yaw), reason: "NOT_CONVERGED", rounds, method, history };
+    // The last turn is not followed by another trip round the loop, so what it
+    // achieved has to be judged here. A turn that landed inside the tolerance is
+    // a success however late it arrived; reporting it as a failure would be a lie
+    // about a state the caller can measure for itself.
+    const error = shortestTurn(target - yaw);
+    if (Math.abs(error) <= tolerance) return { facing: true, target, yaw, error, rounds, method, history };
+    return { facing: false, target, yaw, error, reason: "NOT_CONVERGED", rounds, method, history };
   }
 
   // One turn of about `degrees` (positive turns left, bumping the yaw up).
@@ -987,6 +993,11 @@ export class QuakeControl {
       let ms = Math.abs(wanted) / rate;
       const capMs = numberOr(options.maxKeyMsPerStep, 900);
       if (ms > capMs) ms = capMs;
+      // Deliberately short. The engine applies a held key once per frame, so a
+      // longer floor would make the smallest possible turn *bigger* than the
+      // tolerance face() is aiming for and leave it oscillating around the
+      // target instead of settling on it. A hold this short is occasionally
+      // missed entirely, which #learnTurn is written to expect.
       if (ms < 20) ms = 20;
       // +left raises the yaw, and Quake binds +left/+right to the arrow keys.
       const key = wanted > 0 ? "ArrowLeft" : "ArrowRight";
@@ -1016,7 +1027,15 @@ export class QuakeControl {
   // demonstrably did nothing -- so the next round tries the other one instead of
   // repeating a turn that cannot work.
   #learnTurn(attempted, achieved) {
-    if (Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4) {
+    // A hold of a few milliseconds can fall between two frames and come back as
+    // no turn at all, and face() asks for a turn as small as the tolerance when
+    // the aim is already nearly right. A zero reading from a turn that small is
+    // evidence of nothing: judging it would retire a method that works, and a
+    // retired method is never tried again, so the caller would be left unable to
+    // turn for the rest of the run. Only a turn big enough to be seen can retire
+    // one. Learning is safe from either size -- the ratio windows below throw
+    // away a measurement that is not physically possible.
+    if (Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4 && Math.abs(attempted.amount) >= FACE_TOLERANCE_DEGREES) {
       if (attempted.method === "mouse" && this.turnCalibration.mouseWorks !== false) this.turnCalibration.mouseWorks = false;
       if (attempted.method === "keys" && this.turnCalibration.keysWork !== false) this.turnCalibration.keysWork = false;
       return;
@@ -1127,7 +1146,6 @@ export class QuakeControl {
           return {
             reached: false, reason: "stuck", target: point, tolerance, position: next.position,
             distance, rounds, travelled: horizontalDistance(startPosition, next.position),
-            obstacles: await this.#probeAhead(next, point),
             trail: trail.slice(-16),
             message: "the player stopped closing on the target: " + distance.toFixed(0) + " units short after " + rounds +
               " steps. Something solid, a closed door or a drop is in the way; the last position is the truth.",
@@ -1141,29 +1159,6 @@ export class QuakeControl {
       distance: horizontalDistance(finalPosition, point), rounds,
       travelled: horizontalDistance(startPosition, finalPosition), trail: trail.slice(-16),
     };
-  }
-
-  // Whether anything solid is in front of the player, asked of the game world
-  // through the console's own `trace`. Reported alongside a stuck goto so the
-  // caller can tell a wall from a door from a hole.
-  async #probeAhead(report, point) {
-    if (!report || !report.position) return null;
-    // The engine's `trace` wants two points and prints a fraction; it is the
-    // engine's collision, not a guess from the map file.
-    const from = report.position;
-    const dx = point.x - from.x;
-    const dy = point.y - from.y;
-    const length = Math.hypot(dx, dy) || 1;
-    const ahead = { x: from.x + (dx / length) * 128, y: from.y + (dy / length) * 128, z: from.z };
-    const answer = await this.#withSession(async (game) => {
-      const said = await this.#askEngine(game, [
-        "trace " + Math.round(from.x) + " " + Math.round(from.y) + " " + Math.round(from.z) + " " +
-        Math.round(ahead.x) + " " + Math.round(ahead.y) + " " + Math.round(ahead.z),
-      ]);
-      return said.text;
-    });
-    if (!answer) return null;
-    return answer.split("\n").filter((line) => /fraction|allsolid|startsolid|hit/i.test(line)).slice(-3);
   }
 
   // What the game is showing right now: enough for an agent to decide what to do

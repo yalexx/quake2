@@ -21,8 +21,12 @@
 //   7. goto() reports a miss honestly instead of claiming a target it never
 //      reached
 //
-// PASS/FAIL per step, SKIP with a reason when the game is not open or is sitting
-// in its attract demo, exit 1 if any step failed. Node built-ins only.
+// PASS/FAIL per step, exit 1 if any step failed. A step is SKIPPED, with its
+// reason printed, when there is no browser, no game open, no level running, or a
+// level whose player cannot be driven at all -- a turn and a walk decide that
+// last one before any navigation step runs, so a dead player is reported as a
+// dead player instead of as a broken goto(). "PASS" is only printed when the
+// navigation steps really ran. Node built-ins only.
 //
 //   node scripts/goto-test.mjs
 "use strict";
@@ -133,8 +137,6 @@ try {
       skip("goto() leaves the player within tolerance of a point it was given", why);
       skip("goto() reports a miss honestly", why);
     } else {
-      ran++;
-
       // ---- Step 3: the route data agrees with the running engine ---------
       await step("route.mjs reads the running map from the archive and finds its exit", async () => {
         const name = normalizeMapName(reported.map);
@@ -200,6 +202,10 @@ try {
         skip("goto() leaves the player within tolerance of a point it was given", "the player cannot be driven (see above)");
         skip("goto() reports a miss honestly", "the player cannot be driven (see above)");
       } else {
+        // Only now has a navigation step actually been attempted. The summary
+        // must not claim the bridge navigated anything on a run where every
+        // navigation step was skipped.
+        ran++;
 
         // ---- Step 4: facing ------------------------------------------------
         await step("face() turns the player to a bearing it was given", async () => {
@@ -287,7 +293,7 @@ console.log("");
 if (failures) {
   console.log("goto-test: FAIL -- " + failures + " step(s) failed");
 } else if (!ran) {
-  console.log("goto-test: SKIP -- " + skips + " step(s) skipped, nothing to navigate");
+  console.log("goto-test: SKIP -- nothing was navigated (" + skips + " step(s) skipped; each says why above)");
 } else {
   console.log("goto-test: PASS -- the bridge navigated the live game" + (skips ? " (" + skips + " skipped)" : ""));
 }

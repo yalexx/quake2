@@ -593,7 +593,9 @@ export class RouteMap {
   // than on a fixed z ladder: floors sit at arbitrary heights, and a ladder that
   // does not land on one misses the storey entirely.
   floorGrid(cell = 32, step = 4) {
-    if (this.#columnCache && this.#columnCache.cell === cell) return this.#columnCache;
+    // Both parameters shape the grid, so both are in the cache key: a caller who
+    // asks for a coarser scan after a fine one must not be handed the fine grid.
+    if (this.#columnCache && this.#columnCache.cell === cell && this.#columnCache.step === step) return this.#columnCache;
     const bounds = this.#bounds;
     const minX = Math.floor(bounds.min.x / cell) * cell;
     const minY = Math.floor(bounds.min.y / cell) * cell;
