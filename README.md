@@ -20,10 +20,10 @@ engine files in `engine/` were copied from the project's public site
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
-| `control/` | `bridge.mjs` (drives the running game over CDP) and `server.mjs` (an HTTP front door to it on 127.0.0.1:4233), see [Control interface](#control-interface) |
+| `control/` | `bridge.mjs` (drives the running game over CDP, and navigates it), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
 | `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as six tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -360,6 +360,9 @@ reloaded under it is picked up rather than talked to on a stale handle.
 | `screenshot()` | A PNG of the game frame as a `Buffer` (cropped to the frame when the game is framed) |
 | `typeText(text)` | Type a whole string, one key at a time: how a console command is entered |
 | `evaluate(expression)` | Run an expression inside the game frame and get its JSON value back (an escape hatch: read `FS`, poke `Module`) |
+| `position()` | Where the player is, which way they look and which map is up -- read from the engine's console, no page report |
+| `command(text)` | Run a console command (or an array of them) and read the answer back |
+| `face(bearing)` / `walk(ms)` / `goto(point, opts)` | Closed-loop navigation on top of the probe -- see [Navigating](#navigating-position-face-walk-and-goto) |
 
 Escape is the one key Chromium will not pass through from CDP: it is the key that
 leaves pointer lock and fullscreen, so the browser takes it before the page ever
@@ -419,6 +422,153 @@ toggle wherever it found it.) Two engine habits are worth knowing:
   still starting. When the console will not take the commands the probe reports
   `probed: false` with `probe.ran: false` rather than pretending, and it waits
   for no one -- call it again once a menu or a level is showing.
+
+### Navigating: `position`, `face`, `walk` and `goto`
+
+Pushing keys is enough to open a door and not enough to arrive anywhere. The
+bridge closes the loop on top of the same console probe `state()` uses:
+
+| Call | What it does |
+|---|---|
+| `position()` | Where the player is and which way they look, from the engine's `viewpos`, plus the map name from the `mapname` cvar. Much lighter than `state()` -- no server info, no page report |
+| `command(text)` | Open the console, run one command (or an array of them), read the answer back, close it. How a level is started (`map demo1`) and how a cheat is turned on, said out loud |
+| `face(bearing)` | Turn the player to an absolute bearing, in Quake 2's degrees: `0` is `+X`, `90` is `+Y`, the yaw grows anticlockwise |
+| `walk(ms)` | Hold forward for `ms` and let go. The primitive underneath `goto()` |
+| `goto({x,y,z}, opts)` | Turn towards a point, walk, read the position again, and keep going until the player is there -- or until the position stops improving |
+
+```js
+import { QuakeControl } from "./control/bridge.mjs";
+const game = new QuakeControl();
+const where = await game.position();          // { position, angles, map, running }
+await game.face(90);                          // face +Y
+await game.walk(500);                         // half a second forward
+const trip = await game.goto({ x: -1744, y: 1576, z: 48 }, { tolerance: 64 });
+if (!trip.reached) console.log(trip.reason, trip.distance, trip.position);
+```
+
+`goto()` reports honestly, because a navigation call that lies is worse than one
+that fails. It returns `reached: true` only when it read a position inside
+`tolerance` of the target; otherwise `reached: false` with a `reason` of
+`"stuck"` (the position stopped closing on the target for `stuckRounds` steps),
+`"timeout"`, `"rounds"` (out of `maxRounds`), or `"NO_POSITION"` / `"NO_ANGLES"`
+(the engine would not answer). A miss carries the **last position it actually
+saw**, the distance left and a `trail` of the last few positions, so a caller can
+tell "walked into a wall" from "the console stopped answering".
+
+Three things are worth knowing before trusting a number from it.
+
+**How it turns.** `face()` uses the arrow keys first and the mouse second, and
+says which one worked. The engine turns a held `+left`/`+right` at `cl_yawspeed`
+-- a fixed rate that does not depend on the player's sensitivity cvar -- and on
+this box's build the arrow keys turn the player while the relative-motion deltas
+do not, even though the page receives them. (The mouse step in
+`scripts/quake-control-test.sh` proves the *events* arrive; `scripts/goto-test.mjs`
+proves what the engine then does with them.) `face()` measures the real rate on
+its first turn and uses the measurement afterwards; a method that demonstrably
+turns nothing is retired, so the next round tries the other one instead of the
+same dead turn again.
+
+**How it compares `z`.** A point from the map is the *floor* -- the level's own
+`info_player_start` for `demo1` is at `z = 32` -- and the engine reports the
+*eye*, which is `EYE_ABOVE_FEET` (46) higher: the player's origin is the middle
+of their 32x32x56 box (24 up) and the view sits another 22 above that. `goto()`
+therefore compares `x` and `y` against `tolerance` and `z` against `zTolerance`
+(64 by default), so a floor point from `control/route.mjs` can be passed in
+unchanged.
+
+**What moves the player.** `walk()` is `key("w", true)` for `ms` and then
+`key("w", false)`, so a game that is paused, a player who is dead, or a menu on
+screen all come back as "it did not move". The engine draws `PAUSED` while the
+console is open, and the console is what these calls read through, so the
+console is always shut again before a step is taken.
+
+### The route: where to go
+
+`control/route.mjs` answers "where do I go?" from the level's own data. A Quake 2
+map ships as a BSP whose entity lump holds the player start, the exit trigger,
+the monsters and the items, and whose planes, nodes and leafs describe the solids
+a player can walk between. Nothing here is guessed.
+
+```js
+import { loadMap, exitPoint, waypoints, nearest } from "./control/route.mjs";
+const map = await loadMap("demo1");              // from baseq2/pak0.pak
+map.exitPoint();                                  // { nextMap: "demo2", landmark: "base1", position: {...} }
+map.waypoints("enemy");                           // every monster_*, with its position
+map.nearest(playerPos, "item");                   // the closest pickup, with `distance`
+map.path(map.playerStart().position, map.exitPoint().position);   // a walkable route, or why not
+```
+
+| Call | What it does |
+|---|---|
+| `loadMap(name, opts)` | Read a map, by `"demo1"`, `"demo1.bsp"` or `"maps/demo1.bsp"`. `opts.control` reads it out of the *running engine's* file system instead of off the disk; `opts.pak` names a different archive |
+| `exitPoint(name)` | Where the level ends: the `target_changelevel`'s map (`demo2$base1`, split into `nextMap` and `landmark`), the `trigger_*` that fires it, whether the `worldspawn` `nextmap` agrees, and both `position` (the mapper's marker) and `aim` (the middle of the trigger volume -- see below) |
+| `map.modelBounds("*27")` | The bounding box, centre and size of an inline brush model. A brush entity usually has no `origin`, and the marker a mapper leaves next to it is not where it is |
+| `waypoints(name, kind)` | Every entity worth steering towards, tagged with a `kind`: `start`, `exit`, `enemy`, `key`, `item`, `path`, `secret`, `goal`, `hint`, `teleport`, `dead`, `trigger` |
+| `nearest(name, from, kind)` | The closest one of those to a point. `kind` also accepts a classname, so `nearest(p, "monster_soldier")` works |
+| `path(name, from, to)` | A\* over a walkable grid built from the BSP's own solids. Returns `points`, or an empty list with a `reason` |
+| `map.pathCorners()` | The mapper's authored patrol graph: `path_corner` entities chained through `target` |
+| `map.entities()` / `bounds()` / `summary()` / `pointContents(x,y,z)` / `isSolid(x,y,z)` | The rest of a BSP, for when a caller wants to ask its own question |
+
+A map that is **not in the archive fails with a clear error** (`RouteError`,
+code `MAP_NOT_FOUND`) naming the maps that are -- never a silent empty answer,
+because "no exit here" and "I could not read the map" would send an agent to
+opposite conclusions. A map with no `target_changelevel` throws `NO_EXIT` and
+says so. `map.summary()` is the one call that does not throw: it is meant to be
+asked about any map, so it reports the error in a field.
+
+`path()` is best-effort and says so. It builds a grid of walkable floor points by
+walking the BSP's node tree -- each node is a splitting plane, and a negative
+child is a leaf -- and finds a floor wherever open space stops and solid begins,
+which is where a mapper put one. It then connects neighbouring cells a player
+could really cross, and runs A\* over them. What it cannot see is anything that
+is not in the *world* geometry: a `func_door`, a `func_plat`, a ladder, a
+trigger, a lift. On a real level those are often the only way from one room to
+the next, so `path()` frequently returns `reason: "NO_ROUTE"` with the distance
+the search got to, and that answer is the truth: the level's static floor plan
+does not, on its own, connect those two points on foot.
+
+**A brush entity is where its volume is, not where its marker is.** This is the
+one thing about `demo1`'s exit that is easy to get wrong, and getting it wrong
+looks exactly like a broken level. `target_changelevel` `t37` sits at
+`-1744 1576 48`, and that is where a naive reader aims -- but the thing that
+actually ends the level is the `trigger_multiple` volume next to it, model `*27`,
+which spans `-1840,-1712` by `1448,1640` by `-24,32`. The marker is **outside its
+own trigger**, 16 units above its ceiling. Stand on the marker and nothing
+happens; walk into the volume and the level ends. `exitPoint()` therefore reports
+`position` (the marker), `triggerVolume` (the box), `aim` (the middle of the box,
+which is what to steer towards), and `markerInsideTrigger` to make the
+discrepancy visible rather than a surprise. Inline model bounds come straight out
+of the BSP's models lump; an entity's `model "*27"` is an index into it.
+
+The reader is also useful without a browser at all:
+
+```
+node control/route.mjs list              # every map in the archive
+node control/route.mjs summary demo1     # message, bounds, counts, start, exit
+node control/route.mjs exit demo1        # the aim point for the exit, as JSON
+node control/route.mjs waypoints demo1 enemy
+node control/route.mjs path demo1        # spawn -> exit, or why there is no route
+```
+
+### What finishing `demo1` means
+
+`demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),
+and the only single-player map in the pack: `demo2` and `demo3` are the
+deathmatch maps the demo shipped with. Its exit is a `trigger_multiple` brush
+that fires `target_changelevel` `t37`, whose `map` field is `demo2$base1` -- that
+is, "load `demo2`, and start the player at the entity tagged `base1`". The
+`worldspawn` `nextmap` says the same thing, which is a good sign for a level and
+is not guaranteed.
+
+So finishing the level is one event with a visible consequence: **the player
+walks into that trigger, the level runs its intermission, and the engine loads
+the next map.** An agent can tell it happened without watching the screen -- the
+`mapname` in `position()` stops being `demo1`, and the engine prints its new
+`Map:` banner. Reaching the trigger is the whole of it. There is no key to fetch
+on this level (`route.mjs` finds no `key_*` entity in it) and nothing else gates
+the exit, but the route there crosses the base: the spawn is at `128 -320 32` and
+the trigger volume around `-1776 1544 4`, 2664 units away in a straight line,
+through doors, a lift and a lava pit that kills a player who walks into it blind.
 
 ### The HTTP API
 
@@ -556,6 +706,7 @@ node scripts/test-userdata.js    # the /userdata store: exit 0 pass, 1 fail
 node scripts/e2e-saves.js        # the real game: exit 0 pass, 1 fail, 77 skipped
 node scripts/control-api-test.mjs # every control route: exit 0 pass, 1 fail
 node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
+node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
 
@@ -579,6 +730,31 @@ run for real, with the least intrusive input there is -- a Shift tap (a modifier
 changes no binding), a zero mouse delta, and the middle button, which Quake 2
 leaves unbound -- plus the console probe `state` uses, which is read-only and
 toggles the console shut again once it has read the answer.
+
+**`scripts/goto-test.mjs`** is the one test that proves *navigation*, and it
+cannot be faked: it drives the live game, reads the player's position out of the
+engine's own console, and checks that the player really moved. It finds the game
+and the running level, reads the running map out of the archive with `route.mjs`
+and checks the player is inside that map's bounds -- so the archive and the
+engine have to be talking about the same level -- then turns to a bearing and
+asserts the engine's reported yaw agrees, walks and asserts the position changed,
+runs `goto()` back to a point the player just stood on and asserts it arrived
+within tolerance, and finally asks `goto()` for the level's exit from far away
+with only two steps allowed and asserts it says `reached: false` with a reason
+and a last position. That last step matters as much as the others: a navigation
+call that claims an arrival it did not make is worse than one that fails. The
+test moves the player a few hundred units and walks them back; it says so in its
+own output.
+
+It **skips rather than fails** in three situations, each with its reason printed:
+no browser at the CDP endpoint; no game open; and a game that is open with a
+level running whose player *cannot be driven* -- it turns with the arrow keys and
+walks once before the navigation steps, and if neither moves anything it says so
+instead of blaming `goto()`. The third case is real: finish `demo1` and the
+engine drops the player onto `demo2`, a deathmatch map with no single-player
+start, where the player ends up on a death camera and no key turns them. The gate
+only skips when *nothing* moves, so a genuine navigation bug still fails loudly.
+`game.command("map demo1")` starts a fresh level and the test passes.
 
 **`scripts/mcp-smoke-test.mjs`** spawns `mcp/server.mjs` and speaks its real
 transport to it: `initialize` (protocol version and server name), a
