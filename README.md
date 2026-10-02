@@ -20,10 +20,10 @@ engine files in `engine/` were copied from the project's public site
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
-| `control/` | `bridge.mjs` (drives the running game over CDP, and navigates it), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
+| `control/` | `bridge.mjs` (drives the running game over CDP, and navigates it), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
 | `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as six tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -430,11 +430,32 @@ bridge closes the loop on top of the same console probe `state()` uses:
 
 | Call | What it does |
 |---|---|
-| `position()` | Where the player is and which way they look, from the engine's `viewpos`, plus the map name from the `mapname` cvar. Much lighter than `state()` -- no server info, no page report |
+| `position()` | Where the player is and which way they look, from the engine's `viewpos`, plus the map name from the `mapname` cvar and `dead`. Much lighter than `state()` -- no server info, no page report |
 | `command(text)` | Open the console, run one command (or an array of them), read the answer back, close it. How a level is started (`map demo1`) and how a cheat is turned on, said out loud |
 | `face(bearing)` | Turn the player to an absolute bearing, in Quake 2's degrees: `0` is `+X`, `90` is `+Y`, the yaw grows anticlockwise |
 | `walk(ms)` | Hold forward for `ms` and let go. The primitive underneath `goto()` |
 | `goto({x,y,z}, opts)` | Turn towards a point, walk, read the position again, and keep going until the player is there -- or until the position stops improving |
+| `use(ms)` / `useHold(down)` | The use key, as `+use` on the engine's command line: what opens a door, calls a lift and presses a button. Held rather than tapped, because a door opens when the player walks into it |
+| `jump()` | One tap of space, the engine's fixed-height jump |
+| `strafe(ms, "left")` | Step sideways without turning: how a follower backs out of a corner |
+| `respawn()` | Put a dead player back in the level by starting the level again (`how: "map"`). `{ how: "fire" }` uses the engine's own fire-to-respawn instead, which restores the autosave |
+
+`position()` reports **`dead`**. A living player's view never rolls -- Quake 2 has
+no lean -- so a non-zero roll is the death camera, and it is the only way to
+learn the player has died, because this engine has no console command that
+prints health (see [Reading the game's state](#reading-the-games-state)). It
+matters more than it sounds: every movement key does nothing at all while the
+player is dead, so a navigation loop that does not check it reads a death as a
+wall. `respawn()` is the way back in, and it is not a cheat -- no noclip, no god,
+no teleport; it starts the level again and the player lands on the level's own
+spawn.
+
+It deliberately does **not** press fire first. The engine's own fire-to-respawn
+restores the autosave in `/userdata`, which is wherever the last session saved --
+so a player killed at `128 -320 32` reappears 1300 units away inside the base
+with no walk in between, and a walk that never happened is indistinguishable from
+one that did. `{ how: "fire" }` asks for it anyway, and the result says
+`note: "the engine restored its autosave"` when it happens.
 
 ```js
 import { QuakeControl } from "./control/bridge.mjs";
@@ -520,12 +541,73 @@ asked about any map, so it reports the error in a field.
 walking the BSP's node tree -- each node is a splitting plane, and a negative
 child is a leaf -- and finds a floor wherever open space stops and solid begins,
 which is where a mapper put one. It then connects neighbouring cells a player
-could really cross, and runs A\* over them. What it cannot see is anything that
-is not in the *world* geometry: a `func_door`, a `func_plat`, a ladder, a
-trigger, a lift. On a real level those are often the only way from one room to
-the next, so `path()` frequently returns `reason: "NO_ROUTE"` with the distance
-the search got to, and that answer is the truth: the level's static floor plan
-does not, on its own, connect those two points on foot.
+could really cross, and runs A\* over them.
+
+**The world model is not the whole level.** A Quake 2 map's brush entities --
+`func_door`, `func_wall`, `func_plat`, `func_train` -- are separate models (the
+models lump's `*n` entries), each with its own `headnode` into the *shared* node
+and leaf lumps, and the world's tree contains none of them. The engine collides
+with them separately, so a reader that only walks the world tree gets both halves
+wrong: a `func_wall` platform is a floor the level really has, and a closed
+`func_door` is a wall the level really has until it opens. `route.mjs` reads them
+all, and splits them in two, because they are not the same kind of thing:
+
+* **static brushes** (`func_wall`, `func_explosive`) are geometry, always. A
+  point inside one is solid and its top can be a floor.
+* **movers** (`func_door`, `func_plat`, `func_train`, `func_rotating`,
+  `func_button`) move when the player opens, shoots or rides them, so they are
+  *not* treated as solid: a route may cross them, and `path()` reports every one
+  it crosses in `crossings`, with the `action` -- `open`, `press` or `ride` --
+  that gets the player through.
+
+A brush entity placed by an `origin` key (`func_rotating`, sometimes
+`func_train`) is built around `0 0 0` and moved by that key, so its box is
+shifted onto it; one without an `origin` is already in world coordinates. Getting
+that backwards puts a fan in the wrong room.
+
+Two more things the search knows about the player:
+
+* **a column can have several floors.** `map.floorGrid()` keeps every standable
+  level in a column -- a ledge over a floor, the top and bottom of a lift shaft,
+  two storeys of one room -- and `path()` treats each as a candidate neighbour,
+  rather than only the one nearest the height it is standing at.
+* **a gap can be jumped.** `path(from, to, { maxJump: 160 })` also considers
+  floors across open air, provided the line between them is clear at the player's
+  height; the points that need it come back flagged `jump`. It is off by default:
+  a route that silently leaps a chasm is not the same promise as one that walks.
+
+When it finds nothing it says **what** stopped it, not just that nothing was
+found: `reason: "NO_ROUTE"`, the point the search reached (`reached`), and
+`blockers` -- the brush entities nearest that point, each with its classname,
+model, centre, distance and a one-line `why` ("static brush entity, solid",
+"moves: the route may pass once it is opened, pressed or ridden"). The message
+repeats their names, so a log line reads "the floor grid does not connect ...,
+and the brush entities nearest that point are func_wall *9 at 11 units".
+
+### The walker: following the route, not just drawing it
+
+`control/walker.mjs` turns a route into a player who arrives. A grid route is a
+line over a floor plan and a level is not a floor plan: the doors are shut, the
+lift is at the wrong end, the follower drifts into a corner the grid does not
+know is there. So `RouteWalker.follow(goal)` walks the route one leg at a time
+and, when a leg fails, works out why and does the one thing that fixes it:
+
+* a leg that stops **next to a mover** gets `+use` held while the leg is retried
+  -- which is what opens a door, and is sent as the engine command rather than as
+  a key, because `+use` is what every binding points at and the key itself is the
+  player's own choice;
+* a leg that stops **anywhere else** gets the route re-planned **from where the
+  player actually is**, which is how a follower recovers from a drift the grid
+  route did not intend;
+* a waypoint that will not come is **skipped** once (a grid point can land on a
+  crate the grid calls a floor); two in a row is a wall and the plan is rebuilt;
+* a plan that fails twice gets a **sideways step**, because a follower pressed
+  square against a wall never learns which way is open;
+* a waypoint flagged `jump` gets the **space bar**, run at rather than aimed.
+
+It gives up honestly: `reached: false` with the position the player really
+stopped at, how far short it was, the plan's own `blockers` for that spot, and a
+`log` of everything it tried.
 
 **A brush entity is where its volume is, not where its marker is.** This is the
 one thing about `demo1`'s exit that is easy to get wrong, and getting it wrong
@@ -550,6 +632,14 @@ node control/route.mjs waypoints demo1 enemy
 node control/route.mjs path demo1        # spawn -> exit, or why there is no route
 ```
 
+And the end-to-end one, which drives the running game rather than the archive:
+
+```
+node scripts/demo1-run.mjs plan          # what the level says about the way out
+node scripts/demo1-run.mjs walk X,Y,Z    # walk the route to a point, and report
+node scripts/demo1-run.mjs finish        # fresh demo1, walk to the exit, prove it
+```
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),
@@ -566,9 +656,31 @@ the next map.** An agent can tell it happened without watching the screen -- the
 `mapname` in `position()` stops being `demo1`, and the engine prints its new
 `Map:` banner. Reaching the trigger is the whole of it. There is no key to fetch
 on this level (`route.mjs` finds no `key_*` entity in it) and nothing else gates
-the exit, but the route there crosses the base: the spawn is at `128 -320 32` and
-the trigger volume around `-1776 1544 4`, 2664 units away in a straight line,
-through doors, a lift and a lava pit that kills a player who walks into it blind.
+the exit.
+
+**Where the walk gets to, measured.** The spawn is `128 -320 32` and the trigger
+volume is around `-1776 1544 4`, 2664 units away in a straight line. A player
+who walks at it walks 702 units and stops at **`-427 111 -1`**, at the head of a
+wall of world geometry that runs across `x -464..-512` between the start room
+and the west corridor; the level's own floor plan has no route from the spawn to
+the exit at all, and says so (`reason: "NO_ROUTE"`, search stopped at
+`-432 120 -48`, the two `func_wall`s `*9` and `*10` standing 36 and 53 units from
+that point). The level's own help text -- `target_help` at `88 -256 40`, "Locate
+base installation elevator." -- says the way on is an elevator, and there are
+eight movers in the map, but the only `func_train` (the lift) and all four
+`func_door`s are in the *exit* room at `x -2056..-1680`, so they are the last
+leg, not the first. Nothing in the archive connects the first leg for a walking
+player, and `path()` will not invent one.
+
+Two things are worth knowing before reading that as "the level is broken":
+
+* the search is honest about *why*. It reports where it stopped and names the
+  brushes standing there, so the answer is "a `func_wall` is 36 units from where
+  the walk stopped", not "NO_ROUTE".
+* a *falling* player gets further than a walking one. `route.mjs` plans on
+  floors; the player can drop and can jump, and the walker asks for both
+  (`maxDrop: 300`, `maxJump: 160`), but a drop that lands somewhere with no way
+  onward is a one-way trip, and the plan refuses to take it.
 
 ### The HTTP API
 
@@ -707,8 +819,20 @@ node scripts/e2e-saves.js        # the real game: exit 0 pass, 1 fail, 77 skippe
 node scripts/control-api-test.mjs # every control route: exit 0 pass, 1 fail
 node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
 node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fail
+node scripts/route-test.mjs       # the route planner, off the archive: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
+
+**`scripts/route-test.mjs`** needs no browser and no game: it reads
+`baseq2/pak0.pak` and checks what the planner makes of it -- that all 34 inline
+brush models are read and classified (four static, eight movers, the triggers
+none), that a mover placed by its `origin` lands on it rather than at the world
+origin, that a `func_explosive` standing in a gap the world tree leaves open is
+still solid, that the exit volume and aim point agree with the trigger entity,
+that a route inside the start area is found and a route to the exit is not (and
+that the failure names the brushes nearest the point it reached), and that the
+walker's `brushesNear` finds the door when standing in one and nothing when
+standing in open air.
 
 **`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
 a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP

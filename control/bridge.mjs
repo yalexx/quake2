@@ -172,11 +172,21 @@ function readEngineState(transcript) {
   // last banner of a shutdown.
   const started = Math.max(lastLine(lines, /server initialization/i), lastLine(lines, /^Map:\s/i));
   const stopped = Math.max(lastLine(lines, /Server was killed/i), lastLine(lines, /ShutdownGame/i));
+  const angles = viewpos ? { pitch: Number(viewpos[4]), yaw: Number(viewpos[5]), roll: Number(viewpos[6]) } : null;
   return {
     map: map ? map[1] : null,
     running: started >= 0 && started > stopped,
     position: viewpos ? { x: Number(viewpos[1]), y: Number(viewpos[2]), z: Number(viewpos[3]) } : null,
-    angles: viewpos ? { pitch: Number(viewpos[4]), yaw: Number(viewpos[5]), roll: Number(viewpos[6]) } : null,
+    angles,
+    // A living player's view never rolls: Quake 2 has no lean, and the view
+    // angles are the ones the client smooths from the input, which keep roll at
+    // zero. The death camera is the one thing that rolls them, so a non-zero
+    // roll is how a caller learns the player is dead without a screenshot --
+    // and this engine has no console command that prints health (see "Reading
+    // the game's state"). It matters because every movement key does nothing at
+    // all while the player is dead, which otherwise reads as a follower that has
+    // walked into a wall.
+    dead: !!angles && Math.abs(angles.roll) > 1,
     lines,
   };
 }
@@ -838,7 +848,7 @@ export class QuakeControl {
             "if no level is running, start one first (command(\"map demo1\")).",
         };
       }
-      return { probed: true, position: engine.position, angles: engine.angles, map: engine.map, running: engine.running, attempts: answer.attempts };
+      return { probed: true, position: engine.position, angles: engine.angles, map: engine.map, running: engine.running, dead: engine.dead, attempts: answer.attempts };
     });
   }
 
@@ -1064,6 +1074,90 @@ export class QuakeControl {
     const fromOptions = this.turnCalibration.mouseDegreesPerUnit;
     if (fromOptions !== null && Number.isFinite(fromOptions)) return fromOptions;
     return null;
+  }
+
+  // The engine's use key, as a hold rather than a tap. Quake 2 opens a door on
+  // `+use` when the player is standing in front of it, and the state has to last
+  // across the walk that carries the player into the door's reach -- so this
+  // holds `+use` on the engine's command line and leaves it held until release()
+  // is called. Held down, a door opens the moment the player touches it.
+  //
+  // It goes in through the console rather than as a key event because the
+  // binding for `+use` is the player's own: this box's config may put it on any
+  // key, and a key that is not bound does nothing at all. `+use` is the command
+  // behind every binding, so it always works.
+  async useHold(down = true) {
+    const answer = await this.command([down ? "+use" : "-use"]);
+    if (!answer.ran) {
+      return { held: false, reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console" };
+    }
+    return { held: true, key: down ? "+use" : "-use", output: answer.output };
+  }
+
+  // Press use once and let go: walk into a lift, ride it. Wrapped as a pair so a
+  // caller cannot leave the key stuck down.
+  async use(holdMs = 200) {
+    await this.useHold(true);
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(holdMs, 200))));
+    const release = await this.useHold(false);
+    return { used: release.held !== false, holdMs: holdMs };
+  }
+
+  // Jump. One tap of the space bar, which is what every Quake 2 config binds
+  // `+moveup` to; the physics gives it a fixed height, so a caller that wants to
+  // clear a 40-unit lip does not have to hold it.
+  async jump(key = "Space") {
+    await this.tap(key);
+    return { jumped: true, key };
+  }
+
+  // Get a dead player back into the level. Every movement key does nothing at
+  // all while the player is dead, so a follower that does not check reads a
+  // death as a wall and grinds at it forever -- which is exactly what a walk of
+  // demo1 does, because the level is full of soldiers and dying is normal.
+  //
+  // The engine's own way back in is the fire button -- "press fire to respawn"
+  // -- but on this box that is a trap: the client restores the *autosave* in
+  // `/userdata`, which is wherever the last session saved, and a player who dies
+  // at `128 -320` then reappears 1300 units away inside the base with no walk in
+  // between. That reads exactly like a navigation system that can play a level
+  // it cannot, so it is not the default: the level is started again instead.
+  //
+  // Starting the level is not a cheat. There is no noclip, no god, no give and
+  // no teleport in it; it puts the player back on the level's own spawn with the
+  // level's own weapons, and it is what a single-player game does when the
+  // player dies. `how: "fire"` is still available for a caller that *wants* the
+  // save restored, and it says so in its result.
+  async respawn(options = {}) {
+    const before = await this.position();
+    if (!before || !before.dead) return { respawned: false, reason: "ALIVE", position: before && before.position };
+    if (options.how === "fire") {
+      await this.click("left").catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
+      const afterFire = await this.position();
+      if (afterFire && !afterFire.dead) {
+        return { respawned: true, how: "fire", position: afterFire.position, note: "the engine restored its autosave" };
+      }
+    }
+    const map = options.map || (before && before.map);
+    if (!map) return { respawned: false, reason: "NO_MAP", position: before && before.position };
+    await this.command(["map " + map, "cheats 0"], { tail: 8 });
+    await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
+    const after = await this.position();
+    return {
+      respawned: !!(after && !after.dead),
+      how: "map",
+      map,
+      position: after && after.position,
+      message: after && after.dead ? "the player is still dead after restarting " + map : undefined,
+    };
+  }
+
+  // Step sideways for a while without turning: how a follower backs out of a
+  // corner it has walked into. `direction` is "left" or "right".
+  async strafe(ms = 300, direction = "right", options = {}) {
+    const key = direction === "left" ? (options.leftKey || "a") : (options.rightKey || "d");
+    return this.walk(ms, { key });
   }
 
   // Hold the forward key for a while and let go. The primitive under goto(): it
