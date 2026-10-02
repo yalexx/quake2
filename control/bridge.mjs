@@ -105,7 +105,7 @@ const KEY_ALIASES = {
   ins: "Insert", pgup: "PageUp", pgdn: "PageDown",
   up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight",
   backtick: "`", grave: "`", tilde: "`", console: "`",
-  minus: "-", dash: "-", equal: "=", equals: "=", plus: "=",
+  minus: "-", dash: "-", equal: "=", equals: "=", plus: "+",
   comma: ",", period: ".", dot: ".", slash: "/", backslash: "\\",
   semicolon: ";", quote: "'", apostrophe: "'",
   shift: "Shift", ctrl: "Control", control: "Control", alt: "Alt", option: "Alt",
@@ -559,17 +559,24 @@ export class QuakeControl {
           canvas: canvas ? {
             width: canvas.width, height: canvas.height,
             cssWidth: box.width, cssHeight: box.height,
-            display: canvas.style.display || "block",
+            // style.css hides the canvas until app.js's hideConsole(), which the
+            // engine calls once its video subsystem is up, sets it to "block".
+            // So "" is a page still booting, and "none" is a game that has quit.
+            display: canvas.style.display,
             focused: document.activeElement === canvas,
           } : null,
           engine: {
             module: typeof Module !== "undefined" && !!Module,
             filesystem: typeof FS !== "undefined" && !!FS,
-            // The save mount only exists once the engine has booted.
+            // IDBFS being available means the engine's file system is up; it does
+            // not yet mean the save mount has been made.
             saveMount: typeof FS !== "undefined" && !!FS.filesystems && !!FS.filesystems.IDBFS,
-            // showConsole() hides the canvas, so a hidden canvas means the game
-            // has quit or aborted.
-            running: !!canvas && canvas.style.display !== "none",
+            // The engine sets the canvas to "block" when it comes up, and back to
+            // "none" when it quits or aborts, so that inline style is the one
+            // signal that says a game is really being drawn. Defaulting it to
+            // "block" would report a page that is still downloading its PAKs --
+            // where the canvas's own style is still empty -- as a running game.
+            running: !!canvas && canvas.style.display === "block",
           },
         });
       })()`));

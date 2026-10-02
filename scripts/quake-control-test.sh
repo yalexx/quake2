@@ -108,7 +108,7 @@ try {
     process.exit(1);
   }
   if (!status.engine.running) {
-    console.error("the engine is not running: the canvas is hidden, which happens when the game has quit or aborted");
+    console.error("the engine is not running: the canvas is not being drawn -- either the page is still booting, or the game has quit or aborted");
     process.exit(1);
   }
 } catch (error) {
