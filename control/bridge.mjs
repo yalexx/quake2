@@ -410,6 +410,57 @@ class CdpSession {
   }
 }
 
+// ---- Navigation arithmetic ------------------------------------------------
+
+// How long the engine is given to write its `condump` file after the keys have
+// gone in. Writing is not part of the key dispatch, so it needs a moment.
+const PROBE_SETTLE_MS = 150;
+// Face() stops when the bearing is this close, in degrees.
+const FACE_TOLERANCE_DEGREES = 4;
+// Quake 2's own defaults: sensitivity 3 against m_yaw 0.022 is about a
+// fifteenth of a degree per mouse count. Only ever a starting guess -- face()
+// measures the real ratio on its first successful turn and uses that instead.
+const DEFAULT_DEGREES_PER_MOUSE_UNIT = 0.066;
+// cl_yawspeed, degrees per second, for the +left/+right keys.
+const DEFAULT_YAW_SPEED_DEGREES_PER_SECOND = 140;
+// The gap between a map's floor and the position the engine reports for the
+// player standing on it: the player's origin is the middle of their 32x32x56
+// box (24 up) and the view sits another 22 above that. A target that comes from
+// map data is a floor, so goto() compares z loosely unless told otherwise.
+const EYE_ABOVE_FEET = 46;
+const DEFAULT_Z_TOLERANCE = 64;
+
+function numberOr(value, fallback) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : fallback;
+}
+
+// Fold any angle into (-180, 180]: the turn actually needed, not the long way.
+function shortestTurn(degrees) {
+  let angle = Number(degrees) % 360;
+  if (angle > 180) angle -= 360;
+  if (angle <= -180) angle += 360;
+  return angle;
+}
+
+function horizontalDistance(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+// Quake 2's compass: 0 is +X, 90 is +Y, anticlockwise.
+function bearingTo(from, to) {
+  const bearing = Math.atan2(to.y - from.y, to.x - from.x) * (180 / Math.PI);
+  return (bearing + 360) % 360;
+}
+
+// {x, y, z} out of whatever the caller passed, or null if it is not a point.
+function describePoint(target) {
+  if (!target || typeof target !== "object") return null;
+  const point = { x: Number(target.x), y: Number(target.y), z: Number(target.z) };
+  if (![point.x, point.y, point.z].every(Number.isFinite)) return null;
+  return point;
+}
+
 // ---- The bridge -----------------------------------------------------------
 
 export class QuakeControl {
@@ -425,6 +476,25 @@ export class QuakeControl {
     // reports movementX/Y as the change from the previous dispatch position, so
     // the bridge keeps its own virtual cursor and adds each delta to it.
     this.cursor = null;
+    // The engine's console is a toggle with no way to ask which way it is. The
+    // bridge is the only thing that toggles it, so it counts: every toggle it
+    // makes flips this. #askEngine re-checks against reality and corrects it
+    // when a dump does not come back.
+    this.consoleOpen = false;
+    // What face() has learned about turning: how far one mouse count turns the
+    // player, how fast the arrow keys turn, and whether each works at all.
+    // null means "not measured yet".
+    this.turnCalibration = {
+      mouseDegreesPerUnit: this.#optionsDegreesPerUnit(options),
+      keyDegreesPerMs: null,
+      mouseWorks: null,
+      keysWork: null,
+    };
+  }
+
+  #optionsDegreesPerUnit(options) {
+    const given = numberOr(options.degreesPerMouseUnit ?? process.env.QUAKE2_DEGREES_PER_MOUSE_UNIT, NaN);
+    return Number.isFinite(given) && given > 0 ? given : null;
   }
 
   // Every debuggable target the browser knows about.
@@ -729,6 +799,373 @@ export class QuakeControl {
     });
   }
 
+  // ---- Navigation ---------------------------------------------------------
+  //
+  // key() and mouseMove() push a button and come back; that is enough to open a
+  // door, and not enough to arrive anywhere. Closing the loop needs three things
+  // the engine will only say through its console -- where the player is, which
+  // way they face, and how far a mouse count actually turns them -- so this
+  // section adds them on top of the same probe state() already uses.
+  //
+  // The console is a *toggle* and the bridge now remembers which way it left it.
+  // Typing a command into a console somebody else closed sends the characters
+  // into the game as keystrokes, and opening one that is already open closes it;
+  // both look exactly like the engine ignoring you.
+  //
+  // Everything here reports what it observed. A turn that did not turn, a walk
+  // into a wall and a console that refused to open all come back as such,
+  // because an agent that is told "reached" when it is stuck in a corner has
+  // been told something worse than nothing.
+
+  // Where the player is and which way they are looking, from the engine's own
+  // `viewpos` -- plus `mapname`, which the engine keeps as a cvar and prints as
+  // `"mapname" is "demo1"`. Much lighter than state(): no server info, no page
+  // report, and the map name is what tells an agent whether the level it is
+  // navigating is still the level it planned for.
+  async position() {
+    return this.#withSession(async (game) => {
+      const answer = await this.#askEngine(game, ["viewpos", "mapname"]);
+      const engine = readEngineState(answer.text || "");
+      if (!answer.text) {
+        return {
+          probed: false,
+          position: null,
+          angles: null,
+          map: null,
+          running: false,
+          reason: "NO_ANSWER",
+          message: "the engine did not answer on its console. It refuses to open the console during the attract demo and drops keys while it boots; " +
+            "if no level is running, start one first (command(\"map demo1\")).",
+        };
+      }
+      return { probed: true, position: engine.position, angles: engine.angles, map: engine.map, running: engine.running, attempts: answer.attempts };
+    });
+  }
+
+  // Run one or more console commands and return what the engine printed. This is
+  // the way to start a level, turn cheats on or off, or ask anything `viewpos`
+  // does not cover. The console is left closed afterwards, and it is left in the
+  // state it was found in, because a console left open pauses the game and eats
+  // the next keystroke.
+  //
+  // A `condump` is the whole console scrollback, so its tail is *not* this
+  // command's answer -- it is whatever the engine happened to have printed last,
+  // which on a busy line can be the answer to a command from a minute ago. The
+  // reply is therefore cut at the command's own echo (the console prints `]map
+  // demo1` before it runs anything) and `output` starts there. `options.tail`
+  // then says how many lines of that to keep, because `cmdlist` alone prints
+  // over a hundred.
+  async command(text, options = {}) {
+    const commands = Array.isArray(text) ? text.map(String) : [String(text)];
+    const tail = Math.max(1, Math.floor(numberOr(options.tail, 24)));
+    return this.#withSession(async (game) => {
+      const answer = await this.#askEngine(game, commands);
+      const lines = (answer.text || "").split("\n").filter((line) => line.trim() !== "");
+      const echo = "]" + commands[0];
+      let from = -1;
+      // Backwards, so an earlier command that happens to read the same is not
+      // mistaken for this one.
+      for (let index = lines.length - 1; index >= 0; index--) {
+        const line = lines[index].trim();
+        if (line === echo || line.startsWith(echo + " ")) { from = index; break; }
+      }
+      return {
+        commands,
+        ran: !!answer.text,
+        echoFound: from !== -1,
+        consoleOpen: this.consoleOpen,
+        output: (from === -1 ? lines.slice(-tail) : lines.slice(from, from + tail)),
+        reason: answer.text ? undefined : "NO_ANSWER",
+        message: answer.text ? undefined : "the engine did not answer on its console (attract demo, or it is still booting)",
+      };
+    });
+  }
+
+  // Open the console, run `commands`, condump and read the result back, close the
+  // console. The dump file is the engine's own `condump`, which is also how
+  // state() reads; it is deleted again because the save store is synced from
+  // this file system.
+  async #askEngine(game, commands, attempts = 2) {
+    await this.focusCanvas(game);
+    const page = JSON.parse(await game.evaluate(stateExpression));
+    if (!page.gameDir) return { text: null, gameDir: null, attempts: 0 };
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      await this.#ensureConsole(game, true);
+      for (const command of commands) {
+        await this.#typeInto(game, command);
+        await this.#tapOn(game, "Enter");
+      }
+      await this.#typeInto(game, "condump " + PROBE_DUMP);
+      await this.#tapOn(game, "Enter");
+      await this.#ensureConsole(game, false);
+      // Writing the file is not part of the key dispatch, so it is given a
+      // moment before it is read.
+      await new Promise((resolve) => setTimeout(resolve, PROBE_SETTLE_MS));
+      const dumped = await game.evaluate(readDumpExpression(page.gameDir));
+      await game.evaluate(removeDumpExpression(page.gameDir));
+      if (dumped) return { text: dumped, gameDir: page.gameDir, attempts: attempt + 1 };
+      // No dump means the commands went somewhere other than the console, and
+      // the only thing that can be wrong is where the bridge thinks the console
+      // is. Flip the model and try again rather than repeat the same mistake.
+      this.consoleOpen = !this.consoleOpen;
+    }
+    return { text: null, gameDir: page.gameDir, attempts };
+  }
+
+  // The console toggle, with the bridge's model of it kept in step.
+  async #toggleConsole(game) {
+    await this.#tapOn(game, "`");
+    this.consoleOpen = !this.consoleOpen;
+    return this.consoleOpen;
+  }
+
+  async #ensureConsole(game, want) {
+    if (this.consoleOpen !== want) await this.#toggleConsole(game);
+    return this.consoleOpen;
+  }
+
+  // Turn to an absolute bearing, in Quake 2's degrees: 0 faces +X, 90 faces +Y,
+  // and the yaw grows anticlockwise. Closed loop -- it turns, measures what the
+  // turn actually did, and corrects -- because how far a mouse count turns the
+  // player depends on their own sensitivity cvar, which the engine will not
+  // report.
+  //
+  // options.from skips the first probe when the caller has just read the angles.
+  async face(bearing, options = {}) {
+    const target = Number(bearing);
+    if (!Number.isFinite(target)) throw new ControlError("face(bearing) needs a bearing in degrees", "BAD_REQUEST");
+    const tolerance = numberOr(options.tolerance, FACE_TOLERANCE_DEGREES);
+    const rounds = Math.max(1, Math.floor(numberOr(options.rounds, 6)));
+    const start = options.from && options.from.angles ? options.from : await this.position();
+    if (!start || !start.angles) {
+      return { facing: false, target, reason: "NO_ANGLES", message: "the engine did not report the player's angles", history: [] };
+    }
+    let yaw = start.angles.yaw;
+    const history = [];
+    let method = null;
+    for (let round = 0; round < rounds; round++) {
+      const error = shortestTurn(target - yaw);
+      if (Math.abs(error) <= tolerance) {
+        return { facing: true, target, yaw, error, rounds: round, method, history };
+      }
+      const attempted = await this.#turnBy(error, options);
+      if (attempted.method === "none") {
+        return { facing: false, target, yaw, error, reason: "NO_TURN", message: attempted.message, rounds: round, method, history };
+      }
+      const after = await this.position();
+      if (!after || !after.angles) {
+        return { facing: false, target, yaw, error, reason: "NO_ANGLES", message: "the engine stopped answering after the turn", rounds: round, method, history };
+      }
+      // What the turn achieved, measured against the same yaw convention, then
+      // folded back into the calibration so the next round is closer.
+      const achieved = shortestTurn(after.angles.yaw - yaw);
+      history.push({ method: attempted.method, wanted: error, nominal: attempted.amount, achieved, angle: after.angles });
+      method = attempted.method;
+      this.#learnTurn(attempted, achieved);
+      yaw = after.angles.yaw;
+    }
+    return { facing: false, target, yaw, error: shortestTurn(target - yaw), reason: "NOT_CONVERGED", rounds, method, history };
+  }
+
+  // One turn of about `degrees` (positive turns left, bumping the yaw up).
+  //
+  // The arrow keys come first, the mouse second, and which one worked is
+  // reported. The engine turns at cl_yawspeed for a held key -- a fixed rate
+  // that does not depend on the player's sensitivity cvar -- and on this box's
+  // build the arrow keys turn the player while the relative-motion deltas do
+  // not, even though the page receives them (see the mouse step in
+  // scripts/quake-control-test.sh, which proves the *events* arrive, and
+  // scripts/goto-test.mjs, which proves what the engine then does with them).
+  // A method that demonstrably does nothing is retired, so the other one is
+  // tried next round instead of the same dead turn again.
+  async #turnBy(degrees, options) {
+    const wanted = Number(degrees);
+    const mode = options.turn === "mouse" || options.turn === "keys" ? options.turn : "auto";
+    const keysUsable = mode !== "mouse" && this.turnCalibration.keysWork !== false;
+    if (keysUsable) {
+      const rate = this.turnCalibration.keyDegreesPerMs === null ? DEFAULT_YAW_SPEED_DEGREES_PER_SECOND / 1000 : this.turnCalibration.keyDegreesPerMs;
+      let ms = Math.abs(wanted) / rate;
+      const capMs = numberOr(options.maxKeyMsPerStep, 900);
+      if (ms > capMs) ms = capMs;
+      if (ms < 20) ms = 20;
+      // +left raises the yaw, and Quake binds +left/+right to the arrow keys.
+      const key = wanted > 0 ? "ArrowLeft" : "ArrowRight";
+      await this.#withSession(async (game) => {
+        await this.focusCanvas(game);
+        await this.#sendKey(game, key, true);
+        await new Promise((resolve) => setTimeout(resolve, ms));
+        await this.#sendKey(game, key, false);
+      });
+      return { method: "keys", amount: Math.sign(wanted) * ms * rate, ms: Math.round(ms), key };
+    }
+    if (mode === "keys" || this.turnCalibration.mouseWorks === false) {
+      return { method: "none", message: "neither the arrow keys nor the mouse turned the player (the game may be paused, dead, or in a menu)" };
+    }
+    const perUnit = this.#mouseDegreesPerUnit() === null ? DEFAULT_DEGREES_PER_MOUSE_UNIT : this.#mouseDegreesPerUnit();
+    // Quake turns the yaw *down* as the mouse moves right, so a positive
+    // bearing change is a negative delta.
+    let units = -wanted / perUnit;
+    const capUnits = numberOr(options.maxMouseUnitsPerStep, 500);
+    if (Math.abs(units) > capUnits) units = Math.sign(units) * capUnits;
+    if (Math.abs(units) < 1) return { method: "none", message: "the turn needed is smaller than one mouse count" };
+    await this.mouseMove(Math.round(units), 0);
+    return { method: "mouse", amount: -Math.round(units) * perUnit, units: Math.round(units) };
+  }
+
+  // Fold an observed turn back into the calibration, and retire a method that
+  // demonstrably did nothing -- so the next round tries the other one instead of
+  // repeating a turn that cannot work.
+  #learnTurn(attempted, achieved) {
+    if (Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4) {
+      if (attempted.method === "mouse" && this.turnCalibration.mouseWorks !== false) this.turnCalibration.mouseWorks = false;
+      if (attempted.method === "keys" && this.turnCalibration.keysWork !== false) this.turnCalibration.keysWork = false;
+      return;
+    }
+    if (attempted.method === "mouse" && attempted.units) {
+      const perUnit = Math.abs(achieved / attempted.units);
+      // A sanity window: a value outside it means the turn was observed while
+      // something else moved the player, and believing it would poison the loop.
+      if (perUnit > 0.001 && perUnit < 5) {
+        const previous = this.turnCalibration.mouseDegreesPerUnit;
+        this.turnCalibration.mouseDegreesPerUnit = previous === null ? perUnit : previous * 0.4 + perUnit * 0.6;
+        this.turnCalibration.mouseWorks = true;
+      }
+    }
+    if (attempted.method === "keys" && attempted.ms) {
+      const perMs = Math.abs(achieved / attempted.ms);
+      if (perMs > 0.0005 && perMs < 2) {
+        const previous = this.turnCalibration.keyDegreesPerMs;
+        this.turnCalibration.keyDegreesPerMs = previous === null ? perMs : previous * 0.4 + perMs * 0.6;
+        this.turnCalibration.keysWork = true;
+      }
+    }
+  }
+
+  #mouseDegreesPerUnit() {
+    const fromOptions = this.turnCalibration.mouseDegreesPerUnit;
+    if (fromOptions !== null && Number.isFinite(fromOptions)) return fromOptions;
+    return null;
+  }
+
+  // Hold the forward key for a while and let go. The primitive under goto(): it
+  // is the only way to move, and it says how long it really held.
+  async walk(ms = 300, options = {}) {
+    const key = options.key || "w";
+    const duration = Math.max(0, numberOr(ms, 300));
+    const held = await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      const started = Date.now();
+      await this.#sendKey(game, key, true);
+      await new Promise((resolve) => setTimeout(resolve, duration));
+      await this.#sendKey(game, key, false);
+      return Date.now() - started;
+    });
+    return { key, requestedMs: duration, heldMs: held };
+  }
+
+  // Walk to a point and say honestly whether the player got there. Each round
+  // reads the position, turns towards the target, walks a step and reads again;
+  // when the position stops improving the call gives up and reports where the
+  // player actually is, because "stuck in a corner" is a result an agent can
+  // act on and a hopeful "reached" is not.
+  //
+  // tolerance is the arrival radius across the floor. z is compared with a
+  // wider slack by default: map data places a floor, and the engine reports the
+  // eye, which sits eyeHeight() above it -- see EYE_ABOVE_FEET.
+  async goto(target, options = {}) {
+    const point = describePoint(target);
+    if (!point) throw new ControlError("goto(target) needs {x, y, z} numbers", "BAD_REQUEST");
+    const tolerance = numberOr(options.tolerance, 48);
+    const zTolerance = numberOr(options.zTolerance, DEFAULT_Z_TOLERANCE);
+    const stepMs = numberOr(options.stepMs, 400);
+    const deadline = Date.now() + numberOr(options.timeoutMs, 30000);
+    const stuckRounds = Math.max(1, Math.floor(numberOr(options.stuckRounds, 3)));
+    const maxRounds = Math.max(1, Math.floor(numberOr(options.maxRounds, 40)));
+
+    let last = await this.position();
+    if (!last || !last.position) {
+      return {
+        reached: false, target: point, tolerance, reason: "NO_POSITION",
+        message: (last && last.message) || "the engine did not report a player position",
+        position: null, rounds: 0,
+      };
+    }
+    const startPosition = last.position;
+    let best = horizontalDistance(last.position, point);
+    let stagnant = 0;
+    let rounds = 0;
+    const trail = [{ x: last.position.x, y: last.position.y, z: last.position.z, distance: best }];
+
+    while (rounds < maxRounds) {
+      const position = last.position;
+      const horizontal = horizontalDistance(position, point);
+      if (horizontal <= tolerance && Math.abs(position.z - point.z) <= zTolerance) {
+        return {
+          reached: true, reason: "reached", target: point, tolerance, zTolerance,
+          position, start: startPosition, distance: horizontal, rounds,
+          travelled: horizontalDistance(startPosition, position), trail: trail.slice(-16),
+        };
+      }
+      if (Date.now() > deadline) {
+        return { reached: false, reason: "timeout", target: point, tolerance, position, distance: horizontal, rounds, travelled: horizontalDistance(startPosition, position), trail: trail.slice(-16) };
+      }
+      const bearing = bearingTo(position, point);
+      await this.face(bearing, { from: last, tolerance: numberOr(options.faceTolerance, 8), rounds: numberOr(options.faceRounds, 4) });
+      await this.walk(stepMs, options);
+      rounds++;
+      const next = await this.position();
+      if (!next || !next.position) {
+        return { reached: false, reason: "NO_POSITION", target: point, tolerance, position, distance: horizontal, rounds, message: next && next.message, trail: trail.slice(-16) };
+      }
+      last = next;
+      const distance = horizontalDistance(next.position, point);
+      trail.push({ x: next.position.x, y: next.position.y, z: next.position.z, distance });
+      if (distance < best - 1) { best = distance; stagnant = 0; }
+      else {
+        stagnant++;
+        if (stagnant >= stuckRounds) {
+          return {
+            reached: false, reason: "stuck", target: point, tolerance, position: next.position,
+            distance, rounds, travelled: horizontalDistance(startPosition, next.position),
+            obstacles: await this.#probeAhead(next, point),
+            trail: trail.slice(-16),
+            message: "the player stopped closing on the target: " + distance.toFixed(0) + " units short after " + rounds +
+              " steps. Something solid, a closed door or a drop is in the way; the last position is the truth.",
+          };
+        }
+      }
+    }
+    const finalPosition = last.position;
+    return {
+      reached: false, reason: "rounds", target: point, tolerance, position: finalPosition,
+      distance: horizontalDistance(finalPosition, point), rounds,
+      travelled: horizontalDistance(startPosition, finalPosition), trail: trail.slice(-16),
+    };
+  }
+
+  // Whether anything solid is in front of the player, asked of the game world
+  // through the console's own `trace`. Reported alongside a stuck goto so the
+  // caller can tell a wall from a door from a hole.
+  async #probeAhead(report, point) {
+    if (!report || !report.position) return null;
+    // The engine's `trace` wants two points and prints a fraction; it is the
+    // engine's collision, not a guess from the map file.
+    const from = report.position;
+    const dx = point.x - from.x;
+    const dy = point.y - from.y;
+    const length = Math.hypot(dx, dy) || 1;
+    const ahead = { x: from.x + (dx / length) * 128, y: from.y + (dy / length) * 128, z: from.z };
+    const answer = await this.#withSession(async (game) => {
+      const said = await this.#askEngine(game, [
+        "trace " + Math.round(from.x) + " " + Math.round(from.y) + " " + Math.round(from.z) + " " +
+        Math.round(ahead.x) + " " + Math.round(ahead.y) + " " + Math.round(ahead.z),
+      ]);
+      return said.text;
+    });
+    if (!answer) return null;
+    return answer.split("\n").filter((line) => /fraction|allsolid|startsolid|hit/i.test(line)).slice(-3);
+  }
+
   // What the game is showing right now: enough for an agent to decide what to do
   // next, and enough for an operator to see that the frame really is the game.
   async status() {
@@ -809,14 +1246,16 @@ export class QuakeControl {
         // opens the console and they go in again.
         for (let attempt = 0; attempt < 2; attempt++) {
           await this.focusCanvas(game);
-          await this.#tapOn(game, "`");
+          // Through the tracked toggle, so the bridge's idea of the console
+          // survives a probe the engine did not answer.
+          await this.#toggleConsole(game);
           for (const command of PROBE_COMMANDS) {
             await this.#typeInto(game, command);
             await this.#tapOn(game, "Enter");
           }
           await this.#typeInto(game, "condump " + PROBE_DUMP);
           await this.#tapOn(game, "Enter");
-          await this.#tapOn(game, "`");
+          await this.#toggleConsole(game);
           // Writing the file is not part of the key dispatch, so it is given a
           // moment before it is read.
           await new Promise((resolve) => setTimeout(resolve, 150));
