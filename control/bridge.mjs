@@ -32,6 +32,16 @@ const DEFAULT_TIMEOUT_MS = 5000;
 // CDP's Input.dispatchKeyEvent.modifiers is a bit field.
 const MODIFIER_BITS = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
+// The box of the game's own <iframe>, in the document that draws it, as a CDP
+// clip wants it (viewport CSS pixels). Evaluated in whichever document holds
+// the frame -- the shell's, or the top-level page's when the game is a tab.
+const frameBoxExpression = (mark) => `(function () {
+  const frame = document.querySelector('iframe[src*="${mark}"]') || document.querySelector("iframe");
+  if (!frame) return "null";
+  const box = frame.getBoundingClientRect();
+  return JSON.stringify({ x: box.left, y: box.top, width: box.width, height: box.height, scale: 1 });
+})()`;
+
 // Thrown when there is no game to drive. Its message is what an operator sees,
 // so it says what was looked for and what the browser did have.
 export class ControlError extends Error {
@@ -601,22 +611,55 @@ export class QuakeControl {
   // A PNG of the game frame as a Buffer. A framed game is cropped to its frame,
   // so the ClawBox shell around it never appears in the picture.
   async screenshot() {
-    return this.#withSession(async (game) => {
-      const params = { format: "png" };
-      if (!game.isWholeTarget) {
-        // The iframe element lives in the shell's document, not the game's, so
-        // its box has to be measured there (clip is in viewport CSS pixels).
-        const rect = JSON.parse(await game.evaluateTop(`(function () {
-          const frame = document.querySelector('iframe[src*="${this.gameUrlMark}"]') || document.querySelector("iframe");
-          if (!frame) return "null";
-          const box = frame.getBoundingClientRect();
-          return JSON.stringify({ x: box.left, y: box.top, width: box.width, height: box.height, scale: 1 });
-        })()`));
-        if (rect) params.clip = rect;
+    return this.#withSession(async (game, target) => {
+      // Page.captureScreenshot is only legal on a target the browser itself
+      // treats as top-level. A game that is its own tab (target type "page") is
+      // captured there; the desktop instead frames it in an out-of-process
+      // iframe, which is a target of its own but still not top-level -- CDP
+      // refuses the command there, so that case is captured from the page that
+      // draws the frame and cropped to it. "clip" is in the viewport's CSS
+      // pixels, so the box is measured in whichever document draws the frame.
+      if (target.type === "page") {
+        const params = { format: "png" };
+        if (!game.isWholeTarget) {
+          // The iframe element lives in the shell's document, not the game's, so
+          // its box has to be measured there (clip is in viewport CSS pixels).
+          const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
+          if (rect) params.clip = rect;
+        }
+        const { data } = await game.session.send("Page.captureScreenshot", params);
+        return Buffer.from(data, "base64");
       }
-      const { data } = await game.session.send("Page.captureScreenshot", params);
-      return Buffer.from(data, "base64");
+      const ancestors = JSON.parse(await game.evaluate("JSON.stringify([...location.ancestorOrigins])"));
+      const host = await this.#hostPageForGame(ancestors);
+      const session = await CdpSession.open(host.webSocketDebuggerUrl, this.timeoutMs);
+      try {
+        await session.send("Page.enable");
+        const measured = await session.send("Runtime.evaluate", {
+          expression: frameBoxExpression(this.gameUrlMark),
+          returnByValue: true,
+        });
+        const rect = JSON.parse(measured.result ? measured.result.value : "null");
+        if (!rect) throw new GameNotRunningError("the game's frame is no longer in the top-level page");
+        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip: rect });
+        return Buffer.from(data, "base64");
+      } finally {
+        session.close();
+      }
     });
+  }
+
+  // The top-level page whose document draws the game's frame: the one target the
+  // browser will let us screenshot a framed game from. The desktop frames the app
+  // as an out-of-process iframe, which the shell's own frame tree does not list --
+  // so the frame itself says where it was loaded from (ancestorOrigins works
+  // across origins), and the page with that origin is the host.
+  async #hostPageForGame(ancestorOrigins) {
+    const origin = ancestorOrigins[ancestorOrigins.length - 1];
+    const pages = (await this.targets()).filter((t) => t.type === "page" && t.webSocketDebuggerUrl);
+    const host = (origin && pages.find((t) => t.url.startsWith(origin))) || pages.find((t) => !t.url.includes(this.gameUrlMark));
+    if (!host) throw new GameNotRunningError("found the game's frame but not the top-level page that draws it");
+    return host;
   }
 
   // Present for symmetry: nothing is kept open between calls.
