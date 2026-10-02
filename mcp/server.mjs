@@ -10,7 +10,8 @@
 //   quake2_key        press, hold or release a key, or type a whole string
 //   quake2_mouse      turn the view by a delta (the game is pointer-locked)
 //   quake2_click      click a mouse button (left is fire)
-//   quake2_status     what the game is showing, as JSON
+//   quake2_status     what the page is showing: framing, engine, canvas, CDP
+//   quake2_state      what the game is doing: level, map, position, console log
 //   quake2_screenshot a PNG of the game frame, as an image content block
 //
 // Zero dependencies. ESM is strict by default, so no "use strict" pragma is
@@ -22,6 +23,28 @@ const SERVER_VERSION = "1.0.0";
 // Newest first: the spec's own negotiation rule is to answer with a version we
 // support, preferring the one the client asked for.
 const PROTOCOL_VERSIONS = ["2025-06-18", "2025-03-26", "2024-11-05"];
+// A request line is one small JSON-RPC message; a line that grows past this
+// without ever ending is not one, and buffering it would only grow memory. The
+// cap is generous next to any tool call (a screenshot travels the other way).
+const MAX_LINE = 1024 * 1024;
+// A tool call drives a browser that can wedge, and an MCP client has no way to
+// hang up on one: it gets an answer with isError instead of a server that never
+// speaks again. The bridge's per-CDP timeouts (5 s) are shorter than this, so
+// this only fires when something is badly stuck.
+const CALL_TIMEOUT_MS = Number(process.env.QUAKE2_MCP_TIMEOUT_MS || 20000);
+
+// Settles with the work, or with a TIMEOUT ControlError, whichever is first.
+// Handlers are attached either way, so a call that settles after the deadline
+// is not an unhandled rejection.
+function withTimeout(work, ms) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new ControlError("the tool call did not answer within " + ms + " ms", "TIMEOUT")), ms);
+    work.then(
+      (value) => { clearTimeout(timer); resolve(value); },
+      (error) => { clearTimeout(timer); reject(error); },
+    );
+  });
+}
 
 const game = new QuakeControl();
 
@@ -77,8 +100,31 @@ const TOOLS = [
   },
   {
     name: "quake2_status",
-    description: "Report what the game is showing: the frame's URL, whether the engine is running, the canvas size, window focus and pointer lock, and the CDP target behind it.",
+    description:
+      "Report what the game is showing: the frame's URL, whether the engine is running, " +
+      "the canvas size, window focus and pointer lock, and the CDP target behind it. Also " +
+      "reports framing: whether the game sits inside the ClawBox desktop shell (the host " +
+      "page's origin) or is a tab of its own, and tells you plainly whether a screenshot " +
+      "would come from the shell or from the game's own tab.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "quake2_state",
+    description:
+      "Read the game's state as JSON: whether the engine is running, whether a level is " +
+      "up, the current map, the player's position and angles, the save slots, and the " +
+      "tail of the engine's own console log. Without probe:true it sends no input at all " +
+      "and reports what the engine has already printed; with probe:true it asks the " +
+      "engine directly (opening its console for a moment and shutting it again). Quake 2 " +
+      "has no way to print health, armour, ammo or whether the player is alive -- the " +
+      "reply lists those in `unavailable`; read them from a quake2_screenshot instead.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        probe: { type: "boolean", description: "true asks the engine directly for the live position (input: the console is opened and shut again)." },
+      },
+      additionalProperties: false,
+    },
   },
   {
     name: "quake2_screenshot",
@@ -120,6 +166,9 @@ async function callTool(name, args) {
     }
     case "quake2_status": {
       return { content: [{ type: "text", text: JSON.stringify(await game.status(), null, 2) }] };
+    }
+    case "quake2_state": {
+      return { content: [{ type: "text", text: JSON.stringify(await game.state({ probe: !!args.probe }), null, 2) }] };
     }
     case "quake2_screenshot": {
       const png = await game.screenshot();
@@ -175,7 +224,7 @@ async function handle(message) {
         const name = params && params.name;
         const args = (params && params.arguments) || {};
         try {
-          reply(id, await callTool(name, args));
+          reply(id, await withTimeout(callTool(name, args), CALL_TIMEOUT_MS));
         } catch (error) {
           // A failed tool call is a normal answer with isError, not a protocol error.
           const text = error instanceof ControlError ? error.message : String((error && error.stack) || error);
@@ -205,9 +254,31 @@ async function handle(message) {
 // stdin is the transport: a line at a time, so a partial write can never be
 // mistaken for a whole message.
 let buffer = "";
+// True while the rest of an oversized, unterminated line is being thrown away.
+// The bytes of that line still on their way are not a message either: without
+// this they would be joined to the next real message and take it down with
+// them, which is a stream a client could no longer resynchronise.
+let droppingLine = false;
 process.stdin.setEncoding("utf8");
 process.stdin.on("data", (chunk) => {
   buffer += chunk;
+  if (droppingLine) {
+    const newline = buffer.indexOf("\n");
+    if (newline < 0) {
+      buffer = "";
+      return;
+    }
+    buffer = buffer.slice(newline + 1);
+    droppingLine = false;
+  }
+  // A line that grows past the cap without ever ending is not a message: drop
+  // it and say so, rather than buffering without bound.
+  if (buffer.length > MAX_LINE && !buffer.includes("\n")) {
+    buffer = "";
+    droppingLine = true;
+    replyError(null, -32700, "request line over " + MAX_LINE + " bytes");
+    return;
+  }
   for (;;) {
     const newline = buffer.indexOf("\n");
     if (newline < 0) break;

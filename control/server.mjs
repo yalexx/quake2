@@ -11,12 +11,17 @@
 //   POST /control/key         {"key":"w"}  {"key":"w","down":true}  {"text":"map demo1","enter":true}
 //   POST /control/mouse       {"dx":120,"dy":0}
 //   POST /control/click       {"button":"left"}
-//   POST /control/status      {}                     -> the game's state as JSON
+//   POST /control/status      {}                     -> the page's state as JSON
+//   GET  /control/state                              -> the game's state as JSON, no input sent
+//   POST /control/state       {"probe":true}         -> ... and ask the engine over its own console
+//   GET  /control/health                             -> is the browser there, is the game up, is it framed
 //   GET  /control/screenshot.png                     -> image/png
 //   OPTIONS on any of them                           -> 204 with the CORS headers
 //
 // Failures answer JSON: 400 for a bad request, 503 when no game is running,
-// 502 when the browser cannot be reached, 500 otherwise.
+// 502 when the browser cannot be reached, 504 when a route ran past its
+// deadline, 500 otherwise. Nothing here can hang a socket: every route runs
+// under a hard timeout and an answer is always written.
 //
 // Zero dependencies (Node 22+ for the global WebSocket the bridge uses).
 // ESM is strict by default, so no "use strict" pragma is needed.
@@ -25,9 +30,27 @@ import { QuakeControl, ControlError, GameNotRunningError } from "./bridge.mjs";
 
 // CONTROL_PORT, and never a bare PORT: the box sets PORT=4231 for the game
 // server, and inheriting it would put this API on top of the game's port.
-const PORT = Number(process.env.CONTROL_PORT || 4233);
+// Port 0 is honoured (the OS picks one) so tests can run without a fixed port;
+// an unset, empty or unparsable value is the default rather than a random port
+// (0) or a startup throw (NaN).
+function readPort(value, fallback) {
+  if (value === undefined || String(value).trim() === "") return fallback;
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 0 && port <= 65535 ? port : fallback;
+}
+
+const PORT = readPort(process.env.CONTROL_PORT, 4233);
 // Big enough for any command an agent sends, small enough to bound memory.
 const MAX_BODY = 64 * 1024;
+// The bridge bounds each CDP round trip at 5 s (QUAKE2_CDP_TIMEOUT_MS) and a
+// route makes only a handful of them, so 15 s is comfortably past the slowest
+// honest answer and still bounds a wedged one. Receiving the request itself is
+// bounded much tighter, because an agent sends a small JSON body and no honest
+// client needs longer.
+const ROUTE_TIMEOUT_MS = Number(process.env.CONTROL_TIMEOUT_MS || 15000);
+const REQUEST_TIMEOUT_MS = Number(process.env.CONTROL_REQUEST_TIMEOUT_MS || 10000);
+const HEADERS_TIMEOUT_MS = 5000;
+const startedAt = Date.now();
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
@@ -49,7 +72,15 @@ function statusOf(error) {
   }
 }
 
+// An answer may only be written once. A route that finishes after its deadline
+// -- or after the client has gone -- finds the 504 already sent (or the socket
+// destroyed) and stays quiet, instead of throwing over a closed socket.
+function writable(res) {
+  return !res.headersSent && !res.writableEnded && !res.destroyed;
+}
+
 function sendJson(res, status, body) {
+  if (!writable(res)) return;
   const text = JSON.stringify(body);
   res.writeHead(status, { ...NO_STORE, "Content-Type": "application/json; charset=utf-8", "Content-Length": Buffer.byteLength(text) });
   res.end(text);
@@ -61,6 +92,39 @@ function sendError(res, error) {
   sendJson(res, status, { error: error.message, code: error.code || "INTERNAL" });
 }
 
+// One read for an operator or a supervisor: the endpoint being driven, whether
+// the browser answered, whether the game is there and which framing it is in.
+// It answers 200 even with no game open -- reporting that is the point -- and
+// says so in the body; only a wedged bridge (the browser gone) makes it ok:false.
+async function health() {
+  const report = {
+    ok: true,
+    uptimeSeconds: Number(((Date.now() - startedAt) / 1000).toFixed(1)),
+    cdp: { endpoint: game.cdpUrl, reachable: false },
+    game: { present: false, url: null, framed: null, hostOrigin: null, screenshotFrom: null, running: false },
+  };
+  try {
+    const state = await game.status();
+    report.cdp.reachable = true;
+    report.game = {
+      present: true,
+      url: state.url,
+      framed: state.framed,
+      hostOrigin: state.hostOrigin,
+      screenshotFrom: state.screenshotFrom,
+      running: state.engine.running,
+    };
+  } catch (error) {
+    // No game is not a sick API: the browser answered, there is simply nothing
+    // to drive. A browser that cannot be reached, or any other failure, is.
+    if (!(error instanceof GameNotRunningError)) {
+      report.ok = false;
+      if (error.code !== "CDP_UNREACHABLE") report.error = error.message;
+    }
+  }
+  return report;
+}
+
 // Reads a JSON body, refusing anything oversized or unparsable. An oversized
 // body is drained rather than dropped on the floor, so the 400 is actually
 // delivered instead of the connection just breaking (the same thing server.js
@@ -68,6 +132,10 @@ function sendError(res, error) {
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     if (Number(req.headers["content-length"]) > MAX_BODY) {
+      // Take the oversized body off the wire anyway: a server that answers
+      // before reading it makes the client see a reset instead of the 400.
+      // requestTimeout bounds how long a lying Content-Length can feed this.
+      req.resume();
       reject(new ControlError("body over " + MAX_BODY + " bytes", "BAD_REQUEST"));
       return;
     }
@@ -145,6 +213,34 @@ async function route(req, res, pathname) {
     return;
   }
 
+  // Health is a read of this process and the browser, never of the game's
+  // input, so it is GET-only and always answers.
+  if (pathname === "/control/health") {
+    if (req.method !== "GET") {
+      res.writeHead(405, { ...NO_STORE, Allow: "GET, OPTIONS" }).end();
+      return;
+    }
+    sendJson(res, 200, await health());
+    return;
+  }
+
+  // The live read of the game's state. GET is the cheap form and sends no
+  // input at all; POST {"probe":true} also asks the engine through its own
+  // console (input, but read-only: the console is opened and shut again).
+  if (pathname === "/control/state") {
+    if (req.method === "GET") {
+      sendJson(res, 200, await game.state());
+      return;
+    }
+    if (req.method !== "POST") {
+      res.writeHead(405, { ...NO_STORE, Allow: "GET, POST, OPTIONS" }).end();
+      return;
+    }
+    const body = await readJsonBody(req);
+    sendJson(res, 200, await game.state({ probe: !!body.probe }));
+    return;
+  }
+
   const wantsBody = pathname === "/control/key" || pathname === "/control/mouse" || pathname === "/control/click";
   const isStatus = pathname === "/control/status";
   if (!wantsBody && !isStatus) {
@@ -178,14 +274,43 @@ const server = http.createServer((req, res) => {
     sendJson(res, 400, { error: "bad request target", code: "BAD_REQUEST" });
     return;
   }
-  route(req, res, pathname).catch((error) => {
-    if (res.headersSent) res.end();
-    else sendError(res, error);
-  });
+  // A hard deadline per request: whatever a route is waiting on, the caller
+  // gets an answer. The wedged call itself is left to the bridge's own per-CDP
+  // timeout, which is shorter; this is the backstop that guarantees a reply.
+  const deadline = setTimeout(() => {
+    sendJson(res, 504, { error: "the control route did not answer within " + ROUTE_TIMEOUT_MS + " ms", code: "TIMEOUT" });
+  }, ROUTE_TIMEOUT_MS);
+  route(req, res, pathname)
+    .catch((error) => {
+      if (res.headersSent) res.end();
+      else sendError(res, error);
+    })
+    .finally(() => clearTimeout(deadline));
+});
+
+// A request whose own headers or body never arrive must not hold a socket open,
+// and a malformed one still deserves a JSON answer rather than a bare reset.
+server.requestTimeout = REQUEST_TIMEOUT_MS;
+server.headersTimeout = Math.min(HEADERS_TIMEOUT_MS, REQUEST_TIMEOUT_MS);
+server.keepAliveTimeout = 5000;
+server.on("clientError", (error, socket) => {
+  if (!socket.writable) {
+    socket.destroy();
+    return;
+  }
+  const body = JSON.stringify({ error: "malformed HTTP request: " + error.message, code: "BAD_REQUEST" });
+  socket.end(
+    "HTTP/1.1 400 Bad Request\r\n" +
+    "Content-Type: application/json; charset=utf-8\r\n" +
+    "Content-Length: " + Buffer.byteLength(body) + "\r\n" +
+    "Connection: close\r\n\r\n" + body);
 });
 
 server.listen(PORT, "127.0.0.1", () => {
-  console.log(`Quake 2 control API on http://127.0.0.1:${PORT}/control/ (game frames from ${game.cdpUrl})`);
+  // The bound port, so CONTROL_PORT=0 (a test) prints what it really got.
+  const bound = server.address().port;
+  console.log(`Quake 2 control API on http://127.0.0.1:${bound}/control/ -- 127.0.0.1 only, driving the game frames in the browser at ${game.cdpUrl}`);
+  console.log(`Try it: curl -s http://127.0.0.1:${bound}/control/health`);
 });
 
 // A ControlError from the bridge is an answer to the caller, not a crash.
