@@ -50,6 +50,16 @@ const WALK_DEFAULTS = {
   maxJumpDown: 300,
   cell: 24,
   step: 4,
+  // How far down the route a single straight walk may aim. A route point with a
+  // clear line to it is worth walking at even when it is far off, but "clear
+  // line" only says no wall *stands* on the line -- it says nothing about the
+  // pockets the player's own sliding can carry them into on the way. Aiming at a
+  // point past one of those walks the player into it and the leg stalls there
+  // (demo1 has one at -427 111: the line from the spawn room to the far west is
+  // clear, and the walk slides into the dead end instead of taking the corridor
+  // a few units to the south). Capping the aim keeps the walk on the corridor the
+  // route actually planned.
+  maxLegDistance: 360,
 };
 
 export class RouteWalker {
@@ -208,12 +218,33 @@ export class RouteWalker {
   // even the nearest is out of sight (a corner, a door, a step). A point that
   // needs a jump is never chosen this way: a jump is aimed at one point at a
   // time, because the leap has to be aimed and timed.
+  // Only ever aims at a point *after* the one the player is nearest to. A leg
+  // that aims behind the player walks them back the way they came -- and with a
+  // leg-length cap in play it is easy to hit: a player who has slid a little
+  // south of the corridor is nearest to route point 6, and the farthest point
+  // within 360 units with a clear line is point 2, back in the start room. The
+  // cap and this go together: one keeps the leg short enough not to slide into a
+  // pocket, the other keeps it pointed at where the route is going.
   #farthestVisible(from, points) {
-    for (let i = points.length - 1; i >= 0; i--) {
+    const limit = this.options.maxLegDistance === undefined ? WALK_DEFAULTS.maxLegDistance : this.options.maxLegDistance;
+    const nearest = this.#nearestIndex(from, points);
+    for (let i = points.length - 1; i > nearest; i--) {
       if (points[i].jump) continue;
+      if (limit && Math.hypot(points[i].x - from.x, points[i].y - from.y) > limit) continue;
       if (this.#lineOpen(from, points[i])) return points[i];
     }
     return null;
+  }
+
+  // The route point the player is nearest to.
+  #nearestIndex(from, points) {
+    let nearest = 0;
+    let best = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const d = Math.hypot(points[i].x - from.x, points[i].y - from.y);
+      if (d < best) { best = d; nearest = i; }
+    }
+    return nearest;
   }
 
   // Walk the route, re-planning when it breaks. `goal` is the point the route is
@@ -330,7 +361,12 @@ export class RouteWalker {
       let legs = 0;
       let stalled = 0;
       while (legs < maxLegs) {
-        const target = this.#farthestVisible(position, plan.points) || plan.points[plan.points.length - 1];
+        // Fall back to the point just after the one the player is nearest to,
+        // never to the goal: an aimed-at goal from a corner is a straight walk
+        // through whatever is in the way, which is how a walk ends up in a
+        // pocket the route went round.
+        const target = this.#farthestVisible(position, plan.points) ||
+          plan.points[Math.min(this.#nearestIndex(position, plan.points) + 1, plan.points.length - 1)];
         const leg = await this.#leg(target, legOptions);
         const at = (leg && leg.position) || (await this.game.position()).position;
         if (!at) { this.#note("leg produced no position", leg); break; }
