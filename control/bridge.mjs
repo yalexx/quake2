@@ -1131,6 +1131,13 @@ export class QuakeControl {
   async respawn(options = {}) {
     const before = await this.position();
     if (!before || !before.dead) return { respawned: false, reason: "ALIVE", position: before && before.position };
+    // A roll says the player cannot act, and the intermission camera rolls too.
+    // So a caller that knows which level it was playing hands the name in: if
+    // the engine is somewhere else, the level ended and restarting it would undo
+    // the very thing the caller was driving at.
+    if (options.expectMap && before.map && before.map !== options.expectMap) {
+      return { respawned: false, reason: "LEVEL_CHANGED", map: before.map, expected: options.expectMap, position: before.position };
+    }
     if (options.how === "fire") {
       await this.click("left").catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));

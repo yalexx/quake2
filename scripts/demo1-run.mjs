@@ -22,7 +22,10 @@ import { RouteWalker } from "../control/walker.mjs";
 const CDP = process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801";
 const game = new QuakeControl({ cdpUrl: CDP, timeoutMs: 20000 });
 
+// A line of the run's report. `value` is optional: a label on its own is a
+// heading, and heading that reads "undefined" is worse than no heading at all.
 function report(label, value) {
+  if (value === undefined) { console.log(label); return; }
   console.log(label + ": " + (typeof value === "string" ? value : JSON.stringify(value)));
 }
 

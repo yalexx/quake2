@@ -590,11 +590,11 @@ export class RouteMap {
   }
 
   // The contents of one inline model at a point, or 0 when the point is outside
-  // its box. An inline model's faces are in the same coordinate space as the
-  // world's -- qbsp writes absolute vertices -- so no origin is added here. The
-  // exceptions are the entities the engine *moves*: a `func_rotating` (and a
-  // `func_train` that has not started) records its position in `origin` and the
-  // model's box is centred on it, so the box is shifted for those.
+  // its box. Where the point is *inside* the box, the model's own tree is walked
+  // in the model's local space: a model with an `origin` was built around 0,0,0
+  // and the origin is what takes a local point to a world one, so it comes back
+  // off before the walk. A model without one is already in world coordinates --
+  // its `origin` is the zero vector and subtracting it changes nothing.
   modelContentsAt(model, x, y, z) {
     if (!this.#inBox(model, x, y, z)) return 0;
     const leafs = this.lumps[LUMP_LEAFS];
@@ -921,6 +921,11 @@ export class RouteMap {
         const reach = Math.ceil(maxJump / cell);
         for (const [dx, dy] of neighbours) {
           for (let r = 2; r <= reach; r++) {
+            // `maxJump` is a distance, not a number of cells: a diagonal run of
+            // r cells is r * 1.414 cells long, so counting cells alone would let
+            // a "160 unit" jump reach 237 units at 24-unit cells -- further than
+            // the option asked for and further than a run-and-leap carries.
+            if (Math.hypot(dx * r, dy * r) * cell > maxJump) continue;
             const nx = ix + dx * r, ny = iy + dy * r;
             for (const level of grid.floors.get(nx + "," + ny) || []) {
               if (level - z > maxStepUp || z - level > maxJumpDown) continue;

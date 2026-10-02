@@ -56,6 +56,10 @@ export class RouteWalker {
   constructor(game, map, options = {}) {
     this.game = game;
     this.map = map;
+    // The level this walk belongs to. It is what tells "the player is dead on
+    // the level I am walking" (restart it) from "the level ended and the engine
+    // has loaded the next one" (stop, do not undo it).
+    this.levelName = map && map.name ? map.name : null;
     this.options = { ...WALK_DEFAULTS, ...options };
     this.log = [];
   }
@@ -104,12 +108,19 @@ export class RouteWalker {
       // Face the landing spot and run at it with the jump key down: a gap is
       // cleared by speed and timing, not by aiming.
       const before = await this.game.position();
+      // The engine can fail to answer -- the bridge models that as a result with
+      // a null position -- and a walk that dies on a TypeError instead of
+      // reporting where it stopped is worse than one that does not jump. So a
+      // leg with no position to aim from falls through to the ordinary step,
+      // which reports the miss honestly.
+      if (!before || !before.position) return this.game.goto(point, options);
       const bearing = Math.atan2(point.y - before.position.y, point.x - before.position.x) * 180 / Math.PI;
       await this.game.face(bearing, { from: before, tolerance: 6, rounds: 4 });
       const jump = this.game.jump();
       const walked = this.game.walk(options.stepMs || 400);
       await Promise.all([jump, walked]);
-      return { ...(await this.game.position()), jumped: true, reached: false };
+      const after = await this.game.position();
+      return { ...(after || { position: before.position }), jumped: true, reached: false };
     }
     return this.game.goto(point, options);
   }
@@ -128,9 +139,13 @@ export class RouteWalker {
     for (let round = 0; round < rounds; round++) {
       const start = await this.game.position();
       if (!start || !start.position) break;
+      if (this.levelName && start.map && start.map !== this.levelName) {
+        this.#note("the engine moved to another level; stopping the exploration", { from: this.levelName, to: start.map });
+        break;
+      }
       if (start.dead && options.respawn !== false && this.game.respawn) {
         this.#note("the player is dead; restarting the level before exploring");
-        await this.game.respawn();
+        await this.game.respawn({ expectMap: this.levelName });
       }
       const trip = await this.game.goto(goal, {
         tolerance: options.tolerance === undefined ? 96 : options.tolerance,
@@ -146,7 +161,8 @@ export class RouteWalker {
       const at = state && !state.dead ? state.position : null;
       if (!at) {
         this.#note("the walk ended with the player dead; not counting its position", { reason: trip.reason });
-        await this.game.respawn();
+        const back = await this.game.respawn({ expectMap: this.levelName });
+        if (back.reason === "LEVEL_CHANGED") break;
         continue;
       }
       if (at) {
@@ -226,6 +242,15 @@ export class RouteWalker {
         this.#note("no position from the engine", current);
         return { reached: false, reason: "NO_POSITION", attempts: attempt, position: null, trail, log: this.log };
       }
+      // The engine is playing a different level: this walk is over, and whatever
+      // the reason, restarting *this* one would be undoing someone else's work.
+      // The intermission camera rolls exactly as the death camera does, so
+      // without this the walk that enters the exit trigger would immediately
+      // restart the level it just finished.
+      if (this.levelName && current.map && current.map !== this.levelName) {
+        this.#note("the engine moved to another level; stopping", { from: this.levelName, to: current.map });
+        return { reached: false, reason: "LEVEL_CHANGED", map: current.map, level: this.levelName, attempts: attempt, position: current.position, trail, log: this.log };
+      }
       // A dead player cannot move, and every movement key silently does nothing:
       // without this check a death reads as a wall and the follower grinds at it
       // until its budget runs out. Dying mid-level is normal -- demo1 is full of
@@ -233,8 +258,11 @@ export class RouteWalker {
       // the spawn.
       if (current.dead && options.respawn !== false && this.game.respawn) {
         this.#note("the player is dead; restarting the level");
-        const back = await this.game.respawn();
+        const back = await this.game.respawn({ expectMap: this.levelName });
         this.#note(back.respawned ? "back in the level" : "could not get back into the level", { how: back.how, reason: back.reason });
+        if (back.reason === "LEVEL_CHANGED") {
+          return { reached: false, reason: "LEVEL_CHANGED", map: back.map, level: this.levelName, attempts: attempt, position: back.position, trail, log: this.log };
+        }
         const restarted = await this.game.position();
         if (!restarted || !restarted.position || restarted.dead) {
           return { reached: false, reason: "DEAD", attempts: attempt, position: restarted && restarted.position, trail, log: this.log };

@@ -101,6 +101,102 @@ const walker = new RouteWalker({}, map, {});
 check("brushesNear finds the door it is standing at", walker.brushesNear({ x: -1112, y: 1632, z: 16 }, 64).some((b) => b.kind === "mover"));
 check("brushesNear finds nothing in open air", walker.brushesNear({ x: 0, y: 240, z: -40 }, 32).length === 0, walker.brushesNear({ x: 0, y: 240, z: -40 }, 32));
 
+console.log("a route that crosses a mover says which one");
+// Every mover in demo1 is in the exit room, so a route that passes one is found
+// by asking for one there. The cells are sampled rather than enumerated: this
+// runs A* once per pair, and a test that takes minutes is a test nobody runs.
+const grid16 = map.floorGrid(16, 4);
+const exitRoom = [];
+for (const [k, floors] of grid16.floors) {
+  const [ix, iy] = k.split(",").map(Number);
+  const x = grid16.minX + ix * 16, y = grid16.minY + iy * 16;
+  if (x >= -2120 && x <= -1090 && y >= 1200 && y <= 1920) for (const z of floors) exitRoom.push({ x, y, z });
+}
+const sample = [];
+const stride = Math.max(1, Math.floor(exitRoom.length / 40));
+for (let i = 0; i < exitRoom.length; i += stride) sample.push(exitRoom[i]);
+
+let crossing = null;
+let crossingPairs = 0;
+for (let i = 0; i < sample.length && !crossing; i++) {
+  for (let j = i + 1; j < sample.length && !crossing; j++) {
+    crossingPairs++;
+    const route = map.path(sample[i], sample[j], { maxStepUp: 45, maxDrop: 300, cell: 16 });
+    if (route.points.length && (route.crossings || []).length) crossing = route;
+  }
+}
+check("a route through the exit room crosses a mover", !!crossing, { crossingPairs, sampled: sample.length });
+check("and each crossing names the brush and the action",
+  !crossing || crossing.crossings.every((c) => c.classname && c.model && c.action && c.centre),
+  crossing && crossing.crossings);
+
+console.log("every jump a route takes is inside maxJump");
+// maxJump is a distance. A diagonal run of r cells is r * 1.414 cells long, so
+// counting cells alone lets a "160 unit" jump reach 226 units at 16-unit cells
+// -- further than the option asked for, and further than a run-and-leap carries.
+//
+// This pair in demo1 is one the archive actually needs, and it is the one that
+// shows the mistake: given a 96-unit budget the old cell-counted reach could
+// still take a 136-unit jump (6 diagonal cells of 16), and this route has one
+// waiting. It is pinned rather than searched for because finding it costs 73 A*
+// runs and five minutes; the coordinates are the level's, not the test's.
+const jumpFrom = { x: -2112, y: 1280, z: 192 };
+const jumpTo = { x: -1232, y: 1504, z: 280 };
+const jumpOptions = { maxStepUp: 45, maxDrop: 300, cell: 16 };
+const jumpLegs = (route) => {
+  const legs = [];
+  for (let at = 1; at < route.points.length; at++) {
+    if (!route.points[at].jump) continue;
+    legs.push(Math.hypot(route.points[at].x - route.points[at - 1].x, route.points[at].y - route.points[at - 1].y));
+  }
+  return legs;
+};
+const withJump = map.path(jumpFrom, jumpTo, { ...jumpOptions, maxJump: 160 });
+const jumpLeg = jumpLegs(withJump);
+check("a route across demo1's gap uses a jump", jumpLeg.length > 0, { points: withJump.points.length, reason: withJump.reason });
+check("and that jump is inside the maxJump asked for", jumpLeg.every((d) => d <= 160), jumpLeg);
+const narrow = map.path(jumpFrom, jumpTo, { ...jumpOptions, maxJump: 96 });
+const narrowLegs = jumpLegs(narrow);
+check("a 96-unit budget takes no jump over 96", narrowLegs.every((d) => d <= 96), { legs: narrowLegs, points: narrow.points.length, reason: narrow.reason });
+check("and that budget really does rule a jump out here", narrowLegs.length < jumpLeg.length, { narrow: narrowLegs, asked: jumpLeg });
+const narrower = map.path(jumpFrom, jumpTo, { ...jumpOptions, maxJump: 64 });
+check("nor does a 64-unit budget", jumpLegs(narrower).every((d) => d <= 64), { legs: jumpLegs(narrower), points: narrower.points.length });
+
+console.log("the walker leaves a level the engine has already left");
+// A stub game, so this needs no browser: the engine reports a *different* map
+// with the death roll, which is exactly what the intermission camera looks like.
+const stub = {
+  respawns: [],
+  async position() {
+    return { probed: true, position: { x: 0, y: 0, z: 20 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo2", dead: true };
+  },
+  async respawn(options) { this.respawns.push(options); return { respawned: true, how: "map" }; },
+  async goto(point) { return { reached: true, position: point }; },
+};
+const leaving = new RouteWalker(stub, map, {});
+const left = await leaving.follow({ x: -1776, y: 1544, z: 4 }, { attempts: 2 });
+check("a walk stops when the engine is on another map", left.reason === "LEVEL_CHANGED", left.reason);
+check("and does not restart the level it was walking", stub.respawns.length === 0, stub.respawns);
+check("the level it was walking is named", left.level === "demo1" && left.map === "demo2", { level: left.level, map: left.map });
+
+// The other half: dead on the *same* map is a death, and it is restarted -- with
+// the level's name handed to respawn so the bridge can apply the same check.
+const dying = {
+  respawns: [],
+  async position() {
+    return this.respawns.length
+      ? { probed: true, position: { x: 128, y: -319, z: 46 }, angles: { pitch: 0, yaw: 135, roll: 0 }, map: "demo1", dead: false }
+      : { probed: true, position: { x: -427, y: 111, z: -1 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo1", dead: true };
+  },
+  async respawn(options) { this.respawns.push(options); return { respawned: false, reason: "LEVEL_CHANGED" }; },
+  async goto(point) { return { reached: true, position: point }; },
+};
+const died = new RouteWalker(dying, map, {});
+const after = await died.follow({ x: -1776, y: 1544, z: 4 }, { attempts: 1 });
+check("a death on the same map is restarted", dying.respawns.length === 1, dying.respawns.length);
+check("and the restart names the level it expects", dying.respawns[0] && dying.respawns[0].expectMap === "demo1", dying.respawns[0]);
+check("the walk then stops if the level had changed", after.reason === "LEVEL_CHANGED", after.reason);
+
 console.log("errors are named, never empty");
 let threw = null;
 try { await loadMap("nosuchmap"); } catch (error) { threw = error; }
