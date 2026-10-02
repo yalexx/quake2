@@ -59,17 +59,32 @@ const NODE_BYTES = 28; // int planenum, int children[2], short mins[3], short ma
 const LEAF_BYTES = 28; // int contents, short cluster, short area, short mins[3], short maxs[3], u16 x4
 const PAK_ENTRY_BYTES = 64; // char name[56], int offset, int length
 
-// Leaf contents bits (q_shared.h). Solid, glass and playerclip stop a walking
-// player; lava and slime are walkable but cost health, so a route avoids them
-// when it can. Monsterclip is deliberately *not* blocking: it keeps monsters
-// out, the player walks through it, and mappers lay it over ledges and ceilings
-// where treating it as solid walls a route off for no reason.
+// Leaf contents bits (q_shared.h). Solid and glass stop a walking player; lava
+// and slime are walkable but cost health, so a route avoids them when it can.
+// Monsterclip is deliberately *not* blocking: it keeps monsters out, the player
+// walks through it, and mappers lay it over ledges and ceilings where treating
+// it as solid walls a route off for no reason.
+//
+// Playerclip is not blocking either, and that is a measurement of *this* engine
+// rather than a reading of q_shared.h. Stock Quake 2 folds CONTENTS_PLAYERCLIP
+// into MASK_PLAYERSOLID, and a planner that honours it is right for a stock
+// build -- but on the build this app drives it walls the level off for no
+// reason: a walking player stands with their origin inside a clip leaf
+// (contents 0x08030000, detail|monsterclip|playerclip) and walks on through it.
+// Honouring it here confined the whole of demo1 to a 128k-voxel bubble around
+// the spawn and reported spawn -> exit as NO_ROUTE, against a player who
+// demonstrably walks out of that bubble. So the player's mask is solid|window;
+// CONTENTS_PLAYERCLIP and STOCK_PLAYER_SOLID are exported so a caller can ask
+// for the stock mask back.
 const CONTENTS_SOLID = 1;
 const CONTENTS_WINDOW = 2;
 const CONTENTS_LAVA = 8;
 const CONTENTS_SLIME = 16;
 const CONTENTS_PLAYERCLIP = 0x10000;
-const BLOCKING = CONTENTS_SOLID | CONTENTS_WINDOW | CONTENTS_PLAYERCLIP;
+const CONTENTS_MONSTERCLIP = 0x20000;
+const BLOCKING = CONTENTS_SOLID | CONTENTS_WINDOW;
+// What stock Quake 2's MASK_PLAYERSOLID says, for callers that want it.
+const STOCK_PLAYER_SOLID = CONTENTS_SOLID | CONTENTS_WINDOW | CONTENTS_PLAYERCLIP;
 const HAZARDOUS = CONTENTS_LAVA | CONTENTS_SLIME;
 
 // ---- Inline brush models --------------------------------------------------
@@ -1287,4 +1302,5 @@ if (process.argv[1] && import.meta.url === new URL("file://" + process.argv[1]).
 }
 
 export { DEFAULT_PAK, PROJECT_ROOT };
+export { CONTENTS_SOLID, CONTENTS_WINDOW, CONTENTS_PLAYERCLIP, CONTENTS_MONSTERCLIP, BLOCKING, STOCK_PLAYER_SOLID, HAZARDOUS };
 export default loadMap;

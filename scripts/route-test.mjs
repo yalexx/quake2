@@ -140,9 +140,16 @@ console.log("every jump a route takes is inside maxJump");
 // still take a 136-unit jump (6 diagonal cells of 16), and this route has one
 // waiting. It is pinned rather than searched for because finding it costs 73 A*
 // runs and five minutes; the coordinates are the level's, not the test's.
+//
+// Two budgets here are tighter than the walker's, and both are load-bearing.
+// maxStepUp is 18 -- Quake 2's own STEPSIZE, the height a player walks up -- not
+// the walker's 45, which is the height a *jump* clears; and maxDrop is 64, not
+// the walker's 300. With either one at the walker's value the floor grid climbs
+// or descends this gap a step at a time and the route takes no jump at all (both
+// 18/300 and 45/300 measure jumps=[]), so there would be nothing to measure.
 const jumpFrom = { x: -2112, y: 1280, z: 192 };
 const jumpTo = { x: -1232, y: 1504, z: 280 };
-const jumpOptions = { maxStepUp: 45, maxDrop: 300, cell: 16 };
+const jumpOptions = { maxStepUp: 18, maxDrop: 64, cell: 16 };
 const jumpLegs = (route) => {
   const legs = [];
   for (let at = 1; at < route.points.length; at++) {
@@ -158,9 +165,10 @@ check("and that jump is inside the maxJump asked for", jumpLeg.every((d) => d <=
 const narrow = map.path(jumpFrom, jumpTo, { ...jumpOptions, maxJump: 96 });
 const narrowLegs = jumpLegs(narrow);
 check("a 96-unit budget takes no jump over 96", narrowLegs.every((d) => d <= 96), { legs: narrowLegs, points: narrow.points.length, reason: narrow.reason });
-check("and that budget really does rule a jump out here", narrowLegs.length < jumpLeg.length, { narrow: narrowLegs, asked: jumpLeg });
+check("and that budget really does rule a jump out here", narrowLegs.length > 0 && jumpLeg.some((d) => d > 96), { narrow: narrowLegs, asked: jumpLeg });
 const narrower = map.path(jumpFrom, jumpTo, { ...jumpOptions, maxJump: 64 });
 check("nor does a 64-unit budget", jumpLegs(narrower).every((d) => d <= 64), { legs: jumpLegs(narrower), points: narrower.points.length });
+check("because 64 units cannot cross this gap at all", narrower.points.length === 0, { reason: narrower.reason, points: narrower.points.length });
 
 console.log("the walker leaves a level the engine has already left");
 // A stub game, so this needs no browser: the engine reports a *different* map

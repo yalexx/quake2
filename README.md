@@ -659,28 +659,42 @@ on this level (`route.mjs` finds no `key_*` entity in it) and nothing else gates
 the exit.
 
 **Where the walk gets to, measured.** The spawn is `128 -320 32` and the trigger
-volume is around `-1776 1544 4`, 2664 units away in a straight line. A player
-who walks at it walks 702 units and stops at **`-427 111 -1`**, at the head of a
-wall of world geometry that runs across `x -464..-512` between the start room
-and the west corridor; the level's own floor plan has no route from the spawn to
-the exit at all, and says so (`reason: "NO_ROUTE"`, search stopped at
-`-432 120 -48`, the two `func_wall`s `*9` and `*10` standing 36 and 53 units from
-that point). The level's own help text -- `target_help` at `88 -256 40`, "Locate
-base installation elevator." -- says the way on is an elevator, and there are
-eight movers in the map, but the only `func_train` (the lift) and all four
-`func_door`s are in the *exit* room at `x -2056..-1680`, so they are the last
-leg, not the first. Nothing in the archive connects the first leg for a walking
-player, and `path()` will not invent one.
+volume is around `-1776 1544 4`, 2664 units away in a straight line. The route
+from the spawn to the trigger is **37 points and 4,693 units** (`node
+scripts/demo1-run.mjs plan`), and it opens two doors on the way in: `func_door
+*31`, which `func_button *34` fires, and `func_door *32`, which opens on touch.
 
-Two things are worth knowing before reading that as "the level is broken":
+Walking it is a fight rather than a stroll. The corridor west and north of the
+start room is covered by `monster_soldier` at `-672 336 -16` and `-856 240 -16`,
+and the exit room by three more monsters; the walker does not shoot, and it dies.
+The furthest a walker has been measured live is **`-929 420`** -- 1,407 units from
+the trigger, 3,286 units of the route behind it -- after which the soldiers killed
+it and the level restarted.
 
-* the search is honest about *why*. It reports where it stopped and names the
-  brushes standing there, so the answer is "a `func_wall` is 36 units from where
-  the walk stopped", not "NO_ROUTE".
-* a *falling* player gets further than a walking one. `route.mjs` plans on
-  floors; the player can drop and can jump, and the walker asks for both
-  (`maxDrop: 300`, `maxJump: 160`), but a drop that lands somewhere with no way
-  onward is a one-way trip, and the plan refuses to take it.
+Two traps are worth knowing before reading any single run's "furthest position":
+
+* **`CONTENTS_PLAYERCLIP` is not solid to this engine.** The planner used to fold
+  it into its blocking mask, the way stock Quake 2's `MASK_PLAYERSOLID` does. On
+  this build that walls the level off for no reason: a live player stands with
+  their own origin *inside* a clip leaf (`0x08030000`,
+  detail|monsterclip|playerclip) and walks on through it. Counting clip as solid
+  put the whole of demo1 into a 128,221-voxel bubble around the spawn and reported
+  `NO_ROUTE`; counting it as walkable produces the route above.
+  `STOCK_PLAYER_SOLID` is exported for a caller that wants the stock mask back.
+* **The straight-line walker slides.** `goto()` walks at its target and slides
+  along whatever it touches, so from the start room it sometimes takes the corridor
+  at `y -80` (which reaches `-929 420`) and sometimes the dead-end pocket at
+  `-427 111`. That -- not a bad reading -- is why one run printed a furthest
+  position near `-1007 495` and another stopped at `-427 111`: both positions are
+  real, and the `-1007 495` one is the corridor. `walker.mjs`'s forward-only leg
+  selection exists to keep a walk heading down the corridor instead of back up it;
+  `maxLegDistance` is only a guard rail against one leg aiming the length of the
+  level, because a *tight* cap (360) was measured to stall walks sooner rather
+  than later.
+
+The save slots say the same thing. `save1` is a demo1 save whose player stood at
+`-928 855 5`, on that corridor; `current` and `save0` are level-start autosaves
+whose client state is zeroed, and they record no position at all.
 
 ### The HTTP API
 
