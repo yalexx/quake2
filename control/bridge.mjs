@@ -42,6 +42,163 @@ const frameBoxExpression = (mark) => `(function () {
   return JSON.stringify({ x: box.left, y: box.top, width: box.width, height: box.height, scale: 1 });
 })()`;
 
+// The origins of the documents that hold the game's frame, nearest ancestor
+// first, as the frame itself reports them. This is the only question that
+// answers "is the game framed?" for the ClawBox desktop: the desktop hosts the
+// app as an out-of-process iframe, and an out-of-process child is *absent* from
+// the shell's own Page.getFrameTree, so a frame tree cannot see it. The frame's
+// own location can, across origins, so that is what is asked. The list is
+// walked by index because DOMStringList is not iterable in every browser.
+const ancestorOriginsExpression = `(function () {
+  try {
+    const ancestors = location.ancestorOrigins || [];
+    const origins = [];
+    for (let i = 0; i < ancestors.length; i++) origins.push(ancestors[i]);
+    return JSON.stringify(origins);
+  } catch (error) {
+    return "[]";
+  }
+})()`;
+
+// ---- Reading the game's state ---------------------------------------------
+// Quake 2 has no scripting surface, and the Qwasm2 build exports no cvar or
+// command accessor (its wasm exports are libc and SDL only), so the engine's
+// own console is the one way to ask it anything. Everything the console prints
+// is also mirrored, as the engine prints it, into a log file inside the
+// engine's file system -- so an answer can be read without touching the page.
+// This layer has two halves: the cheap read below (the log, the save store and
+// the page: no input at all) and the probe (types Yamagi's two queries into the
+// console, which is input, and reads their answers out of the same log).
+const PROBE_COMMANDS = ["viewpos", "serverinfo"];
+// The answers are read back from a `condump` (the console's own "write what you
+// have to a file" command) rather than from the live qconsole.log: the engine
+// writes that log through C stdio, so it only reaches the file a few kilobytes
+// at a time and a freshly typed command can sit in the buffer. `condump` writes
+// the file there and then, which is why the live test uses it too.
+const PROBE_DUMP = "q2state-probe"; // the engine appends ".txt"
+// Where a Qwasm2 build mounts the game. The log is looked for in each, in
+// order, because the path differs between builds and app.js's own namespace.
+const GAME_DIRS = ["/qwasm2/baseq2", "/baseq2", "/quake2/baseq2"];
+// The end of the log is all that matters, and the log only grows: reading the
+// last few thousand characters keeps the transfer bounded for a long session.
+const CONSOLE_LOG_TAIL = 12000;
+// What the engine can and cannot be asked for. The list is part of the answer,
+// so a caller never has to guess why a field is null.
+const UNREADABLE = ["health", "armour", "ammo", "alive"];
+const STATE_NOTE =
+  "Quake 2 has no console command that prints health, armour, ammo or whether the " +
+  "player is alive -- they are drawn on the HUD, so read them from a screenshot. " +
+  "The map and the server's running state are read from the engine's console log, " +
+  "which the engine writes through C stdio and can therefore lag by a few kilobytes " +
+  "of output; probed:true asks the engine directly (viewpos, serverinfo) and reads " +
+  "the answers out of a condump, so those are live.";
+
+// The page-side half of the cheap read: where the game is mounted, what its
+// console log says, which save slots exist, and the page's own state.
+const stateExpression = `(function () {
+  const canvas = document.getElementById("canvas");
+  const dirs = ${JSON.stringify(GAME_DIRS)};
+  let log = null;
+  let logPath = null;
+  for (const dir of dirs) {
+    try {
+      log = FS.readFile(dir + "/qconsole.log", { encoding: "utf8" });
+      logPath = dir + "/qconsole.log";
+      break;
+    } catch (error) { /* not this build's layout */ }
+  }
+  let slots = [];
+  const gameDir = logPath === null ? null : logPath.slice(0, -"/qconsole.log".length);
+  if (gameDir) {
+    try {
+      slots = FS.readdir(gameDir + "/save").filter((name) => name !== "." && name !== "..");
+    } catch (error) { /* no saves yet */ }
+  }
+  return JSON.stringify({
+    running: !!canvas && canvas.style.display === "block",
+    pointerLocked: !!(canvas && document.pointerLockElement === canvas),
+    gameDir,
+    slots,
+    logPath,
+    logLength: log === null ? 0 : log.length,
+    log: log === null ? null : log.slice(-${CONSOLE_LOG_TAIL}),
+  });
+})()`;
+
+// The probe's answer, read out of the file `condump` wrote in the game
+// directory, and the removal of that file once it has been read.
+const readDumpExpression = (dir) => `(function () {
+  try {
+    return FS.readFile(${JSON.stringify(dir + "/" + PROBE_DUMP + ".txt")}, { encoding: "utf8" });
+  } catch (error) {
+    return null;
+  }
+})()`;
+
+const removeDumpExpression = (dir) => `(function () {
+  try {
+    FS.unlink(${JSON.stringify(dir + "/" + PROBE_DUMP + ".txt")});
+    return true;
+  } catch (error) {
+    return false;
+  }
+})()`;
+
+// The last line of a transcript that matches, as the regex's match array.
+function lastMatch(lines, pattern) {
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const match = lines[index].match(pattern);
+    if (match) return match;
+  }
+  return null;
+}
+
+function lastLine(lines, pattern) {
+  for (let index = lines.length - 1; index >= 0; index--) if (pattern.test(lines[index])) return index;
+  return -1;
+}
+
+// The engine's own words, parsed: it prints its map name in three different
+// places, its player position only for `viewpos`, and its level lifecycle as
+// banner lines. Everything here comes from a transcript, so nothing is
+// inferred from a value that is not in it.
+function readEngineState(transcript) {
+  const lines = String(transcript || "").split("\n");
+  const map = lastMatch(lines, /^mapname\s+(\S+)\s*$/i)
+    || lastMatch(lines, /^"mapname"\s+is\s+"([^"]+)"/i)
+    || lastMatch(lines, /^Map:\s+(\S+)/i);
+  const viewpos = lastMatch(lines, /^position:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+),\s*angles:\s*(-?[\d.]+)\s+(-?[\d.]+)\s+(-?[\d.]+)/i);
+  // A level is running when the last banner of a level start is later than the
+  // last banner of a shutdown.
+  const started = Math.max(lastLine(lines, /server initialization/i), lastLine(lines, /^Map:\s/i));
+  const stopped = Math.max(lastLine(lines, /Server was killed/i), lastLine(lines, /ShutdownGame/i));
+  return {
+    map: map ? map[1] : null,
+    running: started >= 0 && started > stopped,
+    position: viewpos ? { x: Number(viewpos[1]), y: Number(viewpos[2]), z: Number(viewpos[3]) } : null,
+    angles: viewpos ? { pitch: Number(viewpos[4]), yaw: Number(viewpos[5]), roll: Number(viewpos[6]) } : null,
+    lines,
+  };
+}
+
+// What those ancestors mean for a caller: whether the game sits inside a host
+// document (the desktop shell) and which one, and therefore which page a
+// screenshot has to be taken from. An empty list means the game is its own tab,
+// and its target may be captured whole.
+function describeFraming(ancestorOrigins) {
+  const ancestors = (Array.isArray(ancestorOrigins) ? ancestorOrigins : []).filter((origin) => typeof origin === "string");
+  const framed = ancestors.length > 0;
+  const hostOrigin = framed ? ancestors[ancestors.length - 1] : null;
+  return {
+    framed,
+    hostOrigin,
+    screenshotFrom: framed ? "host-page" : "game-tab",
+    screenshotNote: framed
+      ? "from the page that draws the game's frame (" + hostOrigin + "), cropped to the frame"
+      : "from the game's own tab",
+  };
+}
+
 // Thrown when there is no game to drive. Its message is what an operator sees,
 // so it says what was looked for and what the browser did have.
 export class ControlError extends Error {
@@ -384,6 +541,12 @@ export class QuakeControl {
     }
   }
 
+  // The origins of the frames holding the game, asked of the game frame itself
+  // (the one document that can answer for an out-of-process iframe).
+  async #ancestorOriginsOf(game) {
+    return JSON.parse(await game.evaluate(ancestorOriginsExpression));
+  }
+
   // The default execution context of one frame: the world the page's own script
   // runs in, where its Module and FS globals live. The announcement can arrive a
   // moment after Runtime.enable answers, so this gives it a moment to turn up.
@@ -439,9 +602,14 @@ export class QuakeControl {
   async tap(key) {
     return this.#withSession(async (game) => {
       await this.focusCanvas(game);
-      await this.#sendKey(game, key, true);
-      return this.#sendKey(game, key, false);
+      return this.#tapOn(game, key);
     });
+  }
+
+  // Press and release one key on a session that is already focused.
+  async #tapOn(game, key) {
+    await this.#sendKey(game, key, true);
+    return this.#sendKey(game, key, false);
   }
 
   // Types a string one key at a time, for the in-game console mostly. All of it
@@ -454,12 +622,19 @@ export class QuakeControl {
     for (const character of characters) describeKey(character, false);
     return this.#withSession(async (game) => {
       await this.focusCanvas(game);
-      for (const character of characters) {
-        await this.#sendKey(game, character, true);
-        await this.#sendKey(game, character, false);
-      }
+      await this.#typeInto(game, text);
       return { typed: characters.length };
     });
+  }
+
+  // Type a string on an open session, one key at a time.
+  async #typeInto(game, text) {
+    const characters = [...String(text)];
+    for (const character of characters) {
+      await this.#sendKey(game, character, true);
+      await this.#sendKey(game, character, false);
+    }
+    return characters.length;
   }
 
   // One key event on an open session. Kept separate from key()/tap() so a whole
@@ -590,12 +765,100 @@ export class QuakeControl {
           },
         });
       })()`));
+      // Framing is asked of the frame itself and never inferred from
+      // !isWholeTarget: the desktop hosts the app as an out-of-process iframe
+      // target, whose own main frame *is* the game, so isWholeTarget is true
+      // there and the old answer was backwards for the normal case.
+      const framing = describeFraming(await this.#ancestorOriginsOf(game));
       return {
         ok: true,
         cdp: { endpoint: this.cdpUrl, targetId: target.id, targetType: target.type },
         url: game.frame.url,
-        framed: !game.isWholeTarget,
+        ...framing,
         ...state,
+      };
+    });
+  }
+
+  // The game's state as JSON, for an agent that has to decide what to do next.
+  //
+  // Without options.probe this sends nothing at all: it reads the engine's
+  // console log, its save slots and the page, and reports what the engine has
+  // already said. With options.probe it also asks the engine directly -- which
+  // can only happen through the engine's own console -- by opening the console,
+  // typing its two queries, closing it and reading the answers back out of the
+  // log: input, exactly like every other control call, and it leaves the
+  // console shut behind it.
+  //
+  // Quake 2 answers only part of the question, and the answer says which part:
+  // `unavailable` lists the fields the engine has no way to print. See the note
+  // in the reply.
+  async state(options = {}) {
+    const wantsProbe = !!options.probe;
+    return this.#withSession(async (game, target) => {
+      let page = JSON.parse(await game.evaluate(stateExpression));
+      const probe = { requested: wantsProbe, ran: false, toggles: 0, commands: [] };
+      let transcript = page.log;
+      if (wantsProbe && page.gameDir) {
+        // The console is a toggle and the bridge remembers nothing between
+        // calls, so the first attempt may have *closed* a console somebody left
+        // open, sending the commands to the game as keystrokes. The dump is
+        // what proves they were heard; when it is not there, one more toggle
+        // opens the console and they go in again.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          await this.focusCanvas(game);
+          await this.#tapOn(game, "`");
+          for (const command of PROBE_COMMANDS) {
+            await this.#typeInto(game, command);
+            await this.#tapOn(game, "Enter");
+          }
+          await this.#typeInto(game, "condump " + PROBE_DUMP);
+          await this.#tapOn(game, "Enter");
+          await this.#tapOn(game, "`");
+          // Writing the file is not part of the key dispatch, so it is given a
+          // moment before it is read.
+          await new Promise((resolve) => setTimeout(resolve, 150));
+          probe.toggles = attempt + 1;
+          const dumped = await game.evaluate(readDumpExpression(page.gameDir));
+          // `condump` echoes both the commands and their answers, so a dump
+          // that holds the second command's answer was taken after both ran.
+          if (dumped && /Server info settings:/.test(dumped) && /^\]viewpos\s*$/m.test(dumped)) {
+            transcript = dumped;
+            probe.ran = true;
+            probe.commands = PROBE_COMMANDS.slice();
+            // A file of the engine's own making must not outlive the read: the
+            // save store is synced from this file system.
+            await game.evaluate(removeDumpExpression(page.gameDir));
+            break;
+          }
+          page = JSON.parse(await game.evaluate(stateExpression));
+        }
+        await game.evaluate(removeDumpExpression(page.gameDir));
+      }
+      const engine = readEngineState(transcript);
+      return {
+        ok: true,
+        sampledAt: new Date().toISOString(),
+        probed: probe.ran,
+        probe,
+        cdp: { endpoint: this.cdpUrl, targetId: target.id, targetType: target.type },
+        url: game.frame.url,
+        engine: { running: page.running, pointerLocked: page.pointerLocked },
+        server: { running: engine.running, map: engine.map },
+        player: {
+          position: engine.position,
+          angles: engine.angles,
+          health: null,
+          armour: null,
+          ammo: null,
+          alive: null,
+        },
+        unavailable: UNREADABLE.slice(),
+        note: STATE_NOTE,
+        // `lines` counts only what the tail holds, not the whole file: the log
+        // grows for as long as the game runs and only its end is read.
+        console: { log: page.logPath, lines: engine.lines.length, tail: engine.lines.slice(-20) },
+        saves: { slots: page.slots },
       };
     });
   }
@@ -612,25 +875,34 @@ export class QuakeControl {
   // so the ClawBox shell around it never appears in the picture.
   async screenshot() {
     return this.#withSession(async (game, target) => {
-      // Page.captureScreenshot is only legal on a target the browser itself
-      // treats as top-level. A game that is its own tab (target type "page") is
-      // captured there; the desktop instead frames it in an out-of-process
-      // iframe, which is a target of its own but still not top-level -- CDP
-      // refuses the command there, so that case is captured from the page that
-      // draws the frame and cropped to it. "clip" is in the viewport's CSS
-      // pixels, so the box is measured in whichever document draws the frame.
-      if (target.type === "page") {
+      // Which page may take the picture is decided by the frame's own
+      // ancestors, not by the target's type: the desktop frames the app in an
+      // out-of-process iframe, which is a target of its own that CDP refuses to
+      // capture whole, and which the shell's frame tree does not list. "clip" is
+      // in the viewport's CSS pixels, so a box is always measured in whichever
+      // document draws the frame.
+      const ancestors = await this.#ancestorOriginsOf(game);
+      const framing = describeFraming(ancestors);
+      if (!framing.framed) {
+        // Nothing draws the game: it is its own tab, and its target is
+        // top-level, so the whole of it may be captured as it stands.
+        const { data } = await game.session.send("Page.captureScreenshot", { format: "png" });
+        return Buffer.from(data, "base64");
+      }
+      if (!game.isWholeTarget) {
+        // The game is a child frame of the page this very session is attached
+        // to, so the frame's box is measured in that page's document and the
+        // capture is taken on the same socket.
+        const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
         const params = { format: "png" };
-        if (!game.isWholeTarget) {
-          // The iframe element lives in the shell's document, not the game's, so
-          // its box has to be measured there (clip is in viewport CSS pixels).
-          const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
-          if (rect) params.clip = rect;
-        }
+        if (rect) params.clip = rect;
         const { data } = await game.session.send("Page.captureScreenshot", params);
         return Buffer.from(data, "base64");
       }
-      const ancestors = JSON.parse(await game.evaluate("JSON.stringify([...location.ancestorOrigins])"));
+      // The game frame is the whole of this target, yet it has an ancestor: the
+      // desktop's out-of-process iframe. The picture is taken from the page that
+      // draws the frame -- the one the browser treats as top-level -- which is
+      // found from the frame's ancestor origins.
       const host = await this.#hostPageForGame(ancestors);
       const session = await CdpSession.open(host.webSocketDebuggerUrl, this.timeoutMs);
       try {

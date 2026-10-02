@@ -21,8 +21,9 @@ engine files in `engine/` were copied from the project's public site
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
 | `control/` | `bridge.mjs` (drives the running game over CDP) and `server.mjs` (an HTTP front door to it on 127.0.0.1:4233), see [Control interface](#control-interface) |
-| `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as five tools, see [The MCP server](#the-mcp-server) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium) and `quake-control-test.sh` (the live game over CDP), see [Tests](#tests) |
+| `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as six tools, see [The MCP server](#the-mcp-server) |
+| `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -281,7 +282,7 @@ that the kiosk browser already exposes at `http://127.0.0.1:18801`, so
 |---|---|
 | `control/bridge.mjs` | The driver: a zero-dependency ESM module for Node 22+ (the built-in `WebSocket`, no `npm install`) that speaks CDP to the game |
 | `control/server.mjs` | A small HTTP API on `127.0.0.1:4233` (`CONTROL_PORT`) for anything that would rather use `curl` than MCP. A front door to the bridge only: it never serves game files and never touches the server on 4231 |
-| `mcp/server.mjs` | A Model Context Protocol server (JSON-RPC 2.0 over stdin/stdout) exposing the same five calls as tools |
+| `mcp/server.mjs` | A Model Context Protocol server (JSON-RPC 2.0 over stdin/stdout) exposing the same six calls as tools |
 | `scripts/quake-control-test.sh` | The end-to-end proof against the live game |
 
 ### Which frame it drives
@@ -294,6 +295,17 @@ and the engine would never see them. The bridge looks for the game frame by URL
 and nothing else; if it is not there it raises `GAME_NOT_RUNNING`, naming the
 endpoint and listing every target the browser did have, rather than quietly
 driving the wrong page.
+
+Whether the game is *framed* is asked of the frame itself: `status()` reads
+`location.ancestorOrigins` inside the game frame. That is the only answer that
+works for the ClawBox desktop, which frames the app as an out-of-process iframe:
+such a child is absent from the shell's own `Page.getFrameTree` (a frame tree
+cannot see it), and the target's own top-level-ness says the opposite of the
+truth (an out-of-process iframe is a target whose main frame *is* the game, so
+`isWholeTarget` is true there). `status()` therefore reports `framed`, the
+hosting page's `hostOrigin` (the ClawBox desktop's origin), and `screenshotFrom`
+-- `"host-page"` or `"game-tab"` -- which says plainly which page the next
+screenshot will be taken from.
 
 Every call that sends input -- `key`, `tap`, `typeText`, `mouseMove`, `click` --
 first focuses the canvas (`canvas.focus()`), and, when the game does not hold the
@@ -343,7 +355,8 @@ reloaded under it is picked up rather than talked to on a stale handle.
 | `tap(key)` | Press and release |
 | `mouseMove(dx, dy)` | Turn/look by a delta. `dx` turns right, `dy` looks down |
 | `click(button)` | `"left"` (fire), `"right"` or `"middle"` |
-| `status()` | What the game is showing: the frame's URL, the engine's state, the canvas size, focus and pointer lock, and the CDP target behind it |
+| `status()` | What the game is showing: the frame's URL, whether it is framed and by which origin (`framed`, `hostOrigin`, `screenshotFrom`), the engine's state, the canvas size, focus and pointer lock, and the CDP target behind it |
+| `state({probe})` | What the game is *doing*: the map, whether a level is up, the player's position and angles, the save slots, and the tail of the engine's own console log. No input unless `probe: true` (see [Reading the game's state](#reading-the-games-state)) |
 | `screenshot()` | A PNG of the game frame as a `Buffer` (cropped to the frame when the game is framed) |
 | `typeText(text)` | Type a whole string, one key at a time: how a console command is entered |
 | `evaluate(expression)` | Run an expression inside the game frame and get its JSON value back (an escape hatch: read `FS`, poke `Module`) |
@@ -365,18 +378,63 @@ await fs.writeFile("screen.png", await game.screenshot());
 Point it at another endpoint with `new QuakeControl({ cdpUrl })` or
 `QUAKE2_CDP_URL`; `QUAKE2_CDP_TIMEOUT_MS` bounds each CDP round trip (5 s).
 
+### Reading the game's state
+
+An agent that has to finish a level needs to know where it is and how it is
+doing, and Quake 2 offers exactly one way to ask: its own console. The Qwasm2
+build exports nothing else (its wasm exports are libc and SDL, with no cvar or
+command accessor), so console commands and the engine's console *log* -- which
+the engine keeps inside its file system, at `baseq2/qconsole.log` -- are the
+whole state interface. `state()` reads that log, so it sends no input at all;
+`state({ probe: true })` additionally opens the console, types the two queries
+Yamagi answers (`viewpos`, `serverinfo`), shuts it again and reads the answers
+back out of the same log.
+
+| Wanted | Reachable? | Where it comes from |
+|---|---|---|
+| Engine running, canvas, focus, pointer lock | yes | the page (`status()`) |
+| Whether a level is up, and its map | yes | the console log (the `serverinfo`/`mapname` lines, the `Map:` banners) |
+| Player position and angles | yes, with `probe: true` | the engine's own `viewpos` |
+| Save slots on the engine's file system | yes | `baseq2/save/` |
+| Health, armour, ammo, whether the player is alive | **no** | Quake 2 prints none of them: there is no console command for them, and the build exports no cvar or command accessor. They are drawn on the HUD, so read them from `screenshot()` |
+
+The reply says so itself: `player.health`, `armour`, `ammo` and `alive` are
+always `null`, `unavailable` names them, `note` says why, and `probed` says
+whether the engine was asked. A `null` field here means the engine cannot answer
+it, not that a read came back empty.
+
+`probe: true` is input -- it focuses the canvas like any other control call and
+opens the console for about a second -- and it leaves the console shut behind
+it. Two engine habits are worth knowing:
+
+- The engine writes `qconsole.log` through C stdio, so the file lags behind by a
+  few kilobytes of output, and the cheap read is only as fresh as that. The
+  probe does not read it: it asks the engine for a `condump`, which is written
+  where and when the command runs, and deletes the dump again afterwards (the
+  save store is synced from the same file system).
+- Quake 2 can refuse the console key while it is playing a demo cinematic (the
+  attract demo it boots into), and it drops the first keys of an engine that is
+  still starting. When the console will not take the commands the probe reports
+  `probed: false` with `probe.ran: false` rather than pretending, and it waits
+  for no one -- call it again once a menu or a level is showing.
+
 ### The HTTP API
 
-`node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`) serves
-one game on `127.0.0.1:4233`. Every response has `Access-Control-Allow-Origin: *`
-and no caching. Bodies are JSON objects of at most 64 KiB.
+`node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`, or
+`./scripts/control-server.sh` for a foreground try) serves one game on
+`127.0.0.1:4233`. It prints the port it bound and a one-line `curl` to start
+with. Every response has `Access-Control-Allow-Origin: *` and no caching. Bodies
+are JSON objects of at most 64 KiB.
 
 | Request | Answer |
 |---|---|
 | `POST /control/key` | `{"key":"w"}` taps it; `{"key":"w","down":true}` holds it and `false` releases it; `{"text":"map demo1","enter":true}` types a whole string and presses Enter |
 | `POST /control/mouse` | `{"dx":120,"dy":0}` turns the view |
 | `POST /control/click` | `{"button":"left"}` (the default), `"right"` or `"middle"` |
-| `POST /control/status` (also `GET`) | `200` with the game's state as JSON |
+| `POST /control/status` (also `GET`) | `200` with the page's state as JSON, framing included |
+| `GET /control/state` | `200` with the game's state as JSON: the map, whether a level is up, the position and angles, the save slots and the console log tail. Sends no input |
+| `POST /control/state` | `{"probe":true}` also asks the engine over its own console for a live `viewpos`/`serverinfo` (input: the console is opened and shut again) |
+| `GET /control/health` | `200` with the CDP endpoint, whether the browser answered, and whether the game is there and how it is framed. Read-only, needs no game, and always answers |
 | `GET /control/screenshot.png` (also `HEAD`) | `200`, `image/png` |
 | `OPTIONS` on any of them | `204`, with the CORS headers |
 
@@ -384,12 +442,59 @@ and no caching. Bodies are JSON objects of at most 64 KiB.
 curl -s -X POST 127.0.0.1:4233/control/key -d '{"key":"Escape"}'      # tap Escape
 curl -s -X POST 127.0.0.1:4233/control/mouse -d '{"dx":60,"dy":0}'    # turn right
 curl -s -X POST 127.0.0.1:4233/control/status                          # what the game is showing
+curl -s 127.0.0.1:4233/control/state                                   # what the game is doing (no input)
+curl -s -X POST 127.0.0.1:4233/control/state -d '{"probe":true}'       # ... and ask the engine live
+curl -s 127.0.0.1:4233/control/health                                  # browser there? game there? framed?
 curl -s 127.0.0.1:4233/control/screenshot.png -o screen.png
 ```
 
+`/control/health` is the one to poll: it reports
+`{"ok":true,"cdp":{"endpoint":"http://127.0.0.1:18801","reachable":true},"game":{"present":true,…}}`,
+with `game.framed`, `game.hostOrigin` and `game.screenshotFrom` as `status()`
+reports them. A closed game is a healthy API (`present:false`); only a browser
+that cannot be reached makes `ok:false`.
+
 Failures are JSON: `400` for a bad request, `503` (`GAME_NOT_RUNNING`) when the
-app is not open, `502` when the browser cannot be reached, `500` otherwise. A
-route that does not exist is a `404`, and a wrong method a `405` with `Allow`.
+app is not open, `502` when the browser cannot be reached, `504` when a route
+ran past its deadline, `500` otherwise. A route that does not exist is a `404`,
+and a wrong method a `405` with `Allow`. Nothing here can hang a socket: every
+route runs under a hard 15 s deadline (`CONTROL_TIMEOUT_MS`), a body over 64 KiB
+is refused, and a request whose headers or body never arrive is dropped
+(`CONTROL_REQUEST_TIMEOUT_MS`), so the caller always gets an answer.
+
+#### Keeping the HTTP API up
+
+Nothing starts `control/server.mjs` on its own, so
+`deploy/quake2-control.service` is a systemd **user** unit for it:
+`Restart=on-failure`, `WorkingDirectory` at the app folder,
+`ExecStart=/usr/bin/node control/server.mjs`, `WantedBy=default.target`. Install
+it as yourself -- no root, no system unit:
+
+```sh
+mkdir -p ~/.config/systemd/user
+cp deploy/quake2-control.service ~/.config/systemd/user/
+systemctl --user daemon-reload
+systemctl --user enable --now quake2-control.service
+systemctl --user status quake2-control.service   # log: journalctl --user -u quake2-control -f
+```
+
+From a shell that is not your desktop session (an SSH login, a cron job), set
+`XDG_RUNTIME_DIR=/run/user/1000` first, or `systemctl --user` cannot find the
+session bus:
+
+```sh
+XDG_RUNTIME_DIR=/run/user/1000 systemctl --user enable --now quake2-control.service
+```
+
+Two things not to "fix" later:
+
+- The API stays on `127.0.0.1:4233` only. It drives whatever the browser is
+  showing, so anything that can reach it can play the game and read the screen;
+  the loopback is the boundary.
+- The control routes are deliberately **not** mounted on `server.js` (4231).
+  That server *is* reachable through the ClawBox proxy, so putting `/control/*`
+  there would publish the game's keyboard to the network. The two processes stay
+  separate, and the API never serves game files.
 
 ### The MCP server
 
@@ -404,10 +509,15 @@ and no other process running than the browser showing the game.
 | `quake2_mouse` | `dx`, `dy` |
 | `quake2_click` | `button`: `"left"`, `"right"`, `"middle"` |
 | `quake2_status` | -- |
+| `quake2_state` | `probe` (optional): `true` asks the engine over its console for a live position; omit for a read that sends no input |
 | `quake2_screenshot` | -- (answers with an image content block, `image/png`) |
 
 A failed call comes back as a normal tool result with `isError: true`, so the
-agent reads the reason rather than seeing the connection die.
+agent reads the reason rather than seeing the connection die. `quake2_state` is
+the one an agent planning a level should call first: it says which map is up,
+where the player is and what the engine's console has been saying -- and it says
+plainly which questions Quake 2 cannot answer (see
+[Reading the game's state](#reading-the-games-state)).
 
 Register it with OpenClaw as a stdio server, pointing `command`/`args` at the
 app folder (its own MCP settings file -- this app does not touch gateway
@@ -429,6 +539,11 @@ configuration):
 `control/server.mjs` and the bridge use. Use an absolute path for the script:
 an MCP client starts it with a working directory of its own choosing.
 
+**Restart the gateway after changing that file.** An MCP client reads its server
+list once, at startup, and spawns each server then; a new or edited entry is not
+picked up until the gateway is restarted. This app never edits gateway
+configuration -- the snippet above goes in the gateway's own settings file.
+
 ## Tests
 
 The scripts use Node built-ins only (no `npm install`). The first two can be run
@@ -437,8 +552,43 @@ from anywhere:
 ```
 node scripts/test-userdata.js    # the /userdata store: exit 0 pass, 1 fail
 node scripts/e2e-saves.js        # the real game: exit 0 pass, 1 fail, 77 skipped
+node scripts/control-api-test.mjs # every control route: exit 0 pass, 1 fail
+node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
+
+**`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
+a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP
+endpoint that is not there, for the error paths -- and exercises every route the
+API has: `health`, `status`, `state` (plain and `probe`), `key`, `mouse`,
+`click` and `screenshot`. It asserts status codes and content types, that a
+screenshot is a real PNG (signature, IHDR, dimensions, and `HEAD` agreeing), and
+that failures are JSON with a code: an empty key, a non-numeric delta, an
+unknown button, a body over 64 KiB, a body that is not JSON, an unknown route
+(`404`), a wrong method (`405` with `Allow`), and `502 CDP_UNREACHABLE` for
+every route when the browser is gone. It never touches the live API on 4233, the
+game server on 4231 or `quake2-app.service`, and it stops only the two children
+it started.
+
+It needs **no game open**: the routes that only read or reject are checked either
+way, and the ones that can only answer with a game open are `SKIP`ped with the
+reason (no game in the browser) rather than failed. When a game *is* open they
+run for real, with the least intrusive input there is -- a Shift tap (a modifier
+changes no binding), a zero mouse delta, and the middle button, which Quake 2
+leaves unbound -- plus the console probe `state` uses, which is read-only and
+leaves the console shut.
+
+**`scripts/mcp-smoke-test.mjs`** spawns `mcp/server.mjs` and speaks its real
+transport to it: `initialize` (protocol version and server name), a
+`notifications/initialized` that must produce no answer, `ping`, `tools/list`
+(all six tools, each with an object `inputSchema`), `tools/call` for
+`quake2_status` and `quake2_state` (a well-formed result either way; `isError`
+with a reason when no game is open), an **unknown tool call**, which must come
+back as `isError: true` rather than a JSON-RPC error, a bad argument that must
+not kill the stream, an unknown method (`-32601`) and a line that is not JSON
+(`-32700`). It then asserts that **nothing but JSON-RPC ever reached stdout** --
+a log line there would corrupt the stream -- and that closing stdin ends the
+server with exit code 0. It proves the protocol, not the game.
 
 **`scripts/quake-control-test.sh`** is the one test that needs the game **open
 in the box's browser**, because that is what it drives: it starts nothing, stops
