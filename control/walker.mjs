@@ -127,6 +127,20 @@ export function deepestReading(trail) {
   };
 }
 
+// A point this walk can aim at, or null. All three coordinates, not the two the
+// route is walked on: a call with no height is not a call this walk can use, and
+// a point that reaches the follower with a coordinate that is not a number does
+// not degrade the walk, it ends it -- every distance to it is NaN, every
+// comparison against that NaN is false, and the follower grinds out its whole
+// budget aiming at a place the engine can never report the player as standing.
+// The check belongs where the point enters, so that a bad one is refused with a
+// reason instead of failing somewhere inside the leg loop.
+export function finitePoint(value) {
+  if (!value || typeof value !== "object") return null;
+  const at = { x: Number(value.x), y: Number(value.y), z: Number(value.z) };
+  return [at.x, at.y, at.z].every(Number.isFinite) ? at : null;
+}
+
 export class RouteWalker {
   constructor(game, map, options = {}) {
     this.game = game;
@@ -137,6 +151,12 @@ export class RouteWalker {
     this.levelName = map && map.name ? map.name : null;
     this.options = { ...WALK_DEFAULTS, ...options };
     this.log = [];
+    // How many times this walk has been put back on a restarted level. A death
+    // does not spend an attempt (see `attempt--` in follow), so the attempt
+    // number alone cannot tell a subclass that the player is a *different*
+    // player now -- back on the spawn with the level's own starting loadout.
+    // This is what does.
+    this.restarts = 0;
   }
 
   #note(message, detail) {
@@ -371,6 +391,17 @@ export class RouteWalker {
   // planned towards; the walker stops when the player is inside `tolerance` of
   // it, or when it has run out of ideas.
   async follow(goal, options = {}) {
+    // The goal is the one point the whole walk is aimed at, so it is the last
+    // place a coordinate that is not a number should be found -- and the worst,
+    // because a walk that cannot aim at its goal has no answer to give about
+    // the level. Refused here, by name, rather than left to fail inside the
+    // leg loop (see finitePoint).
+    const aimed = finitePoint(goal);
+    if (!aimed) {
+      this.#note("the goal is not a point this walk can aim at", { goal });
+      return { reached: false, reason: "BAD_GOAL", goal: goal === undefined ? null : goal, position: null, trail: [], log: this.log };
+    }
+    goal = aimed;
     const tolerance = options.tolerance === undefined ? 64 : options.tolerance;
     const attempts = Math.max(1, options.attempts === undefined ? 6 : options.attempts);
     const legOptions = {
@@ -506,6 +537,10 @@ export class RouteWalker {
           this.#note("the player is still dead; restarting again");
           continue;
         }
+        // Alive again, on a level that has just been restarted: this is a new
+        // life, and the choices a subclass made about the old one -- which
+        // weapon it asked the engine for -- are spent with it.
+        this.restarts++;
         current = restarted;
       }
       position = current.position;

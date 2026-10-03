@@ -200,9 +200,20 @@ async function finish() {
   // it read them from. Without the series, "the fight got better" is a claim
   // about the shape of a run rather than about the player, and this run has no
   // way to tell one from the other. See control/hud.mjs.
+  // The fight's levers, each one a knob so that a run can be made and read back
+  // without editing the walker: which weapon to ask the engine for (by the name
+  // the engine's own config uses) and how a firing leg moves while the trigger
+  // is down. Defaults are the behaviour that was measured before they existed.
   const walker = new CombatWalker(game, map, {
-    engage: { readHud: true, hudCropDir: process.env.QUAKE2_HUD_DIR || null },
+    engage: {
+      readHud: true,
+      hudCropDir: process.env.QUAKE2_HUD_DIR || null,
+      weapon: process.env.QUAKE2_WEAPON || null,
+      fireWhile: process.env.QUAKE2_FIRE_WHILE || "advance",
+      ...(process.env.QUAKE2_PICKUP_RANGE ? { pickupRange: Number(process.env.QUAKE2_PICKUP_RANGE) } : {}),
+    },
   });
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange });
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
   // The errands: the level's own weapon and the shells that are near the spawn.
@@ -308,6 +319,19 @@ async function finish() {
     report("firing legs with a health reading", result.combat.healthReadings);
     report("lowest health the fight took the player to", result.combat.minHealth);
     report("health after the last firing leg", result.combat.lastHealth);
+    if (result.combat.weapon) report("weapon the fight asked for", result.combat.weapon);
+    if (result.combat.fireModes && result.combat.fireModes.length) {
+      report("what each way of firing cost (mode, legs, ground covered, health spent, per leg)");
+      for (const row of result.combat.fireModes) {
+        report("  " + row.mode.padEnd(8) + " legs " + row.legs + "  covered " + row.covered +
+          "  spent " + (row.healthSpent === null ? "?" : row.healthSpent) +
+          "  per leg " + (row.spentPerLeg === null ? "?" : row.spentPerLeg) +
+          "  readings " + row.healthReadings);
+      }
+    }
+    if (result.combat.onRoutePickups && result.combat.onRoutePickups.length) {
+      report("pickups the route ran over", result.combat.onRoutePickups);
+    }
   }
   if (result.distance !== null && result.distance !== undefined) report("short of the exit by", Math.round(result.distance));
   // The engine's positions, not the planner's opinion of them: the closest the
@@ -351,6 +375,8 @@ async function finish() {
         (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg)") +
         "  fired " + (fight.fired ? "yes" : "no") +
         "  covered " + fight.travelled +
+        (fight.fireMode && fight.fireMode !== "advance" ? "  " + fight.fireMode : "") +
+        (fight.pickupOnRoute ? "  over " + fight.pickupOnRoute : "") +
         // How much of the leg went on turning. It is the number that says
         // whether the leg walked through its turn or stood still for it.
         (fight.turnMs === null || fight.turnMs === undefined ? "" : "  turn " + fight.turnMs + "ms") +

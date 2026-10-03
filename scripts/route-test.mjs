@@ -382,6 +382,46 @@ check("more restarts than attempts are lived through", dyingStub.respawns === 3,
 check("and the walk stops on its own restart budget, not on its attempts",
   restartResult.reason === "DEATHS", restartResult.reason);
 
+// The weapon a fighting walker asks the engine for is per *life*, not per
+// attempt. A death restarts the level and hands the player the level's own
+// starting loadout, and the walker does not spend an attempt on that restart
+// (`attempt--` in follow) -- so the same attempt number comes round again on a
+// spawn that no longer carries the weapon. Keyed on the attempt alone, every
+// life after the first was fought with the blaster while the report said
+// shotgun: measured on this stub, one ask across four lives.
+console.log("the weapon a fighting walker asks the engine for");
+{
+  const enemy = map.waypoints("enemy").filter((e) => e.classname === "monster_soldier")
+    .sort((a, b) => Math.hypot(a.position.x + 856, a.position.y - 240) - Math.hypot(b.position.x + 856, b.position.y - 240))[0];
+  // On the soldier's own floor: its origin is 24 above its feet and the
+  // player's eye is 46 above its own, so the eye is 22 above that origin --
+  // inside the soldier's box, which is what a level shot needs.
+  const standing = { x: enemy.position.x + 150, y: enemy.position.y, z: enemy.position.z + 22 };
+  const fightStub = {
+    asked: 0,
+    async position() { return { probed: true, position: standing, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+    async selectWeapon(name) { this.asked++; return { selected: true, weapon: name, method: "key", key: "3" }; },
+    async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
+    async key(key, down) { return { held: !!down, key }; },
+    async mouseHold() { return { held: true }; },
+    async attackHold() { return { held: true }; },
+    async walkKeys(keys, ms) { return { keys, requestedMs: ms, heldMs: ms }; },
+  };
+  const armed = new CombatWalker(fightStub, map, { engage: { weapon: "Super Shotgun", readHud: false } });
+  const enemyTarget = { classname: "monster_soldier", position: enemy.position, distance: 150 };
+  const target = { x: standing.x, y: standing.y, z: standing.z, enemy: enemyTarget, route: { x: standing.x, y: standing.y, z: standing.z } };
+  // Twice at the *same* attempt number, which is what a death really looks
+  // like: the walker does not spend an attempt on a restart (`attempt--` in
+  // follow), so the attempt the player died on is the attempt it comes back on.
+  const legOptions = { attempt: 3, leg: 1, tolerance: 32, engageStepMs: 20, maxRounds: 1 };
+  await armed._leg(target, legOptions);
+  check("a life asks the engine for its weapon", fightStub.asked === 1, fightStub.asked);
+  armed.restarts++;
+  await armed._leg(target, legOptions);
+  check("and the life after a restart asks again, at the attempt the player died on",
+    fightStub.asked === 2, { asked: fightStub.asked, attempt: legOptions.attempt, restarts: armed.restarts });
+}
+
 // The furthest reading is a different reading from the last one, and on a run
 // that ends in a death they are hundreds of units apart. The walker's `position`
 // is the last thing the engine said -- before a restart, where the corpse was --
