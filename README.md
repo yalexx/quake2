@@ -16,6 +16,7 @@ engine files in `engine/` were copied from the project's public site
 | Path | What |
 |---|---|
 | `index.html`, `style.css`, `app.js` | The page: a full-viewport canvas that boots the engine immediately |
+| `engine-state.js` | Loaded by `index.html` before `app.js`. Defines `window.quake2Engine`, which reads the player's position, view angles and `cls.key_dest` straight out of the WASM linear memory, plus the frame-loop console watch. No console, no input, no pause. See [Reading the game's state](#reading-the-games-state) |
 | `engine/` | `index.js` (Emscripten loader), `index.wasm`, `index.data`, `game_baseq2.wasm`, `ref_gles3.wasm`, `ref_gl1.wasm`, `ref_soft.wasm`, `license.txt` |
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
@@ -327,8 +328,15 @@ taken on trust: `scripts/quake-control-test.sh` types a command into the in-game
 console over CDP and then reads the engine's own console transcript back out of
 the engine's file system (`condump` writes it, `FS.readFile` reads it), so the
 proof comes from the game, not from CDP's "ok". If a future engine build stops
-receiving CDP events, the same test fails at that step, and the fix is an
-in-page hook in `app.js` driven over `Runtime.evaluate`.
+receiving CDP events, the same test fails at that step.
+
+Reading the engine's *state* is the one thing that did need something in the
+page, and it is a script rather than a change to `app.js`: `engine-state.js` is
+loaded by `index.html` before `app.js` and defines `window.quake2Engine`, which
+reads the engine's live state out of the WASM linear memory. It is a separate
+file on purpose -- if it is missing or fails, the game still boots exactly as it
+did, and the bridge says which reading it has rather than pretending. See
+[Reading the game's state](#reading-the-games-state).
 
 Two consequences of driving someone else's browser are worth knowing:
 
@@ -358,11 +366,11 @@ reloaded under it is picked up rather than talked to on a stale handle.
 | `mouseMove(dx, dy)` | Turn/look by a delta. `dx` turns right, `dy` looks down |
 | `click(button)` | `"left"` (fire), `"right"` or `"middle"` |
 | `status()` | What the game is showing: the frame's URL, whether it is framed and by which origin (`framed`, `hostOrigin`, `screenshotFrom`), the engine's state, the canvas size, focus and pointer lock, and the CDP target behind it |
-| `state({probe})` | What the game is *doing*: the map, whether a level is up, the player's position and angles, the save slots, and the tail of the engine's own console log. No input unless `probe: true` (see [Reading the game's state](#reading-the-games-state)) |
+| `state({probe})` | What the game is *doing*: the map, whether a level is up, the player's position and angles (read live out of the engine's memory), whether the console is up, the save slots, and the tail of the engine's own console log. No input unless `probe: true` (see [Reading the game's state](#reading-the-games-state)) |
 | `screenshot()` | A PNG of the game frame as a `Buffer` (cropped to the frame when the game is framed) |
 | `typeText(text)` | Type a whole string, one key at a time: how a console command is entered |
 | `evaluate(expression)` | Run an expression inside the game frame and get its JSON value back (an escape hatch: read `FS`, poke `Module`) |
-| `position()` | Where the player is, which way they look and which map is up -- read from the engine's console, no page report |
+| `position()` | Where the player is and which way they look, read live out of the engine's own memory: no input, no pause, no page report. Also the map name, `dead`, and whether the console is up |
 | `command(text)` | Run a console command (or an array of them) and read the answer back |
 | `face(bearing)` / `walk(ms)` / `goto(point, opts)` | Closed-loop navigation on top of the probe -- see [Navigating](#navigating-position-face-walk-and-goto) |
 
@@ -386,46 +394,106 @@ Point it at another endpoint with `new QuakeControl({ cdpUrl })` or
 ### Reading the game's state
 
 An agent that has to finish a level needs to know where it is and how it is
-doing, and Quake 2 offers exactly one way to ask: its own console. The Qwasm2
-build exports nothing else (its wasm exports are libc and SDL, with no cvar or
-command accessor), so console commands and the engine's console *log* -- which
-the engine keeps inside its file system, at `baseq2/qconsole.log` -- are the
-whole state interface. `state()` reads that log, so it sends no input at all;
-`state({ probe: true })` additionally opens the console, types the two queries
-Yamagi answers (`viewpos`, `serverinfo`), shuts it again and reads the answers
-back out of the same log.
+doing, and the console used to be the only way to ask. It is not any more.
+
+**The engine's own live state is read straight out of the WASM linear memory.**
+`engine-state.js` is a small script served with the app and loaded by
+`index.html`; it defines one page global, `window.quake2Engine`, whose `read()`
+answers with the floats the engine is rendering from:
+
+```js
+// in the page, or over Runtime.evaluate
+quake2Engine.read()
+// { ok: true, position: {x, y, z}, angles: {pitch, yaw, roll},
+//   keyDest: 0, keyDestName: "game", inGame: true, paused: false,
+//   dead: false, alive: true, health: null, armour: null, ammo: null, ... }
+```
+
+The bridge calls it over `Runtime.evaluate`. That is one evaluation, it sends no
+input, and -- the point of the whole exercise -- **it does not pause the game**.
+`position()` and `state()` are built on it.
+
+Where the offsets came from, since a guessed offset would be worse than no
+reading at all (see [Recovering the offsets](#recovering-the-offsets)):
+
+| Field | Address | How it was proved |
+|---|---|---|
+| `position`, `angles` | `0x597c8`, `0x597d4` | The three floats `viewpos` prints, and the three it prints for angles. The engine prints each as an integer, so the live heap was scanned for float triples inside those integer windows, the player was turned and walked, and the scan was repeated: the pair that survived is 12 bytes apart, which is `refdef_t`'s layout (`vieworg` immediately followed by `viewangles`). Over six poses -- including one taken mid-motion and one while the death camera held the view -- `trunc()` of each of the six floats equalled the six integers `viewpos` printed, every time |
+| `keyDest` (whether the game, the console or the menu owns the keyboard) | `0x8d8b8` | Three snapshots of 4 MiB of heap around one console toggle left four words that ran `0 -> 1 -> 0`; `0x8d8b8` tracked every toggle, and reading 3 while the engine's own menu was up settled which end was which. That 0 is the game and 1 the console was settled by *drawing* it: with the word at 0 the frame is a clean in-game view, with it at 1 the console and PAUSED are both on screen |
+
+What that gives, and what it does not:
 
 | Wanted | Reachable? | Where it comes from |
 |---|---|---|
 | Engine running, canvas, focus, pointer lock | yes | the page (`status()`) |
-| Whether a level is up, and its map | yes | the console log (the `serverinfo`/`mapname` lines, the `Map:` banners) |
-| Player position and angles | yes, with `probe: true` | the engine's own `viewpos` |
+| Player position and angles | **yes, live** | the engine's own memory, from the floats it renders from |
+| Whether the console is up, whether the game is paused | **yes, live** | `cls.key_dest`, sampled from inside the engine's frame loop |
+| Whether a level is up, and its map | yes | the console log, or the last `map` command the bridge issued |
+| Whether the player is dead | yes | the live view roll -- Quake 2 has no lean, so a non-zero roll is the death camera |
 | Save slots on the engine's file system | yes | `baseq2/save/` |
-| Health, armour, ammo, whether the player is alive | **not from the console** | Quake 2 prints none of them: there is no console command for them, and the build exports no cvar or command accessor. They are drawn on the HUD, so they are read off a picture of it -- see [Reading the HUD](#reading-the-hud-controlhudmjs) |
+| Health, armour, ammo | **still not** | no console command prints them, and this pass did not recover those fields from the image either -- see [What this pass could not do](#what-this-pass-could-not-do) |
 
-The reply says so itself: `player.health`, `armour`, `ammo` and `alive` are
-always `null`, `unavailable` names them, `note` says why, and `probed` says
-whether the engine was asked. A `null` field here means the engine cannot answer
-it, not that a read came back empty. Whether the player is *dead* is the one of
-the four the console can answer indirectly, and `position()` reports it: a
-living player's view never rolls, so a non-zero roll is the death camera.
+The reply says so itself: `player.health`, `armour` and `ammo` are always
+`null`, `unavailable` names them, and `note` says why. A `null` field here means
+*unknown*, not *zero*, and it is never filled in with a guess. `alive` is not a
+memory field: it is derived from the live view roll and says so
+(`aliveSource: "view-roll"`).
 
-`probe: true` is input -- it focuses the canvas like any other control call and
-opens the console for about a second -- and it toggles the console shut again
-once it has read the answer. (The console is a plain toggle and the bridge
-remembers nothing between calls, so a probe the engine did not hear leaves the
-toggle wherever it found it.) Two engine habits are worth knowing:
+**The console is now an explicit fallback, and only that.** `state({ probe:
+true })` still does what it always did -- opens the console, types the two
+queries Yamagi answers (`viewpos`, `serverinfo`), shuts it again and reads the
+answers back out of a `condump` -- but nothing on the hot path calls it, and the
+live half of every ordinary call no longer touches it. It is still worth having:
+it is the independent check the memory reading is proved against
+(`position({ verify: true })` runs both and compares them), and it is the
+fallback for a page that does not serve `engine-state.js`.
+
+Two engine habits are worth knowing, both of them about the fallback:
 
 - The engine writes `qconsole.log` through C stdio, so the file lags behind by a
-  few kilobytes of output, and the cheap read is only as fresh as that. The
-  probe does not read it: it asks the engine for a `condump`, which is written
-  where and when the command runs, and deletes the dump again afterwards (the
-  save store is synced from the same file system).
+  few kilobytes of output. The probe does not read it: it asks the engine for a
+  `condump`, which is written where and when the command runs, and deletes the
+  dump again afterwards (the save store is synced from the same file system).
 - Quake 2 can refuse the console key while it is playing a demo cinematic (the
   attract demo it boots into), and it drops the first keys of an engine that is
   still starting. When the console will not take the commands the probe reports
   `probed: false` with `probe.ran: false` rather than pretending, and it waits
   for no one -- call it again once a menu or a level is showing.
+
+#### The console watch, and why it samples from the frame loop
+
+The bridge counts every console key it sends (`consoleMetrics()`), but that is
+the bridge talking about itself. `quake2Engine.watch` is the page's own,
+independent record: it samples `cls.key_dest` and counts every sample where the
+keyboard was not the game's -- so a console opened by anything at all is on the
+record, not just one opened by the bridge.
+
+It samples from inside the engine's own `requestAnimationFrame` loop, **not from
+a timer**, and that is not a detail. A console opened by a client typing over
+CDP is up for only a handful of frames, and while the keys are being dispatched
+the page's main thread is busy enough that `setInterval` callbacks do not fire.
+Measured on this box: a 100 ms timer saw *nothing at all* during a probe that
+per-frame sampling showed the console open for ten frames. A timer-based watch
+would have reported "the console was never opened" about a console that was up
+and drawing PAUSED.
+
+#### Recovering the offsets
+
+`engine/index.wasm` keeps its data section but **not** its name section -- the
+only custom section is `dylink.0` -- so there are no symbols to look up, and the
+build exports only libc and SDL. Every offset above was therefore recovered by
+scanning the live image, anchored by a fact the engine itself produced, and each
+one is backed by a check that would have failed if the offset were wrong: the
+engine's own `viewpos` output for the floats, the engine's own console toggle
+and menu for `key_dest`. None of them was found by looking for a plausible
+number in the binary.
+
+What could not be recovered that way is named rather than faked: the map name
+lives in a heap-allocated string whose address moves between runs, so there is
+no offset to ship -- it is learned instead, from a `mapname` the engine answered
+(its own word for the level it is running), from a `map <name>` the bridge
+issued (a request, not a fact), or from the engine's log, and `mapSource` says
+which of the three answered. Health, armour and ammo are still unread.
 
 ### Reading the HUD: `control/hud.mjs`
 
@@ -490,17 +558,17 @@ bridge closes the loop on top of the same console probe `state()` uses:
 
 | Call | What it does |
 |---|---|
-| `position()` | Where the player is and which way they look, from the engine's `viewpos`, plus the map name from the `mapname` cvar and `dead`. Much lighter than `state()` -- no server info, no page report |
+| `position()` | Where the player is and which way they look, read live out of the engine's memory, plus the map name and `dead`. No input, so it never pauses the game -- which is what makes a walk a walk. `{ verify: true }` also runs the old console probe and compares |
 | `command(text)` | Open the console, run one command (or an array of them), read the answer back, close it. How a level is started (`map demo1`) and how a cheat is turned on, said out loud |
 | `face(bearing)` | Turn the player to an absolute bearing, in Quake 2's degrees: `0` is `+X`, `90` is `+Y`, the yaw grows anticlockwise |
 | `walk(ms)` | Hold forward for `ms` and let go. The primitive underneath `goto()` |
 | `walkKeys(keys, ms)` | Hold several keys at once for `ms` and let go: forward *and* a strafe, which is how a player looks one way and walks another. What a firing leg uses |
 | `goto({x,y,z}, opts)` | Turn towards a point, walk, read the position again, and keep going until the player is there -- or until the position stops improving |
-| `use(ms)` / `useHold(down)` | The use key, as `+use` on the engine's command line: what opens a door, calls a lift and presses a button. Held rather than tapped, because a door opens when the player walks into it |
-| `fire(ms)` / `attackHold(down)` | The fire button, as `+attack` on the engine's command line: the command behind every fire binding, so it works whatever the player's config says. Held for the same reason `use` is -- see [The fight](#the-fight-controlcombatmjs) |
+| `use(ms)` / `useHold(down)` | The use key, as a real key event on the key the engine's **own config** binds to `+use` (read out of `config.cfg`, cached). A stock Quake 2 config binds nothing to `+use` -- a door opens by walking into it -- so on this box it reports `reason: "NO_USE_BINDING"` and holds nothing rather than falling back to the console. `{ console: true }` reaches for the old `+use` command line, and says so in its result |
+| `fire(ms)` / `attackHold(down)` | The fire button, as a real left-mouse-button event -- this build's config binds `MOUSE1` to `+attack`. Held rather than tapped, because a fight is won by firing while the player keeps walking -- see [The fight](#the-fight-controlcombatmjs). `{ console: true }` uses the old `+attack` command line |
 | `jump()` | One tap of space, the engine's fixed-height jump |
 | `strafe(ms, "left")` | Step sideways without turning: how a follower backs out of a corner |
-| `respawn()` | Put a dead player back in the level by starting the level again (`how: "map"`). `{ how: "fire" }` uses the engine's own fire-to-respawn instead, which restores the autosave |
+| `respawn()` | Put a dead player back in the level. The default is the engine's own fire-to-respawn, which is real input and opens no console -- but it restores the autosave, so the result says `how: "fire"` and names that trap. `{ how: "map" }` starts the level again instead, which needs a command and therefore the console |
 
 `position()` reports **`dead`**. A living player's view never rolls -- Quake 2 has
 no lean -- so a non-zero roll is the death camera, and it is the only way to
@@ -512,12 +580,20 @@ wall. `respawn()` is the way back in, and it is not a cheat -- no noclip, no god
 no teleport; it starts the level again and the player lands on the level's own
 spawn.
 
-It deliberately does **not** press fire first. The engine's own fire-to-respawn
+Restarting the level needs a command, and a command needs the console, and the
+console is a pause. `respawn()` sits inside the walker's own loops, so a pause
+there would be exactly the thing this pass removed, and the default is now the
+engine's own fire-to-respawn instead: real input, no console, no pause.
+
+The cost of that default is the trap above. The engine's fire-to-respawn
 restores the autosave in `/userdata`, which is wherever the last session saved --
-so a player killed at `128 -320 32` reappears 1300 units away inside the base
+so a player killed at `128 -320 32` can reappear 1300 units away inside the base
 with no walk in between, and a walk that never happened is indistinguishable from
-one that did. `{ how: "fire" }` asks for it anyway, and the result says
-`note: "the engine restored its autosave"` when it happens.
+one that did. The result therefore says `how: "fire"` and carries
+`note: "the engine restored its autosave, so the player is wherever that save
+left them, not on this level's spawn"`. A caller that would rather have a clean
+spawn, and would rather pay a console round trip for it, asks for it:
+`respawn({ how: "map" })`, and the result says `method: "console"`.
 
 ```js
 import { QuakeControl } from "./control/bridge.mjs";
@@ -581,8 +657,14 @@ unchanged.
 **What moves the player.** `walk()` is `key("w", true)` for `ms` and then
 `key("w", false)`, so a game that is paused, a player who is dead, or a menu on
 screen all come back as "it did not move". The engine draws `PAUSED` while the
-console is open, and the console is what these calls read through, so the
-console is always shut again before a step is taken.
+console is open -- which is why the console is no longer on the path these calls
+read through. A step is measured with `position()`, and `position()` reads the
+engine's memory; nothing on the walk pauses the game, so "the player did not
+move" is a fact about the level rather than about the harness.
+
+The `cls.key_dest` reading says which of those it is, for free: `paused` is true
+whenever the console or the menu owns the keyboard, and `position()` reports it
+alongside `dead`.
 
 ### The route: where to go
 
@@ -1043,39 +1125,87 @@ the **deepest reading** of the player's position, which are not the same number.
 
 #### What this pass could not do
 
-The task is not finished, and two things are worth saying plainly rather than
-burying.
+The task is not finished, and the things it did not reach are worth saying
+plainly rather than burying.
 
 * **`demo1` was not finished.** `"mapname" is "demo1"` on all ten runs that
   completed. Nothing here reached the exit trigger, and the deepest is 1,331
-  units short of the inherited best (976), on a spread that runs to 1,989.
-* **No non-console control path exists on this build, and the console path it
-  uses is a pause.** The engine's own entry points are the proof: `index.wasm`
-  exports **102 functions, every one of them libc or SDL** -- `memory`, `strchr`,
-  `malloc`, `fopen`, `cos`, `qsort`, and no `Cmd_ExecuteString`, no cvar
-  accessor, no `cbuf`, nothing that takes a string and runs it. The JS glue
-  (`engine/index.js`) has no `ccall`, no `cwrap`, no `Module.ccall` and no
-  exported command hook either. So a *command* -- `viewpos`, `mapname`,
-  `map demo1` -- can only be issued through the in-game console, and opening the
-  console pauses single-player, which makes every position probe a pause. What
-  this pass did about it is remove the console from the path that least needed
-  it: the trigger is now a **held mouse button** (`mouseHold`, the same
-  `+attack` the engine's own config binds), not `+attack` typed at a console,
-  which takes two console round trips per firing leg out of the fight. Position
-  still costs one probe, because a command is the only way to ask for it and
-  there is no way to ask that is not the console. **Whether the console really
-  does pause this build was not measured before the game left the browser** --
-  the A/B that would settle it (walk a fixed wall-clock distance with no probes,
-  then the same distance while probing every 250 ms; a pause shows up as less
-  ground covered) is written and unrun, and no claim is made here about it
-  either way.
-* **The comparison run the change was meant to earn could not be made.** Part
-  way through the pass the kiosk browser left the game -- its CDP target list
-  stopped containing `/apps/quake2/` and showed other apps instead -- and the
-  device refuses to navigate that browser back to a local address (`the device
-  refused that address`). Without a game there is no `finish` attempt to
-  compare, no `goto-test.mjs`, and no way to leave the level fresh. That is the
-  state this pass stopped in, and it is a missing measurement, not a good one.
+  units short of the inherited best (976), on a spread that runs to 1,989. That
+  is the state the earlier navigation pass stopped in and this pass did not
+  re-run it: what changed here is *how* the harness reads and drives the game,
+  not how far it walked.
+* **Health, armour and ammo are still unread, from anywhere.** The fix that
+  took position and angles out of the console has not been extended to them.
+  They live in the game DLL's own edict and client structs rather than in the
+  client's `refdef`, and this pass did not find an anchor for them that survived
+  a check: `engine/game_baseq2.wasm` carries no name section either, and no
+  candidate field could be made to change under a controlled action, so none is
+  claimed. `player.health`, `armour` and `ammo` are `null` and `unavailable`
+  names them. Reading the HUD off a screenshot is still the way to get them --
+  see [Reading the HUD](#reading-the-hud-controlhudmjs).
+* **The map name has no address in the image.** It is a heap-allocated string
+  whose address moves between runs, so there is no offset to recover and none
+  was shipped: `position().map` comes from the engine's console log or from the
+  last `map` command the bridge issued, or from a `mapname` answer the engine
+  gave, and `mapSource` says which. All three cost nothing, and all three mean
+  the name arrives a little late on a cold start. It is
+  not in the hot path's way -- the walk does not need it -- but a caller that
+  wants the name the instant a level starts should use `command("map demo1")`,
+  which is what makes it immediate.
+* **`use` cannot be driven as real input on this build.** The engine has a
+  `+use` command, and the bridge can find it, but the config in `/userdata`
+  binds no key to it -- Quake 2 opens doors by walking into them -- so a real
+  key event has nowhere to go. `useHold()` reports `reason: "NO_USE_BINDING"`
+  and holds nothing rather than reaching for the console behind the caller's
+  back; `{ console: true }` is the explicit fallback. Two things this pass did
+  *not* do about it: it did not bind a key (that would edit the player's own
+  config) and it did not find the engine's `in_use` flag to write directly
+  (a full-heap differential across `+use`/`-use` did not produce a candidate
+  that survived two cycles, so there is nothing to write to that this pass can
+  stand behind).
+
+#### The proof: a walk with no console
+
+`console-free-test.mjs` is the live measurement, and it is kept with the run's
+evidence rather than in `scripts/` because it drives a real game and is only
+meaningful against one. It was run against this box's game on `demo1`, and it
+reloads the page with `ignoreCache` first so that the hook under test is the one
+being served.
+
+| Check | Result |
+|---|---|
+| The live memory reading against the engine's own console probe, at six poses, `position({ verify: true })` | **agrees on 6/6** -- `trunc(memory)` equalled the six integers `viewpos` printed, position and angles, every time |
+| 60 position samples taken the ordinary way | the engine never left the game: **0 non-game frames**, 0 transitions, 0 console keys sent by the bridge |
+| One real walk leg (`face` + `walk` + `position`, three times) | **271 units covered**, 0 console keys sent, **0 non-game frames of 370** sampled from inside the engine's own frame loop |
+| Console round trips per leg -- the same leg run against the committed bridge | **11 before, 0 after** (the before leg is `bridge-before.mjs`, taken from git, driving the same game) |
+| Control: can the instrument see a console at all? | yes -- the same watch saw the committed bridge's console open for **50 of 412 frames**, 22 transitions |
+
+The run was repeated four times and passed every time. The numbers that depend
+on the live game moved between them -- 11, 13, 14 and 11 console round trips on
+the before leg, 189, 263, 283 and 271 units on the measured walk -- which is
+what numbers taken from a running game should do. The two that carry the claim
+did not move at all: **0 console round trips and 0 non-game frames on the
+measured leg, in every run.**
+
+The control is the part that makes the rest worth anything. "The console was
+never opened" is only a measurement if the instrument used to say so can see a
+console being opened, and the before leg is that instrument watching the old
+bridge do exactly what this pass removed.
+
+Two things that only turned up by measuring:
+
+- **A 100 ms timer sees nothing.** The console in the before leg is up for
+  about ten frames -- a fifth of a second -- and while CDP is dispatching the
+  keys the page's main thread is busy enough that `setInterval` callbacks do not
+  fire. A timer-based watch reported zero non-game samples for a console that
+  was demonstrably open (screenshotted mid-probe). The watch samples from the
+  engine's own `requestAnimationFrame` loop for that reason.
+- **The engine's log is written a few kilobytes late.** After a cold start the
+  log holds `]map demo1` and nothing else: no `Map:` banner and no `"mapname"
+  is "demo1"` line, because the engine only prints the latter when something
+  asks for it and `qconsole.log` goes through C stdio. The map name from the
+  log is therefore a slow answer, not a wrong one, and the bridge's own record
+  of the level it asked for covers the gap.
 
 It also prints **every engine position it read**, leg by leg, as
 `a<attempt> leg <n>  x y z  short <units>`. That is deliberate: "where it
@@ -1141,10 +1271,10 @@ are JSON objects of at most 64 KiB.
 | `POST /control/key` | `{"key":"w"}` taps it; `{"key":"w","down":true}` holds it and `false` releases it; `{"text":"map demo1","enter":true}` types a whole string and presses Enter |
 | `POST /control/mouse` | `{"dx":120,"dy":0}` turns the view |
 | `POST /control/click` | `{"button":"left"}` (the default), `"right"` or `"middle"` -- one press and release |
-| `POST /control/attack` | `{"ms":500}` holds the fire button for that long and lets go (default 300, maximum 5000); `{"down":true}` and `{"down":false}` hold and release it explicitly. The `+attack` console command, so it works whatever the fire key is bound to. See [The fight](#the-fight-controlcombatmjs) |
+| `POST /control/attack` | `{"ms":500}` holds the fire button for that long and lets go (default 300, maximum 5000); `{"down":true}` and `{"down":false}` hold and release it explicitly. A real left-mouse-button event, which is what this build binds to `+attack`, so it opens no console and pauses nothing. See [The fight](#the-fight-controlcombatmjs) |
 | `POST /control/status` (also `GET`) | `200` with the page's state as JSON, framing included |
 | `GET /control/state` | `200` with the game's state as JSON: the map, whether a level is up, the position and angles, the save slots and the console log tail. Sends no input |
-| `POST /control/state` | `{"probe":true}` also asks the engine over its own console for a live `viewpos`/`serverinfo` (input: the console is opened and shut again) |
+| `POST /control/state` | `{"probe":true}` also asks the engine over its own console for a live `viewpos`/`serverinfo` (input: the console is opened and shut again, which pauses the game while it is open). The live half of the plain `GET` comes from the engine's memory either way |
 | `GET /control/health` | `200` with the CDP endpoint, whether the browser answered, and whether the game is there and how it is framed. Read-only, needs no game, and always answers |
 | `GET /control/screenshot.png` (also `HEAD`) | `200`, `image/png` |
 | `OPTIONS` on any of them | `204`, with the CORS headers |
@@ -1334,12 +1464,15 @@ way, and the ones that can only answer with a game open are `SKIP`ped with the
 reason (no game in the browser) rather than failed. When a game *is* open they
 run for real, with the least intrusive input there is -- a Shift tap (a modifier
 changes no binding), a zero mouse delta, and the middle button, which Quake 2
-leaves unbound -- plus the console probe `state` uses, which is read-only and
-toggles the console shut again once it has read the answer.
+leaves unbound -- plus the console probe `state({probe:true})` uses, which is
+read-only in the sense that it sends no game input, and toggles the console shut
+again once it has read the answer. (It does pause the game while the console is
+open; that is why it is opt-in and nothing on the hot path calls it.)
 
 **`scripts/goto-test.mjs`** is the one test that proves *navigation*, and it
 cannot be faked: it drives the live game, reads the player's position out of the
-engine's own console, and checks that the player really moved. It finds the game
+engine's own memory (it no longer opens the console to do it), and checks that
+the player really moved. It finds the game
 and the running level, reads the running map out of the archive with `route.mjs`
 and checks the player is inside that map's bounds -- so the archive and the
 engine have to be talking about the same level -- then turns to a bearing and

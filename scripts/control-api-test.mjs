@@ -243,10 +243,22 @@ try {
       assert.ok(key in body.player, "state.player has no " + key);
     }
     // The engine cannot be asked these, and the answer has to say so rather
-    // than look like a read that merely came back empty.
-    for (const key of ["health", "armour", "ammo", "alive"]) {
+    // than look like a read that merely came back empty. `alive` is not one of
+    // them any more: it is derived from the live view roll, which engine-state.js
+    // reads out of the engine's memory, and says so in `aliveSource`.
+    for (const key of ["health", "armour", "ammo"]) {
       assert.ok(body.unavailable.includes(key), "state does not list " + key + " as unavailable");
       assert.equal(body.player[key], null, key + " must be null, the engine cannot print it");
+    }
+    // The live half has to say where it came from, and a plain read must not
+    // have opened the console to get it.
+    assert.ok(["wasm-memory", "console", "none"].includes(body.source), "state.source is " + body.source);
+    assert.equal(typeof body.consoleSpend.toggles, "number", "state carries no console spend");
+    if (body.source === "wasm-memory") {
+      assert.equal(typeof body.player.alive, "boolean", "state.player.alive must be answered, not null");
+      assert.ok(!body.unavailable.includes("alive"), "alive is read now, so it must not be listed as unavailable");
+      assert.equal(typeof body.engine.paused, "boolean", "state does not report whether the engine is paused");
+      assert.equal(body.engine.paused, !body.engine.inGame, "paused must mean the game does not own the keyboard");
     }
     assert.equal(typeof body.note, "string", "state carries no note");
     assert.ok(Array.isArray(body.console.tail), "state has no console tail");
