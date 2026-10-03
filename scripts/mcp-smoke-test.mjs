@@ -28,7 +28,7 @@ const SERVER = path.join(ROOT, "mcp", "server.mjs");
 // server's own isError answer rather than as this test's deadline.
 const ANSWER_TIMEOUT_MS = 25000;
 const PROTOCOL_VERSION = "2025-06-18";
-const TOOL_NAMES = ["quake2_key", "quake2_mouse", "quake2_click", "quake2_status", "quake2_state", "quake2_screenshot"];
+const TOOL_NAMES = ["quake2_key", "quake2_mouse", "quake2_click", "quake2_attack", "quake2_status", "quake2_state", "quake2_screenshot"];
 
 let failures = 0;
 const child = spawn(process.execPath, [SERVER], { cwd: ROOT, stdio: ["pipe", "pipe", "pipe"] });
@@ -143,7 +143,7 @@ try {
   });
 
   // -- tools/list ----------------------------------------------------------
-  await step("tools/list returns the six Quake 2 tools, each with a JSON schema", async () => {
+  await step("tools/list returns every Quake 2 tool, each with a JSON schema", async () => {
     const answer = await call("tools/list");
     assert.ok(answer.result && Array.isArray(answer.result.tools), "no tools array");
     const names = answer.result.tools.map((tool) => tool.name);

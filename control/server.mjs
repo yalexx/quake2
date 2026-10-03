@@ -11,6 +11,7 @@
 //   POST /control/key         {"key":"w"}  {"key":"w","down":true}  {"text":"map demo1","enter":true}
 //   POST /control/mouse       {"dx":120,"dy":0}
 //   POST /control/click       {"button":"left"}
+//   POST /control/attack      {"ms":500}  {"down":true}  {"down":false}
 //   POST /control/status      {}                     -> the page's state as JSON
 //   GET  /control/state                              -> the game's state as JSON, no input sent
 //   POST /control/state       {"probe":true}         -> ... and ask the engine over its own console
@@ -196,6 +197,29 @@ async function handleMouse(body) {
   return game.mouseMove(dx, dy);
 }
 
+// The longest a single hold-fire request may take. The route deadline is 15 s
+// and the hold sits inside two console round trips, so this is comfortably
+// inside it -- and a caller who asks for longer is told rather than hung.
+const MAX_FIRE_MS = 5000;
+
+// Fire, as a hold rather than a click. /control/click presses and releases the
+// left button, which is one blaster bolt; a Quake 2 fight is won by holding the
+// trigger down while the player keeps moving, because a player who stops to aim
+// is a stationary target (measured on demo1: six seconds of standing still is a
+// corpse, and the same six seconds with the trigger down is a won fight). So
+// this takes either `down` -- an explicit hold, released by a later call -- or
+// `ms`, hold for that long and let go, which is the one that cannot be left
+// stuck. It goes in as the `+attack` console command rather than a key event,
+// for the same reason the use key does: the binding is the player's own.
+async function handleAttack(body) {
+  if (body.down !== undefined) return game.attackHold(!!body.down);
+  const ms = body.ms === undefined ? 300 : Number(body.ms);
+  if (!Number.isFinite(ms) || ms < 0 || ms > MAX_FIRE_MS) {
+    throw new ControlError("ms must be a number from 0 to " + MAX_FIRE_MS + " (or send down:true/false to hold and release)", "BAD_REQUEST");
+  }
+  return game.fire(ms);
+}
+
 async function route(req, res, pathname) {
   if (req.method === "OPTIONS") {
     res.writeHead(204, { ...NO_STORE, Allow: "GET, POST, OPTIONS" }).end();
@@ -241,7 +265,7 @@ async function route(req, res, pathname) {
     return;
   }
 
-  const wantsBody = pathname === "/control/key" || pathname === "/control/mouse" || pathname === "/control/click";
+  const wantsBody = pathname === "/control/key" || pathname === "/control/mouse" || pathname === "/control/click" || pathname === "/control/attack";
   const isStatus = pathname === "/control/status";
   if (!wantsBody && !isStatus) {
     sendJson(res, 404, { error: "no such control route: " + pathname, code: "NOT_FOUND" });
@@ -262,6 +286,7 @@ async function route(req, res, pathname) {
   if (pathname === "/control/key") answer = await handleKey(body);
   else if (pathname === "/control/mouse") answer = await handleMouse(body);
   else if (pathname === "/control/click") answer = await game.click(body.button === undefined ? "left" : requireString(body.button, "button"));
+  else if (pathname === "/control/attack") answer = await handleAttack(body);
   else answer = await game.status();
   sendJson(res, 200, { ok: true, ...(answer && typeof answer === "object" ? answer : { result: answer }) });
 }

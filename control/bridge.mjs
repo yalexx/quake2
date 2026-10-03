@@ -491,6 +491,10 @@ export class QuakeControl {
     // makes flips this. #askEngine re-checks against reality and corrects it
     // when a dump does not come back.
     this.consoleOpen = false;
+    // Whether `+attack` was the last thing sent. The bridge cannot press a key
+    // the engine has already been told to hold, so a caller that dies mid-fight
+    // would otherwise leave the player firing at nothing forever.
+    this.attacking = false;
     // What face() has learned about turning: how far one mouse count turns the
     // player, how fast the arrow keys turn, and whether each works at all.
     // null means "not measured yet".
@@ -1103,6 +1107,48 @@ export class QuakeControl {
     return { used: release.held !== false, holdMs: holdMs };
   }
 
+  // The engine's fire button, as a hold rather than a tap -- the same shape as
+  // useHold(), for the same reason, and one more of its own. `+attack` is the
+  // command behind every fire binding, so it works whatever the player's config
+  // says, and it is a *hold* because a fight on this box is won by firing while
+  // the player keeps walking: a soldier takes three blaster bolts, a single
+  // click is one of them, and a player who stands still to aim the second and
+  // third is the player the level kills.
+  //
+  // Held down, the engine re-fires at the weapon's own refire rate until
+  // release() is called. Nothing here leaves it held: a stuck trigger is not
+  // harmless, because fire is also the key that leaves the death camera and
+  // skips an intermission.
+  async attackHold(down = true) {
+    const answer = await this.command([down ? "+attack" : "-attack"]);
+    if (!answer.ran) {
+      return { held: false, reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console" };
+    }
+    this.attacking = !!down;
+    return { held: true, command: down ? "+attack" : "-attack", output: answer.output };
+  }
+
+  // Fire for a while and let go. The pair is wrapped so that a caller cannot
+  // leave the trigger down, and the time actually spent firing is the time the
+  // caller asked for -- the console round trips around it are the bridge's.
+  //
+  // `fired` and `released` are reported separately on purpose. They are two
+  // different failures and only one of them is harmless: a press the engine did
+  // not answer means nothing was fired, while a *release* it did not answer
+  // means the player may still be firing -- and the caller has to know that,
+  // because the next `-attack` is the only thing that will stop it. Reporting
+  // the first from the second would say "nothing was fired" about a trigger that
+  // is down.
+  async fire(ms = 300) {
+    const press = await this.attackHold(true);
+    if (!press.held) {
+      return { fired: false, released: true, reason: press.reason, message: press.message, holdMs: 0 };
+    }
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(ms, 300))));
+    const release = await this.attackHold(false);
+    return { fired: true, released: release.held !== false, holdMs: ms };
+  }
+
   // Jump. One tap of the space bar, which is what every Quake 2 config binds
   // `+moveup` to; the physics gives it a fixed height, so a caller that wants to
   // clear a 40-unit lip does not have to hold it.
@@ -1181,6 +1227,46 @@ export class QuakeControl {
       return Date.now() - started;
     });
     return { key, requestedMs: duration, heldMs: held };
+  }
+
+  // Hold several keys at once for a while and let them go.
+  //
+  // walk() holds one key, which is all a follower needs and not all a *fight*
+  // needs. Quake 2 moves a player along the way they are looking -- forward is
+  // the view, strafe is the view turned a quarter turn -- so a player who has to
+  // look at a soldier and still walk the corridor has to hold forward and a
+  // strafe key together. That is the whole trick of shooting on the move, and it
+  // is the reason this exists rather than a wider walk().
+  //
+  // Every key goes down before any comes up, and every release is attempted even
+  // if the hold throws -- a key left down is a player walking into a wall for
+  // the rest of the run. Each release is its own attempt, too: one key the
+  // engine refuses must not leave the others held as well, which is what a
+  // single loop over the list would do.
+  async walkKeys(keys, ms = 300, options = {}) {
+    const list = (Array.isArray(keys) ? keys : [keys]).map(String).filter((key) => key !== "");
+    if (!list.length) throw new ControlError("walkKeys(keys) needs at least one key", "BAD_REQUEST");
+    const duration = Math.max(0, numberOr(ms, 300));
+    const held = await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      const started = Date.now();
+      try {
+        for (const key of list) await this.#sendKey(game, key, true);
+        await new Promise((resolve) => setTimeout(resolve, duration));
+      } finally {
+        for (const key of [...list].reverse()) {
+          try {
+            await this.#sendKey(game, key, false);
+          } catch {
+            // Nothing better is available: a release that cannot be delivered
+            // means the socket is gone, and the remaining keys are still worth
+            // releasing on the chance that it is not.
+          }
+        }
+      }
+      return Date.now() - started;
+    });
+    return { keys: list, requestedMs: duration, heldMs: held, stepMs: options.stepMs };
   }
 
   // Walk to a point and say honestly whether the player got there. Each round
