@@ -1508,7 +1508,7 @@ what the engine says it is running, up to `RESET_TRIES` (6) sends, and only then
 hands the walk a level. Measured after the fix, on the same command:
 `map after reset: demo1`, `player at: 128 -320 46`, the level's own spawn.
 
-**What the walk did, once it was walking.** Four runs, all with `cheats 0`,
+**What the walk did, once it was walking.** Five runs, all with `cheats 0`,
 the fight's default `advance` mode unless noted, and the status bar unread
 (`QUAKE2_READ_HUD=0` -- the read costs about 40% of the ground a firing leg
 makes, and no firing leg in these runs made a damage decision from health):
@@ -1519,6 +1519,7 @@ makes, and no firing leg in these runs made a damage decision from health):
 | `finish-4` | 40 | **743 short** | -1037 1622 | 29 | 141 | 15,548 |
 | `finish-retreat` | 24, `fireWhile:retreat` | **1,633 short** | -814 224 | 17 | 57 | 3,548 |
 | `finish-5` | 60 | **901 short** | -952 1181 | 48 | 256 | 27,998 |
+| `finish-6` | 60, status bar read **on** | **827 short** | -952 1475 | 48 | 237 | 45,985 |
 
 **Kiting was tried and is worse.** `QUAKE2_FIRE_WHILE=retreat` walks the route
 *backwards* while the trigger is down, away from the soldier being shot -- the
@@ -1543,6 +1544,21 @@ in the same place.** Of the 48 restarts in the 60-attempt run, 31 were between
 reached 901. That is the corridor, and it is the same corridor the earlier
 passes describe: the walk survives the open ground and the pocket, enters the
 corridor, and is ground down in it.
+
+**Reading the status bar did not cost the ground, and it bought the health
+series.** `finish-5` and `finish-6` are the same command at the same 60-attempt
+budget with one difference: the second reads the status bar on every firing leg
+(`finish`'s own default), the first was run with `QUAKE2_READ_HUD=0`. Read on,
+the walk covered **45,985 units of ground against 27,998** and reached **827**
+units short against 901 -- inside the same spread -- and it produced the fight's
+own numbers: **151 of 237 firing legs with a health reading, 3,038 health spent
+across them, 12.82 a leg**, the lowest the fight took the player to **1**, and
+21 health left after the last firing leg. That is the corridor's price at this
+budget: about 63 health a life against a level the earlier pass measured at
+about 200 health of top-ups along the route. The "40% of a firing leg's ground"
+the earlier pass attributed to the read is **not** reproduced at this budget.
+What these numbers still do not say is whether the reader was *right* on each
+leg -- the crops are the evidence for that, and none were kept in this pass.
 
 **Two things the per-leg record says about the corridor.** First, the walk
 stalls in the pocket: the trail shows four consecutive legs of one attempt at
