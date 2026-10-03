@@ -46,6 +46,27 @@ const DEFAULT_CDP_URL = "http://127.0.0.1:18801";
 // frame and nothing else on the box.
 const GAME_URL_MARK = "/apps/quake2/";
 const DEFAULT_TIMEOUT_MS = 5000;
+// A view roll past this many degrees is the death camera and not a hit.
+//
+// Quake 2 rolls the view for two reasons, and they are an order of magnitude
+// apart. A *hit* kicks it, and measured on a live player fighting through
+// demo1's corridor that kick reached 1.57 degrees while the status bar was
+// showing 100 health at the same moment -- the four moments the page called
+// death carried rolls of 1.21, 1.25, 1.57 and 1.57 beside health readings of
+// 100, 100, 100 and 52. A *death* rolls it much further: the death camera held
+// 27.28 degrees in that same run, and 39 when the offset was first recovered.
+//
+// The threshold has to sit between them, and at one degree it did not: every hit
+// the player took was read as a death, and a walker that believes the player is
+// dead restarts the level, so demo1's corridor was restarting the walk on
+// contact. Ten degrees is six times the largest kick measured and less than half
+// the smallest death.
+//
+// engine-state.js carries the same number and the same measurement. It is
+// repeated here because the page loads that script once, at startup: a
+// corrected constant never reaches a page that is already running, and this is
+// the reading every decision in the walker is made from.
+const ROLL_IS_DEATH = 10;
 // CDP's Input.dispatchKeyEvent.modifiers is a bit field.
 const MODIFIER_BITS = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
@@ -112,12 +133,30 @@ const directStateExpression = () => `(function () {
   return JSON.stringify({ read: out.read, watch: out.watch, map });
 })()`;
 
-// The key the engine's own config binds to `+use`, read out of its config file.
-// Quake 2 has no default `+use` binding -- a door opens by walking into it --
-// so on a stock config this answers null, and useHold() says so instead of
-// quietly falling back to the console. A config that binds one is honoured.
-const useBindingExpression = () => `(function () {
+// The key the engine's own config binds to a command -- `+use`, or a weapon
+// select such as `use supershotgun` -- read out of the engine's own config file.
+//
+// It is read and not assumed. Quake 2 has no default `+use` binding (a door
+// opens by walking into it) and the weapon keys are the player's, not the
+// game's: a config.cfg that binds `use supershotgun` to `4`, or to nothing at
+// all, is the only thing that says which key to press. Guessing "3" would be a
+// claim about somebody's keyboard.
+//
+// The config file is also the only place this build exposes bindings at all:
+// the wasm exports are libc and SDL, there is no cvar accessor, and `bind` on
+// the console prints only to the log the engine buffers. The file is written by
+// the engine at exit, so `default.cfg` is searched as well -- a player who has
+// never quit has only the shipped defaults.
+const bindingExpression = (command) => `(function () {
   const dirs = ${JSON.stringify(GAME_DIRS)};
+  // Compared with the spaces taken out, because the engine names an item the
+  // way the player sees it and not the way the code does: the config binds
+  // \`use Super Shotgun\`, and a caller asking for the level's \`weapon_supershotgun\`
+  // is asking for the same thing. Case alone is not enough -- "supershotgun" and
+  // "Super Shotgun" differ by a space as well -- and a lookup that misses is a
+  // weapon the walk picks up and cannot fire.
+  const flatten = (text) => String(text).replace(/\\s+/g, "").toUpperCase();
+  const wanted = flatten(${JSON.stringify(String(command))}.trim());
   for (const dir of dirs) {
     for (const name of ["config.cfg", "default.cfg"]) {
       let text = null;
@@ -133,7 +172,7 @@ const useBindingExpression = () => `(function () {
         if (m) binds[m[1].toUpperCase()] = m[2];
       }
       for (const key of Object.keys(binds)) {
-        if (binds[key].trim() === "+use") return JSON.stringify({ key });
+        if (flatten(binds[key].trim()) === wanted) return JSON.stringify({ key, command: binds[key].trim() });
       }
     }
   }
@@ -600,6 +639,10 @@ export class QuakeControl {
     // up yet, null = the config binds none (which is what a stock Quake 2
     // config does), a string = the key to press.
     this.useBinding = undefined;
+    // command (as the config writes it) -> { found, binding, pressable, key, button }.
+    // Undefined until something asks: nothing is read out of the player's config
+    // until a caller needs a key.
+    this.bindings = undefined;
     // What this bridge has learned about the current level, as { name, source }.
     // The map name has no stable address in the image (see #readEngineState), so
     // it is learned instead: from a `mapname` the engine answered (its own word
@@ -1059,6 +1102,13 @@ export class QuakeControl {
 
   #positionFromDirect(direct) {
     const read = direct.read;
+    // Whether the player is dead, decided here rather than taken from the page:
+    // see ROLL_IS_DEATH for why the page's own answer is not the one to trust.
+    // A reading with no angles in it has nothing to decide from, and the page's
+    // answer is passed through as it stands.
+    const rolled = read.angles && typeof read.angles.roll === "number" && Number.isFinite(read.angles.roll)
+      ? Math.abs(read.angles.roll) > ROLL_IS_DEATH
+      : null;
     return {
       probed: false,
       source: "wasm-memory",
@@ -1075,9 +1125,9 @@ export class QuakeControl {
       consoleOpen: read.consoleOpen,
       keyDest: read.keyDest,
       keyDestName: read.keyDestName,
-      dead: read.dead,
-      alive: read.alive,
-      aliveSource: read.aliveSource,
+      dead: rolled === null ? read.dead : rolled,
+      alive: rolled === null ? read.alive : !rolled,
+      aliveSource: rolled === null ? read.aliveSource : "view-roll",
       health: read.health,
       armour: read.armour,
       ammo: read.ammo,
@@ -1462,36 +1512,55 @@ export class QuakeControl {
   // null when nothing is bound. A mouse binding is returned as a button.
   async useKey() {
     if (this.useBinding === undefined) {
-      let raw;
-      try {
-        raw = await this.#withSession((game) => game.evaluate(useBindingExpression()));
-      } catch {
-        // The page could not answer -- so nothing is known, and nothing is
-        // remembered. Caching this would turn one unreadable moment (a page
-        // still booting, a socket that dropped) into "the config binds no key"
-        // for the rest of the run, which is a claim about the player's config
-        // that this bridge has not earned.
-        return { found: false, reason: "UNREADABLE" };
-      }
-      let name = null;
-      try {
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed && typeof parsed.key === "string" && parsed.key !== "") name = parsed.key;
-      } catch {
-        name = null;
-      }
-      this.useBinding = this.#describeUseKey(name);
+      const found = await this.binding("+use");
+      // The page could not answer -- so nothing is known, and nothing is
+      // remembered. Caching this would turn one unreadable moment (a page still
+      // booting, a socket that dropped) into "the config binds no key" for the
+      // rest of the run, which is a claim about the player's config that this
+      // bridge has not earned.
+      if (found.reason === "UNREADABLE") return found;
+      this.useBinding = found;
     }
     return this.useBinding;
+  }
+
+  // Which key the engine's own config binds to `command`, looked up once per
+  // command and remembered. `command` is a Quake 2 binding body as the config
+  // writes it: `"+use"`, `"use supershotgun"`, `"weapon 3"`. The answer is the
+  // same shape useKey() gives -- `{ found, binding, pressable, key, button }` --
+  // with the command echoed back, and `{ found: false, reason: "UNREADABLE" }`
+  // when the page could not be asked. Nothing is assumed when nothing is found:
+  // a key that is not in the config is a key this bridge will not press.
+  async binding(command) {
+    const wanted = String(command === undefined || command === null ? "" : command).trim();
+    if (!wanted) return { found: false, reason: "NO_COMMAND", command: null };
+    if (!this.bindings) this.bindings = new Map();
+    if (this.bindings.has(wanted)) return this.bindings.get(wanted);
+    let raw;
+    try {
+      raw = await this.#withSession((game) => game.evaluate(bindingExpression(wanted)));
+    } catch {
+      return { found: false, reason: "UNREADABLE", command: wanted };
+    }
+    let name = null;
+    try {
+      const parsed = raw ? JSON.parse(raw) : null;
+      if (parsed && typeof parsed.key === "string" && parsed.key !== "") name = parsed.key;
+    } catch {
+      name = null;
+    }
+    const described = { ...this.#describeBinding(name), command: wanted };
+    this.bindings.set(wanted, described);
+    return described;
   }
 
   // The engine names bindings in its own spelling ("SPACE", "MOUSE1", "e").
   //
   // Returns whether anything was bound at all, and whether this bridge can
-  // actually press it. Those are different answers: a config that binds `+use`
-  // to a fourth mouse button has bound something, and saying it "binds no key"
-  // would be a false statement about the player's own config.
-  #describeUseKey(name) {
+  // actually press it. Those are different answers: a config that binds a
+  // command to a fourth mouse button has bound something, and saying it "binds
+  // no key" would be a false statement about the player's own config.
+  #describeBinding(name) {
     if (name === null || name === undefined || String(name) === "") return { found: false, binding: null, pressable: false, key: null, button: null };
     const upper = String(name).toUpperCase();
     const mouse = upper.match(/^MOUSE(\d+)$/);
@@ -1638,8 +1707,31 @@ export class QuakeControl {
   // result says `how: "fire"` and names the trap. A caller that would rather
   // have a clean spawn, and would rather pay a console round trip for it, asks:
   // `respawn({ how: "map" })`, or `{ console: true }`.
+  //
+  // The fire path is also a hint that can simply fail to land -- a click that
+  // misses the canvas, a death camera that has already gone -- and a caller
+  // whose whole walk is riding on it must not be told "the level is over"
+  // because a click did not take. So a fire that does not work falls back to
+  // starting the level, which always works; the result then says `how: "map"`
+  // with `fellBackFrom: "fire"`, so the slow path is on the record rather than
+  // hidden behind a success. `respawn({ fallback: false })` turns the fallback
+  // off for a caller that would rather see the failure.
   async respawn(options = {}) {
-    const before = await this.position();
+    let before = await this.position();
+    if (before && !before.dead && options.recheck !== false) {
+      // The caller asked for a restart because it read a dead player, and this
+      // read says alive. The two disagree, and the death camera is the one place
+      // they can: `dead` is the view's roll, and the roll comes back through
+      // zero for a frame while the camera is being torn down. So a caller that
+      // reads a corpse and asks this a moment later can be told `ALIVE` and then
+      // read a corpse again on its very next probe. Measured, on the proof run
+      // that argued for this: the walker was told `ALIVE` twice in a row, went
+      // on to read `dead` again, ended the run `DEAD` -- and six of its eight
+      // lives and the level's whole route went unspent. One more look, a moment
+      // later, is what tells a settled player from a flickering one.
+      await new Promise((resolve) => setTimeout(resolve, 250));
+      before = await this.position();
+    }
     if (!before || !before.dead) return { respawned: false, reason: "ALIVE", position: before && before.position };
     // A roll says the player cannot act, and the intermission camera rolls too.
     // So a caller that knows which level it was playing hands the name in: if
@@ -1664,17 +1756,44 @@ export class QuakeControl {
           console: this.consoleMetrics(),
         };
       }
-      return {
-        respawned: false,
-        reason: "NOT_RESPAWNED",
-        how: "fire",
-        position: before.position,
-        message: "pressing fire did not get the player back into the level.",
-        console: this.consoleMetrics(),
-      };
+      // Fire did not get the player back. That is not a dead end, and treating
+      // it as one throws away the rest of the run: measured, a `finish` run
+      // lived through two restarts by fire and ended `DEAD` on a third that did
+      // not take, with the exit still 1,144 units away and the level's own
+      // route unspent. Pressing fire is a *hint* to the engine -- it lands or
+      // it does not, depending on the death camera and on whether the click
+      // reached the canvas -- and the one thing that certainly puts the player
+      // back on the level is starting the level again. So the console restart
+      // is the fallback rather than the caller's choice: the fast path stays
+      // the fast path, and the slow one only pays for itself once the fast one
+      // has already failed.
+      if (options.fallback === false) {
+        return {
+          respawned: false,
+          reason: "NOT_RESPAWNED",
+          how: "fire",
+          position: before.position,
+          message: "pressing fire did not get the player back into the level, and no fallback was allowed.",
+          console: this.consoleMetrics(),
+        };
+      }
+      const restarted = await this.#startLevel(options, before);
+      return { ...restarted, fellBackFrom: "fire" };
     }
-    const map = options.map || (before && before.map);
-    if (!map) return { respawned: false, reason: "NO_MAP", position: before && before.position };
+    return this.#startLevel(options, before);
+  }
+
+  // Start the level again through the console -- the restart that certainly
+  // works, and the slow one: a console round trip and a level load, against the
+  // one click the fire path costs. The level to start is the caller's map, or
+  // the one the engine reports, or -- when neither is known, which is the usual
+  // case on this build, where `position()` reports no map before a level has
+  // been started -- the level the caller said it expected to be on. Naming `map`
+  // as a restart target is not a cheat: the level's own spawn and the level's
+  // own weapons are what the player gets, exactly as they did the first time.
+  async #startLevel(options, before) {
+    const map = options.map || (before && before.map) || options.expectMap || null;
+    if (!map) return { respawned: false, reason: "NO_MAP", how: "map", position: before && before.position, console: this.consoleMetrics() };
     await this.command(["map " + map, "cheats 0"], { tail: 8 });
     await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
     const after = await this.position();
@@ -1750,6 +1869,43 @@ export class QuakeControl {
       return Date.now() - started;
     });
     return { keys: list, requestedMs: duration, heldMs: held, stepMs: options.stepMs };
+  }
+
+  // Put a set of keys down, or let them up, and say nothing about how long --
+  // the caller owns the interval.
+  //
+  // walkKeys() presses and releases inside one call, which is all a follower
+  // needs and not enough for a fight. A fighting leg has to walk *while it
+  // turns*: Quake 2's arrow keys raise and lower the yaw without letting go of
+  // `+forward`, so a player who holds the movement keys and then turns keeps
+  // moving through the whole turn. Doing the turn first and the walk afterwards
+  // -- which is what a leg built out of face() then walkKeys() does -- spends
+  // the turn standing still, and standing still in demo1's corridor is the one
+  // thing the level punishes: measured, 100 health and no armour becomes a
+  // corpse in six seconds of it. The turn is the longer half of a fighting leg,
+  // so this is not a detail.
+  //
+  // State lives in the page, not in the session: a key pressed here stays down
+  // for the engine until the matching release, whenever it is sent. Every
+  // release is attempted even if one throws, for the reason walkKeys gives.
+  async holdKeys(keys, down = true) {
+    const list = (Array.isArray(keys) ? keys : [keys]).map(String).filter((key) => key !== "");
+    if (!list.length) return { keys: [], down: !!down, held: [] };
+    const held = await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      const done = [];
+      for (const key of (down ? list : [...list].reverse())) {
+        try {
+          await this.#sendKey(game, key, down);
+          done.push(key);
+        } catch {
+          // The remaining keys are still worth sending: one key the engine
+          // refuses must not leave the others in the wrong state.
+        }
+      }
+      return done;
+    });
+    return { keys: list, down: !!down, held };
   }
 
   // Walk to a point and say honestly whether the player got there. Each round

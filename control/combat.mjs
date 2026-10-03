@@ -580,16 +580,10 @@ export class CombatWalker extends RouteWalker {
     if (!before || !before.position) return super._leg({ ...target, enemy: undefined }, options);
     const aim = { x: target.x, y: target.y, z: before.position.z };
     const facing = bearingTo(before.position, aim);
-    const aimed = await this.game.face(facing, {
-      from: before,
-      tolerance: numberOr(options.faceTolerance, 6),
-      rounds: numberOr(options.faceRounds, 4),
-    });
     // Where to walk: at the route point the leg would have aimed at had there
     // been no soldier. A leg that has lost its route point walks where it looks,
     // which is the best a leg can do with nothing to go on.
     const walkBearing = target.route ? bearingTo(before.position, target.route) : facing;
-    const keys = movementKeys(facing, walkBearing);
     const stepMs = numberOr(options.engageStepMs, this.engage.engageStepMs);
     // The press is asked for and reported on: a trigger the engine never took
     // is a leg that walked and aimed and did not shoot, and saying otherwise
@@ -605,8 +599,16 @@ export class CombatWalker extends RouteWalker {
       ? await this.game.mouseHold("left", true)
       : await this.game.attackHold(true);
     let walked = null;
+    let aimed = null;
+    // The keys the leg is walking on. Computed from the view the player has at
+    // the start of the leg and re-computed after the turn, because Quake 2 walks
+    // a player along the view: the same key is a different direction after the
+    // view has moved. See #turnOnTheMove.
+    let keys = movementKeys(facing, walkBearing);
     try {
-      walked = await this.game.walkKeys(keys, stepMs, options);
+      walked = await this.#turnOnTheMove(before, facing, walkBearing, keys, stepMs, options);
+      aimed = walked.aimed;
+      keys = walked.keys;
     } finally {
       // The trigger comes up even if the walk threw: fire is also the key that
       // leaves the death camera, and a stuck trigger would respawn the player
@@ -632,6 +634,12 @@ export class CombatWalker extends RouteWalker {
       at,
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
       holdMs: walked ? walked.heldMs : 0,
+      // How much of the leg the turn took, and how long the leg held its keys.
+      // The turn used to be the whole leg -- it was made standing still and the
+      // walking happened after it -- so these two numbers are how "the leg walks
+      // through its turn" is checkable from a run's own record rather than
+      // believed from this file.
+      turnMs: walked && walked.turnMs !== undefined ? walked.turnMs : null,
       dead: !!(after && after.dead),
     };
     // The one reading the engine will not give: how much of the player is left
@@ -642,6 +650,77 @@ export class CombatWalker extends RouteWalker {
     if (health) Object.assign(record, health);
     this.fights.push(record);
     return { ...(after || { position: before.position }), fired: !!press.held, position: at };
+  }
+
+  // One firing leg's movement: the player is walking the route before the turn
+  // starts, keeps walking through it, and is still walking when the leg ends.
+  //
+  // This is the leg's whole defence and it used to be missing. A leg built out
+  // of `face()` and then `walkKeys()` turns first and walks afterwards, and the
+  // turn is the longer half: the arrow keys turn at cl_yawspeed -- 140 degrees a
+  // second -- and face() caps one round at 900 ms, so a soldier 90 degrees off
+  // the way forward is over half a second of a half-second leg spent standing
+  // still, and a soldier behind the player is more. Standing still in demo1's
+  // corridor with full health and no armour was measured to end in a corpse in
+  // six seconds; walking the same ground into the same soldiers costs nothing.
+  // A leg that stands still for most of itself is therefore not fighting, it is
+  // dying, and the fix is the one a player uses without thinking about it: hold
+  // the movement keys down *first* and turn while they are held.
+  //
+  // The keys have to be re-chosen after the turn, and that is not a detail.
+  // Quake 2 moves a player along the view, so `movementKeys(facing, wanted)`
+  // answers "which keys walk `wanted` while looking at `facing`" -- and `facing`
+  // is a different direction once the turn lands. Left as they were, a leg that
+  // turned a quarter turn would keep walking the bearing it started with a
+  // quarter turn away. Both sets are returned so the caller can report which
+  // keys the leg actually walked on.
+  async #turnOnTheMove(before, facing, walkBearing, startKeys, stepMs, options) {
+    const faceOptions = {
+      from: before,
+      tolerance: numberOr(options.faceTolerance, 6),
+      rounds: numberOr(options.faceRounds, 4),
+    };
+    // A game object that cannot hold a key apart from the call that sends it --
+    // the stubs in scripts/route-test.mjs -- keeps the old shape: turn, then
+    // walk. It is the half of this file's own argument that measurably loses,
+    // and it is here only so that an object with no input state still runs.
+    if (typeof this.game.holdKeys !== "function") {
+      const aimed = await this.game.face(facing, faceOptions);
+      const keys = movementKeys(facing, walkBearing);
+      const walked = await this.game.walkKeys(keys, stepMs, options);
+      return { aimed, keys, heldMs: walked ? walked.heldMs : 0, turnMs: null };
+    }
+    // Down before the first turn: the leg is moving before it has turned a
+    // degree, which is the whole point of this method.
+    let keys = startKeys;
+    await this.game.holdKeys(keys, true);
+    let aimed = null;
+    let turnMs = 0;
+    try {
+      const turnedAt = Date.now();
+      aimed = await this.game.face(facing, faceOptions);
+      turnMs = Date.now() - turnedAt;
+      const yaw = aimed && aimed.yaw !== undefined ? aimed.yaw : facing;
+      const after = movementKeys(yaw, walkBearing);
+      if (after.join(",") !== keys.join(",")) {
+        // Release before pressing: a key held down and pressed again is one key
+        // hold, not two, and the direction it is held on is the first one.
+        await this.game.holdKeys(keys, false);
+        await this.game.holdKeys(after, true);
+        keys = after;
+      }
+      // The leg lasts `stepMs` of walking, counted from the moment the keys went
+      // down -- so the turn is spent walking rather than added to the leg. A
+      // soldier far off the way forward costs ground to answer, not health.
+      const rest = stepMs - turnMs;
+      if (rest > 0) await new Promise((resolve) => setTimeout(resolve, rest));
+    } finally {
+      // The keys come up whatever happened above: a leg that throws with a
+      // movement key still down is a player walking into a wall for the rest of
+      // the run.
+      await this.game.holdKeys(keys, false);
+    }
+    return { aimed, keys, heldMs: Math.max(turnMs, stepMs), turnMs };
   }
 
   // The player's own state off the status bar, and the picture it was read

@@ -48,6 +48,35 @@ import { loadMap } from "./route.mjs";
 // the two has to go through this.
 const EYE_ABOVE_FEET = 46;
 
+// Whether a player standing at `position` is touching the thing a `via` call
+// names -- and "touching" is not a radius.
+//
+// Quake 2 takes a pickup when the player's box and the item's box overlap, and
+// that test is per axis. The player's box is 32 units across and a pickup item
+// is the same, so two origins 45 units apart *on the diagonal* are touching --
+// 32 across and 32 along, both exactly on the limit -- while two origins 33
+// units apart *straight out* are not. A radius gets those the wrong way round,
+// and on demo1 it is the difference that mattered: measured, a walk sent to
+// fetch the level's supershotgun closed to 33 units of it, was not told the call
+// was made, could not close the last unit, and spent a whole attempt dithering
+// beside the weapon it had already picked up.
+//
+// The vertical test is a slab for the same reason. An item rests on a floor with
+// its origin in the middle of its 32-unit box; the player stands on that floor
+// with their origin 24 above their feet. The boxes overlap while the origins are
+// up to 40 units apart in z, so the slab is wider than the half-width -- and it
+// still refuses a call on another storey.
+const CALL_TOUCH_HALF = 32;
+const CALL_TOUCH_Z = 56;
+
+function touchesCall(position, call) {
+  if (!position || !call) return false;
+  const feet = position.z - EYE_ABOVE_FEET;
+  return Math.abs(position.x - call.x) <= CALL_TOUCH_HALF &&
+    Math.abs(position.y - call.y) <= CALL_TOUCH_HALF &&
+    Math.abs(feet - call.z) <= CALL_TOUCH_Z;
+}
+
 const WALK_DEFAULTS = {
   maxStepUp: 45, // a step, or the height a jump clears
   maxDrop: 300, // a fall the player walks away from
@@ -294,6 +323,39 @@ export class RouteWalker {
     return null;
   }
 
+  // A call on the `via` list has been reached, and whatever the caller asked to
+  // happen on arrival happens here.
+  //
+  // The one thing that uses it is a key press, and the reason it exists is that
+  // picking a weapon up is not the same as holding it. Quake 2's `weapon_*`
+  // items put the weapon in the pack; which one the player is *firing* is a
+  // separate state, and a walk that leaves it alone walks the rest of the level
+  // with whatever it started with -- on demo1, the spawn's own blaster, against
+  // soldiers standing thirty units from the route. The key to press is not
+  // guessed here: it comes from the caller, which reads it out of the engine's
+  // own config (see QuakeControl.binding).
+  //
+  // Never throws. A key that cannot be pressed leaves the walk where it was --
+  // on a call it has made, with the note saying the press did not land -- which
+  // is worse than a working press and much better than losing the attempt.
+  async #madeCall(entry) {
+    const asked = entry && entry.tap ? (Array.isArray(entry.tap) ? entry.tap : [entry.tap]) : [];
+    const pressed = [];
+    for (const key of asked) {
+      if (typeof this.game.tap !== "function") {
+        this.#note("a call asked for a key this game object cannot press", { key });
+        continue;
+      }
+      try {
+        await this.game.tap(key);
+        pressed.push(key);
+      } catch (error) {
+        this.#note("a call's key did not reach the game", { key, reason: error.message });
+      }
+    }
+    return pressed;
+  }
+
   // The route point the player is nearest to.
   #nearestIndex(from, points) {
     let nearest = 0;
@@ -335,6 +397,57 @@ export class RouteWalker {
     let bestDistance = Infinity;
     let position = null;
     let lastPlan = null;
+    // Places the walk has to call at on the way to the goal: the level's own
+    // weapons, armour and shells, which a fresh spawn does not have and the
+    // fight cannot be walked through without. They are goals in their own right,
+    // taken in the order given, and `stage` is how many have been reached.
+    //
+    // The order is the caller's, and it is not an optimization: a walk that dies
+    // after the weapon and before the exit is put back at the spawn *without*
+    // the weapon, so the errand has to be run again. That is why `stage` is
+    // reset by a death and why this lives inside the attempt loop rather than in
+    // a sequence of separate calls from outside -- a sequence of calls would
+    // walk the exit route from the spawn with nothing but the spawn's own
+    // blaster on every second attempt, and report that as the level's fault.
+    // All three coordinates, not just the two the route is walked on. A call
+    // with no height is not a call this walk can use, and `map.path()` throws
+    // `BAD_REQUEST` on a goal it cannot parse -- so a malformed entry left in
+    // the list does not degrade the walk, it ends it with an exception from
+    // inside the follower. The filter is where a bad call is supposed to stop.
+    const via = Array.isArray(options.via)
+      ? options.via.filter((point) => point &&
+        Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)) && Number.isFinite(Number(point.z)))
+      : [];
+    // How close a leg walking to a call has to aim. This is the distance the
+    // player really ends up at, because `goto` stops as soon as it is inside
+    // the tolerance it was given -- and it has to be small, because a plan's
+    // last point is a grid cell and its centre can sit most of a cell away from
+    // the item the call names. Whether the call then counts as *made* is not a
+    // distance at all: see touchesCall.
+    const viaLegTolerance = options.viaLegTolerance === undefined ? 12 : options.viaLegTolerance;
+    // How close the player has to be before the walk stops aiming at the
+    // planner's cell and starts aiming at the item itself. See the guard on the
+    // appended point below.
+    const viaApproach = options.viaApproach === undefined ? 240 : options.viaApproach;
+    let stage = 0;
+    // The point this attempt is really walking towards: the next call that has
+    // not been made, or the goal once every one of them has.
+    const activeGoal = () => (stage < via.length ? via[stage] : goal);
+    // A call that has been made does not spend one of the attempts, for the same
+    // reason a death does not: an attempt is a *re-plan that went nowhere*, and
+    // walking to the level's own supershotgun is the walk going somewhere.
+    // Charging it to the budget is what a walk with four calls to make and five
+    // attempts to make them in gets. Measured, on the run that argued for this:
+    // the errand run spent every attempt it had, made the last call with the
+    // budget already gone, and never turned for the exit at all -- the mechanic
+    // worked and the accounting around it made it useless.
+    const madeCall = async (entry) => {
+      const pressed = await this.#madeCall(entry);
+      stage++;
+      attempt--;
+      bestDistance = Infinity;
+      return pressed;
+    };
 
     while (attempt < attempts) {
       attempt++;
@@ -367,27 +480,101 @@ export class RouteWalker {
         // The restart does not spend an attempt: the plan was not the thing
         // that failed, and the next one is the same plan from the same spawn.
         attempt--;
+        // Back at the spawn means back to the spawn's own loadout: whatever the
+        // walk had collected on the way is gone with the corpse, so every call
+        // is owed again.
+        stage = 0;
+        bestDistance = Infinity;
         const back = await this.game.respawn({ expectMap: this.levelName });
         this.#note(back.respawned ? "back in the level" : "could not get back into the level", { how: back.how, reason: back.reason });
         if (back.reason === "LEVEL_CHANGED") {
           return { reached: false, reason: "LEVEL_CHANGED", map: back.map, level: this.levelName, attempts: attempt, position: back.position, trail, log: this.log };
         }
         const restarted = await this.game.position();
-        if (!restarted || !restarted.position || restarted.dead) {
-          return { reached: false, reason: "DEAD", attempts: attempt, position: restarted && restarted.position, deepest: deepestReading(trail), trail, log: this.log };
+        if (!restarted || !restarted.position) {
+          return { reached: false, reason: "NO_POSITION", attempts: attempt, position: null, deepest: deepestReading(trail), trail, log: this.log };
+        }
+        if (restarted.dead) {
+          // The player is still a corpse, so the restart did not take. That is
+          // not the end of the walk: it is a restart that has to be tried again,
+          // and the budget for trying again is the death budget the caller set
+          // -- the top of this loop counts it and stops the walk when it runs
+          // out. Ending the run here instead is what a proof run did on its
+          // fourth death, with six of its eight lives and the level's own route
+          // still unspent. Measured: two restarts came back `ALIVE` from the
+          // bridge's own recheck and the walker read a corpse straight after.
+          this.#note("the player is still dead; restarting again");
+          continue;
         }
         current = restarted;
       }
       position = current.position;
+      // A call the walk is already standing on is a call it has made. This runs
+      // before the goal test on purpose: a restart puts the player back at the
+      // spawn, and a spawn that happens to sit on one of the calls must not be
+      // read as the walk being over.
+      while (stage < via.length && touchesCall(position, via[stage])) {
+        const call = stage + 1;
+        const pressed = await madeCall(via[stage]);
+        this.#note("standing where the walk was headed anyway", { at: via[stage], call, of: via.length, pressed });
+      }
+      const active = activeGoal();
+      // Two distances, and they answer different questions. `need` is how far
+      // the player is from what this attempt is walking towards -- the next call
+      // while any are owed, and the goal after that -- and it is what progress
+      // is judged by. `distance` is the run's own record of how far it is from
+      // the goal, which is what `deepest`, the report and a reader of the trail
+      // all mean by "how far did it get". Handing the first over as the second
+      // would make a walk that stopped 20 units from a shell box read as a walk
+      // that stopped 20 units from the exit.
+      const need = Math.hypot(position.x - active.x, position.y - active.y);
       const distance = Math.hypot(position.x - goal.x, position.y - goal.y);
-      trail.push({ x: position.x, y: position.y, z: position.z, attempt, distance });
-      if (distance <= tolerance && Math.abs(position.z - goal.z) <= (options.zTolerance || 96)) {
+      trail.push({ x: position.x, y: position.y, z: position.z, attempt, distance, need: stage < via.length ? need : undefined });
+      if (stage >= via.length && need <= tolerance && Math.abs(position.z - active.z) <= (options.zTolerance || 96)) {
         this.#note("reached the goal");
         return { reached: true, reason: "reached", attempts: attempt, position, distance, trail, log: this.log, crossings: lastPlan ? lastPlan.crossings : undefined };
       }
 
-      const plan = this.plan(position, goal);
+      const plan = this.plan(position, active);
+      // A call is an *object*, not a place on the grid. The planner answers with
+      // the centre of the floor cell it snapped the goal to, and that centre can
+      // sit most of a cell away from the item the level put there -- which is
+      // the difference between walking over a supershotgun and walking past it.
+      // Measured, on the run that argued for this: the walk arrived beside the
+      // weapon, 16 units along one axis and 48 along the other, was not touching
+      // it, had nothing left to aim at that was any closer, backed off, and went
+      // wandering. The item's own origin is put on the end of the plan so the
+      // leg that fetches it is aimed at the thing itself.
+      // Only on the last approach, though, and that guard is not decoration
+      // either. The item's origin is an entity's origin, not a floor the planner
+      // has cleared: aimed at from across the level it is a bearing with no
+      // floor under it, and a walk that follows one on demo1 is a walk off the
+      // ledge above its canyon. Measured, on the first run that tried it
+      // unguarded: the player ended at `317 76 -198`, two hundred units below
+      // the level, with no route anywhere. Inside `viaApproach` the correction
+      // is what it was meant to be -- a step onto the thing the walk is standing
+      // beside -- and outside it the plan is the planner's own.
+      if (stage < via.length && plan.points.length &&
+          Math.hypot(position.x - active.x, position.y - active.y) <= viaApproach) {
+        plan.points = [...plan.points, { x: active.x, y: active.y, z: active.z, jump: 0 }];
+      }
       lastPlan = plan;
+      if (!plan.points.length && stage < via.length) {
+        // A call the planner cannot find a way to is a call this walk cannot
+        // make from here, and it is not the walk's destination: standing the
+        // whole walk on it because a shell box is round a corner the grid does
+        // not connect is how a run that was going to the exit ends up throwing
+        // its attempt budget at a detour. It is given up on -- out loud, so the
+        // report says which errand was abandoned and why -- and the walk
+        // re-plans for whatever is next, which after the last call is the exit.
+        const abandoned = via[stage];
+        this.#note("giving up on a call the planner cannot reach", {
+          classname: abandoned.classname || null, at: abandoned, reason: plan.reason, call: stage + 1, of: via.length,
+        });
+        stage++;
+        attempt--;
+        continue;
+      }
       if (!plan.points.length) {
         this.#note("no route from here", { reason: plan.reason, closest: plan.closest, blockers: plan.blockers });
         // The level's own floor plan does not connect these two points. That is
@@ -399,14 +586,18 @@ export class RouteWalker {
         // honest measure of how much of the level is playable and *where* it
         // stops.
         if (options.explore !== false) {
-          const explored = await this.#explore(goal, options, trail);
+          const explored = await this.#explore(active, options, trail);
           return {
             reached: false,
             reason: plan.reason,
             message: plan.message,
             attempts: attempt,
             position: explored.position,
-            distance: explored.distance,
+            // How far the furthest point really reached is from the *goal*, and
+            // not from whatever the walk was heading for when it got there. A
+            // walk that ran out of level beside a shell box has not stopped a
+            // hundred units from the exit.
+            distance: explored.position ? Math.hypot(explored.position.x - goal.x, explored.position.y - goal.y) : null,
             explored: true,
             plan,
             blockers: plan.blockers || [],
@@ -447,12 +638,43 @@ export class RouteWalker {
         // The attempt and leg numbers ride along with the leg so that anything
         // the leg records -- a combat walker's health reading, say -- can say
         // where in the run it was taken.
-        const leg = await this._leg(target, { ...legOptions, attempt, leg: legs + 1 });
+        // A leg walking to a *call* is held to a tighter tolerance than a leg
+        // walking the route. A route point is a place to be roughly, and 48
+        // units of slack is what keeps a follower from grinding against a
+        // riser. A call is an object on the floor, and it is picked up by
+        // touching it: measured, a walk sent for demo1's supershotgun closed to
+        // 48 units of it, was told it had arrived, and could not close the last
+        // 16 -- because the leg's own arrival radius was the thing standing
+        // between the player and the weapon. `goto` will walk onto a point when
+        // it is asked for that, so it is asked for that.
+        const leg = await this._leg(target, {
+          ...legOptions,
+          tolerance: stage < via.length ? Math.min(legOptions.tolerance, viaLegTolerance) : legOptions.tolerance,
+          attempt, leg: legs + 1,
+        });
         const at = (leg && leg.position) || (await this.game.position()).position;
         if (!at) { this.#note("leg produced no position", leg); break; }
         legs++;
-        const remaining = Math.hypot(at.x - goal.x, at.y - goal.y);
-        trail.push({ x: at.x, y: at.y, z: at.z, attempt, leg: legs, distance: remaining });
+        const remaining = Math.hypot(at.x - active.x, at.y - active.y);
+        trail.push({ x: at.x, y: at.y, z: at.z, attempt, leg: legs,
+          distance: Math.hypot(at.x - goal.x, at.y - goal.y),
+          need: stage < via.length ? remaining : undefined });
+        // Standing on the call the walk came for ends both the leg and the plan
+        // it was drawn from: the attempt re-plans from here towards whatever is
+        // next, instead of reading "the player is on the pickup" as arrival at
+        // the exit. The `break` is the point -- the plan's remaining points
+        // belong to the call just made, not to the one after it.
+        if (stage < via.length && touchesCall(at, via[stage])) {
+          const call = stage + 1;
+          const entry = via[stage];
+          const pressed = await madeCall(entry);
+          this.#note("reached what the walk came for", {
+            at, call, of: via.length, classname: entry.classname || null, pressed,
+          });
+          position = at;
+          stalled = 0;
+          break;
+        }
         // What the leg actually did, measured from the engine's own positions:
         // the ground it covered, and whether it closed on the point it was
         // aimed at. Both are needed, and neither is the same question as "is
@@ -483,7 +705,7 @@ export class RouteWalker {
           if (remaining < bestDistance) bestDistance = remaining;
           position = at;
           stalled = 0;
-          if (remaining <= tolerance && Math.abs(at.z - goal.z) <= (options.zTolerance || 96)) {
+          if (stage >= via.length && remaining <= tolerance && Math.abs(at.z - active.z) <= (options.zTolerance || 96)) {
             this.#note("reached the goal");
             return { reached: true, reason: "reached", attempts: attempt, position: at, distance: remaining, trail, log: this.log, crossings: plan.crossings };
           }
@@ -506,8 +728,10 @@ export class RouteWalker {
           this.#note("opening what is in the way", { classname: mover.classname, model: mover.ref, distance: mover.distance });
           const retry = await this.#tryDoor(target, legOptions);
           const after = (retry && retry.position) || (await this.game.position()).position;
-          const afterRemaining = Math.hypot(after.x - goal.x, after.y - goal.y);
-          trail.push({ x: after.x, y: after.y, z: after.z, attempt, leg: legs, distance: afterRemaining });
+          const afterRemaining = Math.hypot(after.x - active.x, after.y - active.y);
+          trail.push({ x: after.x, y: after.y, z: after.z, attempt, leg: legs,
+            distance: Math.hypot(after.x - goal.x, after.y - goal.y),
+            need: stage < via.length ? afterRemaining : undefined });
           if (afterRemaining < bestDistance - 1) {
             bestDistance = afterRemaining;
             position = after;
@@ -542,7 +766,9 @@ export class RouteWalker {
           await this.game.walk(options.backOffMs === undefined ? 400 : options.backOffMs);
           const back = await this.game.position();
           const landed = back && back.position ? back.position : at;
-          trail.push({ x: landed.x, y: landed.y, z: landed.z, attempt, leg: legs, distance: Math.hypot(landed.x - goal.x, landed.y - goal.y) });
+          trail.push({ x: landed.x, y: landed.y, z: landed.z, attempt, leg: legs,
+            distance: Math.hypot(landed.x - goal.x, landed.y - goal.y),
+            need: stage < via.length ? Math.hypot(landed.x - active.x, landed.y - active.y) : undefined });
           if (Math.hypot(landed.x - at.x, landed.y - at.y) > 8) {
             this.#note("backed off", { to: landed });
             position = landed;
@@ -556,8 +782,13 @@ export class RouteWalker {
         }
       }
       position = (await this.game.position()).position || position;
-      if (Math.hypot(position.x - goal.x, position.y - goal.y) <= tolerance) {
-        return { reached: true, reason: "reached", attempts: attempt, position, distance: Math.hypot(position.x - goal.x, position.y - goal.y), trail, log: this.log, crossings: plan.crossings };
+      while (stage < via.length && touchesCall(position, via[stage])) {
+        await madeCall(via[stage]);
+      }
+      const settled = activeGoal();
+      const settledDistance = Math.hypot(position.x - settled.x, position.y - settled.y);
+      if (stage >= via.length && settledDistance <= tolerance) {
+        return { reached: true, reason: "reached", attempts: attempt, position, distance: settledDistance, trail, log: this.log, crossings: plan.crossings };
       }
       if (options.sideStep !== false) {
         // A step sideways, alternating, because a follower that is square

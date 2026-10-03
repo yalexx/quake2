@@ -69,10 +69,24 @@
   var KEYDEST_CONSOLE = 1;
   var KEYDEST_NAMES = { 0: "game", 1: "console", 3: "menu" };
 
-  // The view rolls only when the engine hands the view to the death camera
-  // (Quake 2 has no lean), so a non-zero roll is how a reader learns the player
-  // is dead without a screenshot. Measured at 39 degrees on the death camera.
-  var ROLL_IS_DEATH = 1;
+  // The view roll is how a reader learns the player is dead without a
+  // screenshot, and the threshold has to sit between the two reasons Quake 2
+  // rolls the view -- an order of magnitude apart.
+  //
+  // A *hit* kicks the view. Measured on a live player fighting through demo1's
+  // corridor, that kick reached 1.57 degrees while the status bar was showing
+  // 100 health at the same moment: the four moments a one-degree threshold
+  // called death carried rolls of 1.21, 1.25, 1.57 and 1.57 beside health
+  // readings of 100, 100, 100 and 52. A *death* rolls it much further -- the
+  // death camera held 27.28 degrees in that same run, and 39 when this offset
+  // was first recovered.
+  //
+  // At one degree every hit was read as a death. Ten is six times the largest
+  // kick measured and less than half the smallest death. control/bridge.mjs
+  // carries the same number for the same reason and decides the same question
+  // for itself, because a page that is already running keeps the script it
+  // loaded.
+  var ROLL_IS_DEATH = 10;
 
   // A reading further from the origin than this is not a map this engine has;
   // it means the memory moved under us, and it is reported as untrustworthy
