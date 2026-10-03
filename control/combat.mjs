@@ -196,21 +196,32 @@ export const ENGAGE_DEFAULTS = {
   // walking.
   fireModeWarmup: 2,
   // How far off the route a health or armour pickup may stand and still be
-  // walked over on the way past. **Off by default, and measured off.** At 96 a
-  // run of demo1's exit route does exactly what this was written to do -- two
-  // route points move onto the level's two `item_health_small`, at route units
-  // 629 and 677, for 53 extra units of walking -- and the health those items
-  // give is spent at the wrong end of the level. The player is at full health
-  // when it passes unit 630 (measured: the first firing leg of every traced
-  // `finish` run is past route unit 900), so both items are picked up and
-  // thrown away, and the walk is 53 units longer for it. The one health item
-  // this route really could use, the `item_health_large` at -1176 1520, lies 64
-  // units off the route *line* at unit 2770 -- closer than either small -- but
-  // more than 96 units from any of the plan's own points, so no nudge reaches
-  // it. The lever is a real one and this is where it lives; on this level the
-  // measurement says there is nothing on the route worth taking, so it is left
-  // for a caller that has a level where there is.
-  pickupRange: 0,
+  // walked over on the way past. **On by default at 96, and re-measured.**
+  //
+  // It was off, because the point-nudge this used to be could not reach anything
+  // on demo1 worth having: at 96 it moved two plan points onto the level's two
+  // `item_health_small` at route units 629 and 677 for 53 extra units of
+  // walking, and the player is at full health when it passes them (the first
+  // firing leg of every traced `finish` run is past route unit 900). The one
+  // item the route could use -- `item_health_large` at -1176 1520, 50 health, 64
+  // units off the route *line* at unit 2,770 -- is more than twice this from any
+  // of the plan's own points, because a plan is 37 points over 4,693 units and a
+  // step is 130 units long.
+  //
+  // `pickupDetours` asks the same question of the plan's *steps* and inserts a
+  // detour, and that reaches it: measured, `pickupRange: 96` takes exactly one
+  // pickup on demo1's exit route -- the `item_health_large` -- and inserts two
+  // points for it, the foot of the detour on the line and the item itself, so
+  // the plan grows 37 points to 39 and the walk is 123 units longer. The run that used it covered 7,386 units on 30 firing legs for 349
+  // health -- 11.63 a leg -- and reached `-951 1550`, 825 units short; the run
+  // without it covered 4,426 on 25 legs for 436 -- 17.44 a leg -- and reached
+  // `-935 1262`, 887 short. The 62 units between those two deepest readings is
+  // inside this level's own run-to-run spread and is not claimed for the
+  // top-up; what is claimed for it is the insert, which the run reports, and
+  // the 50 health it is worth. Left at 96 rather than raised: the next items out
+  // are 208 units off the line, and a 416-unit round trip through a corridor
+  // this level shoots down is not a top-up.
+  pickupRange: 96,
   // ...and how much of a turn taking it may cost. A pickup is taken on the way
   // past, so a nudge that would bend the route is not a top-up, it is a
   // different route -- measured on demo1, the nearest health item to the exit
@@ -219,6 +230,20 @@ export const ENGAGE_DEFAULTS = {
   // between the bearing the leg had and the bearing the nudge would give it, so
   // a point on a straight run takes a pickup beside it and a corner does not.
   pickupTurn: 45,
+  // What a pickup beside a *step* of the plan may cost to collect, as the round
+  // trip out to it and back to the line. This is the bound that does the work
+  // `pickupTurn` cannot do for an insert (see `pickupDetours`), and it is set
+  // from a measurement rather than picked: demo1's `item_health_large` is 64
+  // units off the line, so 128 of round trip, and the next item out is the
+  // `item_health_small` at -384 80 -- 91 units off the line, 182 of round trip,
+  // and the item the pass before this one measured as *harmful* from demo1's
+  // pocket ("nudging demo1's pocket escape onto that item turns the leg through
+  // the pocket's own wall-corner"). 140 sits between the two: it is above the
+  // 50-health item this mechanism exists for and below the 15-health one that
+  // was measured to cost a leg. A top-up the walk would pay 280 units of
+  // corridor for is not a top-up, it is a different route with an item at the
+  // end of it.
+  pickupDetour: 140,
 };
 
 // Local compass arithmetic, matching the engine's: 0 is +X, 90 is +Y, and the
@@ -474,6 +499,19 @@ export class CombatWalker extends RouteWalker {
     // The plan the pickups were snapped onto, and the snapped points. A plan is
     // a fresh array on every re-plan, so the array itself is the cache key.
     this.snapped = null;
+    // The pickups that were *inserted* into a plan as waypoints of their own,
+    // because they stood beside a step of it and no point of it was close
+    // enough to nudge. Kept for the report: "the walk tops up on the way" is a
+    // claim about the plan, and this is the plan's own record of it.
+    //
+    // Accumulated across re-plans rather than replaced by each one, and keyed by
+    // the item. A walk re-plans every `maxLegs` legs, from wherever it has got
+    // to, and a plan drawn from half way down the level need not contain the
+    // step an item stood beside -- so the last call is not a superset of the
+    // first. Measured, the first version of this overwrote the record on a
+    // later re-plan and a run that had routed over a 50-health item reported
+    // none at all.
+    this.detours = new Map();
     // One row per way of firing: how many legs it took, and what the status bar
     // says they cost. See #fireMode.
     this.fireModes = new Map();
@@ -500,8 +538,8 @@ export class CombatWalker extends RouteWalker {
     const range = numberOr(this.engage.pickupRange, 0);
     let result = points;
     if (range > 0 && this.pickups.length && Array.isArray(points) && points.length) {
-      result = points.map((point) => ({ ...point }));
       const claimed = new Set();
+      result = points.map((point) => ({ ...point }));
       for (let index = 1; index < result.length; index++) {
         const point = result[index];
         let best = null;
@@ -526,9 +564,130 @@ export class CombatWalker extends RouteWalker {
         claimed.add(best.key);
         result[index] = candidate;
       }
+      // ...and the same question asked of the plan's *steps*, which the loop
+      // above cannot see.
+      //
+      // A plan is a handful of points spread over thousands of units -- demo1's
+      // is 37 points over 4,693, so a step is about 130 units long -- and a
+      // pickup that stands 64 units to the side of a step is 225 units from
+      // either end of it. Nudging points therefore misses it by a factor of two,
+      // and on demo1 the one item the walk could actually use is exactly that
+      // case: `item_health_large` at -1176 1520 sits 64 units off the route
+      // *line* at route unit 2,770 and more than twice `pickupRange` from any
+      // point. It is 50 health, it is on the way in to the exit complex, and
+      // the point-based nudge has never once reached it (measured; see README).
+      //
+      // So a pickup whose perpendicular is close to a step, and whose projection
+      // lands in the middle of it, is *inserted* into the plan as a waypoint of
+      // its own -- at the foot of the detour and at the item. Every insertion is
+      // guarded by a walkable line at each of its three legs, and by
+      // `pickupDetour` on what the round trip may cost; `pickupTurn` is not one
+      // of the guards, for the reason given at `pickupDetours`.
+      const walked = [result[0]];
+      for (let index = 1; index < result.length; index++) {
+        // A point that is already standing on a pickup is the item; do not look
+        // for another one to insert beside it.
+        if (!result[index].pickup) {
+          for (const detour of this.pickupDetours(walked[walked.length - 1], result[index], range, claimed)) walked.push(detour);
+        }
+        walked.push(result[index]);
+      }
+      result = walked;
+      for (const point of result) {
+        if (!point.detour) continue;
+        this.detours.set(point.pickup.classname + point.x + "," + point.y, {
+          classname: point.pickup.classname,
+          x: point.x, y: point.y, z: point.z,
+          offRoute: point.off,
+        });
+      }
     }
     this.snapped = { points, result };
     return result;
+  }
+
+  // The level's own top-ups that stand beside one *step* of the plan, in the
+  // order they are passed, as plan points to insert between its two ends.
+  //
+  // `claimed` is shared with the point nudge above so that one item is walked to
+  // once and not twice. Each candidate is bounded by `pickupDetour` -- the round
+  // trip out to it and back to the line -- and by three walkable lines: the plan
+  // to the foot of the detour, the foot to the item, and the item back on to the
+  // plan. `pickupTurn` deliberately does not appear here; see below.
+  pickupDetours(from, to, range, claimed) {
+    const out = [];
+    if (!from || !to) return out;
+    const vx = to.x - from.x;
+    const vy = to.y - from.y;
+    const length2 = vx * vx + vy * vy;
+    if (length2 < 1) return out;
+    const found = [];
+    for (const pickup of this.pickups) {
+      const key = pickup.classname + pickup.position.x + "," + pickup.position.y;
+      if (claimed.has(key)) continue;
+      const t = ((pickup.position.x - from.x) * vx + (pickup.position.y - from.y) * vy) / length2;
+      // Near either end the step is not where the pickup is, and the point nudge
+      // above has already had its chance at it.
+      if (!(t > 0.12 && t < 0.88)) continue;
+      const off = Math.hypot(pickup.position.x - (from.x + vx * t), pickup.position.y - (from.y + vy * t));
+      if (off > range) continue;
+      if (off * 2 > numberOr(this.engage.pickupDetour, ENGAGE_DEFAULTS.pickupDetour)) continue;
+      found.push({ pickup, key, t, off });
+    }
+    found.sort((a, b) => a.t - b.t);
+    let previous = from;
+    for (const candidate of found) {
+      const pickup = candidate.pickup;
+      // The item floats; the plan point is a *floor*, so the height comes from
+      // the level's own geometry under the item and not from the item's centre.
+      const chord = from.z + (to.z - from.z) * candidate.t;
+      // The detour is walked from the point on the route line directly beside
+      // the item -- the perpendicular -- and that point is inserted into the
+      // plan as a waypoint of its own.
+      //
+      // This is not tidiness, it is the difference between the mechanism
+      // working and not working. Without it the detour is approached from the
+      // plan's previous *vertex*, which on demo1's 130-unit steps can be a
+      // hundred units back up the line and on the far side of a wall: measured,
+      // `item_health_large` at -1176 1520 clears from its own perpendicular to
+      // within a body's width, and does *not* clear from the vertex at -960
+      // 1584 -- 216 units back, behind the wall the two rooms share. The first
+      // version of this asked the vertex and refused the one item it was
+      // written for.
+      const via = { x: from.x + vx * candidate.t, y: from.y + vy * candidate.t };
+      const viaFloor = floorNear(this.map, via.x, via.y, chord, this.engage);
+      if (viaFloor === null) continue;
+      via.z = viaFloor;
+      const floor = floorNear(this.map, pickup.position.x, pickup.position.y, chord, this.engage);
+      if (floor === null) continue;
+      const detour = { x: pickup.position.x, y: pickup.position.y, z: floor, pickup, detour: true };
+      detour.off = Math.round(candidate.off);
+      // What the detour is allowed to cost is `pickupDetour`, and that is the
+      // only shape test it needs. `pickupTurn` is deliberately *not* applied
+      // here: it measures a deflection from the line, and every insert is a
+      // step straight off the line and back, so its angle is 90 degrees by
+      // construction and the knob would refuse all of them -- measured, at 45 it
+      // refused the one item this code was written for. A step aside whose
+      // round trip is inside `pickupDetour` is a top-up; anything longer is the
+      // `pickupTurn`-governed nudge's business or another route's.
+      //
+      // The line along the route to the foot is tested at the same standard the
+      // plan's own rows were built on -- the centre line -- for the same reason:
+      // `minLegReach`-style shoulder room is more than the level gives the route
+      // itself. Measured, the plan's own step from -960 1584 to -1488 1584 does
+      // not clear the shoulder test at any point along it, so requiring it of a
+      // part of that same step would refuse the route's own ground.
+      const walkable = (a, b) => clearWalk(this.map, a, b, { radius: this.engage.bodyRadius }) ||
+        clearWalk(this.map, a, b, { radius: 0 });
+      if (!walkable(previous, via)) continue;
+      if (!walkable(via, detour)) continue;
+      if (!walkable(detour, to)) continue;
+      claimed.add(candidate.key);
+      out.push(via);
+      previous = detour;
+      out.push(detour);
+    }
+    return out;
   }
 
   // Which way of firing the fight is currently using, and the measurement
@@ -670,13 +829,33 @@ export class CombatWalker extends RouteWalker {
     // still in the open, which is the one thing demo1 punishes.
     const within = [];
     for (let index = last; index >= stop; index--) {
-      if (Math.hypot(points[index].x - position.x, points[index].y - position.y) > this.engage.walkReach) continue;
+      const distance = Math.hypot(points[index].x - position.x, points[index].y - position.y);
+      if (distance > this.engage.walkReach) continue;
+      // ...and never at one the player is already standing inside the leg's own
+      // arrival radius of. `goto()` is asked for a point with a tolerance of
+      // `max(24, tolerance/2)` -- 48 on a `finish` run -- and it answers
+      // `reached` to a target it is already inside that of *without taking a
+      // step*. A leg aimed at one is a leg spent standing still: the position
+      // does not move, the walker's own `moved > 8` test calls it a stall, and
+      // the attempt loses one of its eight legs. Measured, this is what the
+      // walk was doing at -438 13 on demo1: the only plan point past it that
+      // cleared the shoulder test was 21 units away, `goto` returned `reached,
+      // rounds: 0, 0 units covered`, and legs 5, 6 and 7 of the attempt covered
+      // 3, 0 and 0 units in a row -- with a clear 166-unit line to a point four
+      // further along the plan sitting right there unused.
+      if (distance <= this.engage.minLegReach) continue;
       within.push(points[index]);
     }
-    // The player's own shoulders first, the plan's centre line second: a level
-    // that really is narrower than a player should still be walked.
-    for (const radius of [this.engage.bodyRadius, 0]) {
-      for (const candidate of within) {
+    // Farthest first, and the shoulders first *for each candidate*: the margin
+    // is a preference about a line, not about which point to aim at, and the
+    // two loops used to be written the other way round -- the radius outermost,
+    // so every candidate was tried with the shoulder test before any was tried
+    // without it, and a point 21 units away that a body fits down beat a point
+    // 166 units away that only the centre line cleared. A short leg is not a
+    // cheaper leg: it spends one of the attempt's eight legs to cross a fifth
+    // of the ground, and at 21 units it spends one to cross none.
+    for (const candidate of within) {
+      for (const radius of [this.engage.bodyRadius, 0]) {
         if (clearWalk(this.map, feet, candidate, { ...this.engage, radius })) return candidate;
       }
     }
@@ -927,10 +1106,17 @@ export class CombatWalker extends RouteWalker {
     // Down before the first turn: the leg is moving before it has turned a
     // degree, which is the whole point of this method.
     let keys = walkBearing === null ? [] : startKeys;
-    if (keys.length) await this.game.holdKeys(keys, true);
     let aimed = null;
     let turnMs = 0;
     try {
+      // The press goes inside the `try` so that the `finally` below covers it.
+      // A key-down that throws on the way out -- the bridge's own `holdKeys`
+      // catches a refused key, but a session that dies while the keys are going
+      // down does not -- would otherwise leave movement keys held with nothing
+      // left to lift them, and a key left down is a player walking into a wall
+      // for the rest of the run. Releasing keys that were never pressed costs a
+      // keyup the engine ignores.
+      if (keys.length) await this.game.holdKeys(keys, true);
       const turnedAt = Date.now();
       aimed = await this.game.face(facing, faceOptions);
       turnMs = Date.now() - turnedAt;
@@ -1034,6 +1220,11 @@ export class CombatWalker extends RouteWalker {
         })),
         weapon: this.weaponSelection,
         onRoutePickups: [...new Set(this.fights.map((fight) => fight.pickupOnRoute).filter(Boolean))],
+        // What the plan itself was routed over: one entry per pickup inserted as
+        // a waypoint, with where it stands off the line. A run whose plan
+        // contains one did walk over it; whether the player was still alive at
+        // the time is the trail's answer and not this one's.
+        pickupDetours: [...this.detours.values()],
         fights: this.fights,
       },
     };
