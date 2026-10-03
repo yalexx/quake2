@@ -1573,25 +1573,38 @@ its shoulder while it advances. Whether that is what the health is being spent
 on is not answerable from these runs: the status bar was unread, and the reader
 is not trustworthy anyway (see below).
 
-**The health reading: a phantom number, found and narrowed.** No run in this
-pass made a decision from health, but the reader was measured in the one state
-where the engine's truth is known -- a fresh spawn, where the bar carries
+**The health reading: a phantom number, and the floor that rejects it.** No run
+in this pass made a decision from health, but the reader was measured in the one
+state where the engine's truth is known -- a fresh spawn, where the bar carries
 exactly one number and it is 100. The reader returned that 100 (score 0.819)
-**and a phantom `4` at x=662 (score 0.619)**, read out of the bar's own art; a
+**and a phantom `4` at x=662 (score 0.619)** read out of the bar's own art; a
 picture of the strip (`hud-fresh-spawn.png`) put to the vision pass reads the
-100 and no other number. Score 0.6 was the floor, so a weak coincidence in the
-art was a number like any other. `readBar`'s floor is now **0.65** -- above the
-phantom, below the real number -- which makes a leg more likely to report *no*
-reading than a wrong one, and misses are what the fight report is written to
-survive (`health ?` rather than a number). Verified on that same live strip (the
-phantom gone, the 100 untouched) and by `scripts/route-test.mjs` (all 132
-checks, the painted bars included). The measurement, the picture and the
-verification are in `HUD-READING.md` in this run's evidence. What is **not**
-claimed is that the read is trustworthy under fire: one state was measured, and
-the earlier pass's two crops where the bar and the reading disagreed
-(`leg-a2l5-002.png`, **100** on the bar against a reading of **4**;
-`leg-a2l7-004.png`, **25** against **80**) are the reason a per-leg health
-number is quoted here with its crop and never steered on.
+100 and no other number. With no confidence floor, a leg whose real digits could
+not be read hands that phantom back as the player's health -- which is the `4`
+the earlier pass's kept crop shows against a bar reading **100**. `readHealth`
+now judges the whole number: a reading below **0.65** comes back as *no* reading
+(`health: null`, which the fight report already writes as `?`) instead of as a
+number nobody should trust.
+
+The floor is deliberately **not** on `readBar`'s cells. That was the first
+attempt and the review pass caught what it costs: a cell floor is what a number
+is grown out of, cell by cell, so raising it does not reject a weak reading, it
+*splits* one. Measured on bars painted from the archive's own digits with one
+glyph dimmed towards the background: a `100` whose trailing `0` is faint reads
+**`10`** (score 0.849) at a 0.65 cell floor and **`100`** at the 0.6 the cells
+still use, and a `100` whose leading `1` is faint reads `0` at 0.65 and `100` at
+0.6. A truncated number is worse than a phantom: it is a wrong value wearing a
+good score. Verified after the correction, on a fresh live strip in the review
+pass: the reader returns **100** at the default floor, **100** at
+`numberScore: 0.8`, and **null** at 0.9 -- the miss that is the point -- with
+`scripts/route-test.mjs` at all 132 checks. The measurement, the picture and the
+verification are in `HUD-READING.md` in the run's evidence.
+
+What is still **not** claimed is that the read is trustworthy under fire: one
+state was measured, and the earlier pass's two crops where the bar and the
+reading disagreed (`leg-a2l5-002.png`, **100** on the bar against a reading of
+**4**; `leg-a2l7-004.png`, **25** against **80**) are the reason a per-leg
+health number is quoted here with its crop and never steered on.
 
 **Nothing else was changed, and the review branch held nothing to fold in.**
 `clawbox/run-gvr292q5` (tip `0c9744f`) was inspected commit by commit: its one
