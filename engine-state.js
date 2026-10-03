@@ -108,9 +108,17 @@
       : null;
   }
 
+  // The view is kept and rebuilt only when the buffer it was taken from has
+  // been replaced, which happens when the engine grows its memory (the old
+  // ArrayBuffer is detached then). Building it fresh on every call would
+  // allocate once per rendered frame for as long as the page lives, and the
+  // console watch calls this every frame.
+  var keyDestView = null;
+
   function keyDest(buffer) {
     if (!inRange(buffer, KEYDEST, 4)) return null;
-    return new Int32Array(buffer, KEYDEST, 1)[0];
+    if (keyDestView === null || keyDestView.buffer !== buffer) keyDestView = new Int32Array(buffer, KEYDEST, 1);
+    return keyDestView[0];
   }
 
   // One reading of the engine, as JSON-serialisable data.

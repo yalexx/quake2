@@ -1415,13 +1415,35 @@ export class QuakeControl {
       return { held: true, method: "console", key: down ? "+use" : "-use", output: answer.output, console: this.consoleMetrics() };
     }
     const bound = await this.useKey();
-    if (!bound) {
+    if (bound.reason === "UNREADABLE") {
+      return {
+        held: false,
+        method: "key",
+        reason: "BINDING_UNREADABLE",
+        message: "the engine's config could not be read, so this bridge does not know what +use is bound to and " +
+          "will not guess. It holds nothing; try again, or use({ console: true }) to reach +use on the command line.",
+        console: this.consoleMetrics(),
+      };
+    }
+    if (!bound.found) {
       return {
         held: false,
         method: "key",
         reason: "NO_USE_BINDING",
         message: "the engine's own config binds no key to +use, so there is no real input to send. " +
           "Quake 2 opens a door by walking into it; use({ console: true }) is the explicit console fallback.",
+        console: this.consoleMetrics(),
+      };
+    }
+    if (!bound.pressable) {
+      return {
+        held: false,
+        method: "key",
+        reason: "USE_BINDING_UNSUPPORTED",
+        binding: bound.binding,
+        message: "the engine's config binds +use to " + bound.binding + ", which this bridge cannot press: " +
+          "it dispatches the left, right and middle mouse buttons and keyboard keys, and nothing else. " +
+          "use({ console: true }) is the explicit console fallback.",
         console: this.consoleMetrics(),
       };
     }
@@ -1440,31 +1462,46 @@ export class QuakeControl {
   // null when nothing is bound. A mouse binding is returned as a button.
   async useKey() {
     if (this.useBinding === undefined) {
-      let found = null;
+      let raw;
       try {
-        const raw = await this.#withSession((game) => game.evaluate(useBindingExpression()));
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed && typeof parsed.key === "string" && parsed.key !== "") found = parsed.key;
+        raw = await this.#withSession((game) => game.evaluate(useBindingExpression()));
       } catch {
-        // A page that cannot reach its file system reads as "nothing bound",
-        // which is the safe answer: it holds no key rather than the wrong one.
+        // The page could not answer -- so nothing is known, and nothing is
+        // remembered. Caching this would turn one unreadable moment (a page
+        // still booting, a socket that dropped) into "the config binds no key"
+        // for the rest of the run, which is a claim about the player's config
+        // that this bridge has not earned.
+        return { found: false, reason: "UNREADABLE" };
       }
-      this.useBinding = found === null ? null : this.#describeUseKey(found);
+      let name = null;
+      try {
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed.key === "string" && parsed.key !== "") name = parsed.key;
+      } catch {
+        name = null;
+      }
+      this.useBinding = this.#describeUseKey(name);
     }
     return this.useBinding;
   }
 
   // The engine names bindings in its own spelling ("SPACE", "MOUSE1", "e").
-  // Mouse buttons become a button name for mouseHold; everything else is handed
-  // to the key dispatcher as written.
+  //
+  // Returns whether anything was bound at all, and whether this bridge can
+  // actually press it. Those are different answers: a config that binds `+use`
+  // to a fourth mouse button has bound something, and saying it "binds no key"
+  // would be a false statement about the player's own config.
   #describeUseKey(name) {
+    if (name === null || name === undefined || String(name) === "") return { found: false, binding: null, pressable: false, key: null, button: null };
     const upper = String(name).toUpperCase();
     const mouse = upper.match(/^MOUSE(\d+)$/);
     if (mouse) {
       const button = { "1": "left", "2": "right", "3": "middle" }[mouse[1]];
-      return button ? { key: upper, button } : null;
+      return button
+        ? { found: true, binding: upper, pressable: true, key: upper, button }
+        : { found: true, binding: upper, pressable: false, key: null, button: null };
     }
-    return { key: String(name), button: null };
+    return { found: true, binding: String(name), pressable: true, key: String(name), button: null };
   }
 
   // Press use once and let go: walk into a lift, ride it. Wrapped as a pair so a
@@ -1964,9 +2001,9 @@ export class QuakeControl {
         },
         unavailable: UNREADABLE.slice(),
         note: STATE_NOTE,
-        // The page's own record of cls.key_dest, sampled at 10 Hz since the
-        // hook was first read, and this bridge's count of what it spent on the
-        // console. Together they are the console-free proof.
+        // The page's own record of cls.key_dest, sampled once per rendered
+        // frame since the hook was first read, and this bridge's count of what
+        // it spent on the console. Together they are the console-free proof.
         consoleWatch: direct.watch,
         consoleSpend: this.consoleMetrics(),
         // `lines` counts only what the tail holds, not the whole file: the log
