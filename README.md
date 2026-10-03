@@ -401,12 +401,14 @@ back out of the same log.
 | Whether a level is up, and its map | yes | the console log (the `serverinfo`/`mapname` lines, the `Map:` banners) |
 | Player position and angles | yes, with `probe: true` | the engine's own `viewpos` |
 | Save slots on the engine's file system | yes | `baseq2/save/` |
-| Health, armour, ammo, whether the player is alive | **no** | Quake 2 prints none of them: there is no console command for them, and the build exports no cvar or command accessor. They are drawn on the HUD, so read them from `screenshot()` |
+| Health, armour, ammo, whether the player is alive | **not from the console** | Quake 2 prints none of them: there is no console command for them, and the build exports no cvar or command accessor. They are drawn on the HUD, so they are read off a picture of it -- see [Reading the HUD](#reading-the-hud-controlhudmjs) |
 
 The reply says so itself: `player.health`, `armour`, `ammo` and `alive` are
 always `null`, `unavailable` names them, `note` says why, and `probed` says
 whether the engine was asked. A `null` field here means the engine cannot answer
-it, not that a read came back empty.
+it, not that a read came back empty. Whether the player is *dead* is the one of
+the four the console can answer indirectly, and `position()` reports it: a
+living player's view never rolls, so a non-zero roll is the death camera.
 
 `probe: true` is input -- it focuses the canvas like any other control call and
 opens the console for about a second -- and it toggles the console shut again
@@ -424,6 +426,62 @@ toggle wherever it found it.) Two engine habits are worth knowing:
   still starting. When the console will not take the commands the probe reports
   `probed: false` with `probe.ran: false` rather than pretending, and it waits
   for no one -- call it again once a menu or a level is showing.
+
+### Reading the HUD: `control/hud.mjs`
+
+Health, armour and ammo are drawn on the status bar and printed nowhere, so the
+only way to read them is off a picture of it. `control/hud.mjs` is that picture
+and the reader for it, and the fight report in
+[The fight](#the-fight-controlcombatmjs) is built on it: without a per-leg
+health reading, "the fight got better" is not a claim a run can make about
+itself.
+
+```js
+import { hudShot, readHealth } from "./control/hud.mjs";
+const shot = await hudShot(game);          // a 1:1 picture of the status bar
+const { health } = readHealth(shot.png, shot.readOptions);
+```
+
+Three measured facts make it work, and each of them was wrong at first.
+
+* **The HUD does not scale with resolution.** Quake 2's status bar blits
+  `pics/num_0.pcx` -- 16x24 -- at 16x24 however big the canvas is. On this box
+  the canvas is 1366x768 and the digit row sits in its bottom 24 rows, so the
+  numbers are *small*: about ten pixels wide each, drawn on a lit wall.
+* **A plain screenshot is smaller than the canvas.** The canvas is 1366 wide
+  inside an 837-wide CSS box, so `screenshot()` has thrown away 39% of the HUD's
+  pixels before anything can read them. At that size the ring of a `0` and the
+  bowl of a `6` are the same blur and a matcher against the level's own digits
+  scores every digit alike. `hudShot()` displays the canvas at its own size,
+  slid so the status bar is what the viewport shows, captures that 1:1, and puts
+  the canvas's style back -- the engine keeps drawing into the same backing
+  store (measured: `canvas.width` stays 1366x768 across the move), so the
+  picture is of the same game, framed differently for one screenshot. The
+  capture is clipped to the forty rows that can hold the status bar, which is
+  four kilobytes instead of six hundred.
+* **The digits are the level's own pictures.** `pics/num_*.pcx` are what the
+  engine blits for health and ammo and `pics/anum_*.pcx` for armour. They are
+  8-bit paletted, index 255 is transparent, and the picture's *background* is
+  its own most common remaining index -- not index 0. Reading them wrong turns
+  every digit into the same solid rectangle; that is a matcher that "reads" 100
+  for every screenshot, which is worse than one that reads nothing.
+
+The reading itself is normalised cross-correlation against those pictures, not a
+brightness threshold: the status bar sits on top of the level and its strokes
+and the wall behind them overlap in luminance (measured), so "bright pixel" is
+not "glyph pixel". Correlation does not care what the background is doing, and
+`scripts/route-test.mjs` paints a status bar out of the archive's own digits on
+a noisy background and reads it back, including a number on a dark wall and the
+same number on a lit one. The family -- health or armour -- is read off the
+ink's colour: the `num_*` pictures carry a grey ink and the `anum_*` a red one,
+and their *shapes* are the same font and do not separate them (measured: a
+painted "100" reads as its own family only by a hair).
+
+`hudShot()` costs a 150 ms settle and one clipped screenshot, and the read is
+bounded to the rows the status bar must be on, because the player is standing
+still while it happens and on `demo1` standing still is the thing that kills.
+When the player is *dead* there is no status bar to read, and `health` comes
+back `null` rather than a guess -- `finish` prints those legs as `?`.
 
 ### Navigating: `position`, `face`, `walk` and `goto`
 
@@ -812,6 +870,66 @@ than taste:
 aim error, the keys it held and the ground it covered -- so a run says what the
 fight did rather than only where the player got to.
 
+#### The fight is measured, leg by leg
+
+A body count tells you nothing about a fight that ends in a corpse, and until
+this pass a `finish` run could not say what the fight had cost. It can now:
+`readHud: true` makes every firing leg take a picture of the status bar, read
+the player's health and armour off it ([Reading the
+HUD](#reading-the-hud-controlhudmjs)) and record them with the soldier it was
+fighting and where that soldier stood. `finish` prints the series, and the
+crops are kept, so a number that is wrong is visible in the picture it came
+from.
+
+Point `QUAKE2_HUD_DIR` at a directory and the crops are kept as well, one per
+firing leg, named `leg-a<attempt>l<leg>-<n>.png`, so every number in the report
+can be checked against the picture it came from:
+
+```
+QUAKE2_HUD_DIR=./hud-crops node scripts/demo1-run.mjs finish
+```
+
+That is what turned "the walk dies in the corridor" into a mechanism. Run 5 of
+the instrument, firing at `monster_soldier` with the aim landing within 0 to 3
+degrees on every leg it took:
+
+```
+leg  soldier          aimed        covered  health after
+  1  monster_soldier  yes (3deg)      128   9
+  2  monster_soldier  yes (0deg)        0   ?   DIED ON THIS LEG
+  3  monster_soldier  yes (-1deg)     195   76
+  4  monster_soldier  yes (0deg)       38   47
+  5  monster_soldier  yes (1deg)        1   ?   DIED ON THIS LEG
+```
+
+The aim was never the problem -- 0 to 3 degrees, over distances of 150 to 365
+units. The problem was that the player arrived at the corridor with 9 health
+left and then lost 29 on a leg. It was being shot the whole way in by soldiers
+it never fired at, and the per-leg record says why: at the deepest point that
+run reached (`-728 321 -1`) the level shot could reach two soldiers, one at 58
+units and one at 151, and the walker fired on neither. They stood 116 and 82
+degrees off the way forward; the arc is 80. **The second of those misses by two
+degrees.** That is the one fight rule this pass changed, and it is the only one
+the measurements argued for:
+
+* **`answerRange` (200).** The arc decides what is worth *walking towards*.
+  Inside 200 units it stops deciding what is worth *answering*: a soldier that
+  close can shoot the player wherever it stands, and a walker that will not turn
+  for one is a walker that takes damage it could have prevented. The leg still
+  walks the route -- `movementKeys()` holds forward and a strafe, or backpedals,
+  according to the route, not the view -- so the walk goes on either way.
+* **`minimumRange` stays 40.** It was lowered to 24 and put back. Measured on
+  run 7, the one leg that answered a soldier inside the old radius
+  (`monster_soldier` at 39 units, 95 degrees off) covered 0 units and died on
+  the spot, which is exactly the fault the radius was there to avoid. A soldier
+  at arm's length is a collision to be walked out of, not a target to spin for.
+
+Two instrument faults were found by using it, and both are fixed: a whole-page
+capture is smaller than the canvas, so the status bar has to be photographed
+1:1 (`hudShot`), and a clipped capture races the layout change that frames it,
+so it waits 150 ms -- measured, two of three reads on a live player came back
+framed for the un-framed canvas and read nothing.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),
@@ -842,22 +960,31 @@ corridor west and north of the start room is covered by `monster_soldier` at
 `-856 584 -24`; the exit room by three more. `finish` has never finished: every
 run has ended with the engine still answering `"mapname" is "demo1"`.
 
-**What changed is where it stops.** Before this pass a run ended in demo1's
-dead-end pocket at `-427 111`, with the walker's own note naming the two
-`func_wall`s it was standing against and the attempt budget spent on legs that
-covered 0 units -- seven of an attempt's eight legs, on the two traced runs that
-did it. Measured since, over seven `finish` runs and two traced ones, the walk
-gets out of the pocket, down the corridor and out the far side of it, and the
-deepest it has been measured is `-951 1023`, **976 units short** of the exit --
-3,717 of the route's 4,693 units.
+**Where the walk gets to, measured on this pass.** Ten `finish` attempts ran to
+completion (two more could not start: the game tab left the kiosk browser
+between them, so the bridge could not find it -- see *What this pass could not
+do*, below). The deepest is `-960 492`, **1,331 units short** of the exit, on 18
+firing legs with 11 of them carrying a health reading. The ten reached 1,331,
+1,604, 1,611, 1,633, 1,685, 1,697, 1,699, 1,907, 1,983 and 1,989 units short.
 
-**The honest read of the numbers.** The seven `finish` runs after the changes
-reached 976, 1,313, 1,554, 1,580, 1,604, 1,718 and 1,828 units short. One
-`finish` run on the unchanged code reached 1,315, and two traced runs on it
-stopped at 2,032 and 2,333 with the pocket named in the walker's own note. So the
-best run is 625 units deeper than the best any earlier run reported (1,601), and
-the *worst* of the new runs is not: the spread across runs is about 850 units, and
-what a single run proves is limited.
+That is *worse* than the inherited number on this level -- an earlier pass
+recorded 976 units short, over seven runs spanning 976 to 1,828 -- and the
+honest reading is that the spread is what dominates: ten runs land between 1,331
+and 1,989, a spread of 658 units, and two of them never left the pocket at all
+(`0` firing legs, 9 restarts). What the runs do show is a mechanism, and it is
+the fight, not the traversing: the pocket runs die without firing a shot, and
+the corridor runs die with the aim landing inside 0 to 6 degrees on nearly every
+leg.
+
+**The last reading and the deepest one are different readings.** This was a real
+fault and it is fixed: the walker's `position` is the last thing the engine
+said, and after a level restart that is where the *corpse* was. Run 9 ended with
+`position` at `-463 19 -19` and its deepest reading at `-960 492` -- **686 units
+apart** -- and a report that printed one while meaning the other would have
+understated the walk by two thirds of the corridor. The walker now returns
+`deepest` next to `position` (`control/walker.mjs`, `deepestReading()`), and
+`finish` prints both, says by how far they disagree, and names the attempt and
+leg that took the deepest one.
 
 What the traces and the regression checks pin down is the mechanism, and it is
 narrower than "the walk never stalls" -- legs that cover nothing still happen.
@@ -869,16 +996,25 @@ the attempt that stands still from end to end, and the frozen yaw that caused it
 what is left is a leg here and there against a wall, followed by a leg that backs
 off and a leg that moves.
 
-**The constraint now is the fight, not the traversing.** Three of the seven runs,
-including the deepest, ended on the **restart budget** (`DEATHS`) rather than the
-re-plan budget (`ATTEMPTS`), each having lived through **nine level restarts**:
-the player is killed, the level puts them back at the spawn, and the walk covers
-the same ground again. The run that got deepest fired on 20 legs and 18 of them
-had the turn landed on the soldier, and it still ran out of restarts: its
-furthest reading is `-951 1023`, and the position it stopped at is
-`-462 19 -19` -- a corpse back by the pocket, not at the deepest point it
-reached. That -- not the geometry, and not the pocket -- is what stands between
-this build and `"mapname" is "demo2"`.
+**The constraint now is the fight, not the traversing.** All ten runs ended on
+the **restart budget** (`DEATHS`), each having lived through **nine level
+restarts**: the player is killed, the level puts them back at the spawn, and the
+walk covers the same ground again. The deepest, run 9, fired on 18 legs and the
+turn landed on the soldier on 14 of them; it took the player from `128 -320 32`
+to `-960 492`, through seven firing legs in a row without dying (the last four
+of them holding 41 health), and then lost four legs in a row dying on each. What
+stands between this build and `"mapname" is "demo2"` is that the player is
+outgunned, not out-manoeuvred. The per-leg record says so directly: the aim
+lands (0 to 6 degrees, at 95 to 365 units), the surviving legs cover ground (38
+to 186 units each), and on the legs where two health readings are next to each
+other the cost is **23 to 72 health per leg** -- more than one soldier's blaster
+can do in half a second, which is the arithmetic of several firing at once while
+the walker answers one of them.
+
+**What the level's monsters do to a player, measured.** Two live experiments
+on demo1 in the corridor, both with 100 health and no armour, both read off the
+HUD in a screenshot (`position()` cannot report health -- see
+[Reading the HUD](#reading-the-hud-controlhudmjs)):
 
 **What the level's monsters do to a player, measured.** Two live experiments
 on demo1 in the corridor, both with 100 health and no armour, both read off the
@@ -901,9 +1037,45 @@ units so the decision to shoot is taken every couple of hundred units rather
 than once a plan.
 
 `finish` reports the fight as well as the walk: how many soldiers the level
-holds, how many firing legs the run took, and -- when it does not finish -- the
-closest the player was ever *measured* to be to the exit, with the walker's own
-last notes.
+holds, how many firing legs the run took, the health the player had left after
+each of them, and -- when it does not finish -- both the **last reading** and
+the **deepest reading** of the player's position, which are not the same number.
+
+#### What this pass could not do
+
+The task is not finished, and two things are worth saying plainly rather than
+burying.
+
+* **`demo1` was not finished.** `"mapname" is "demo1"` on all ten runs that
+  completed. Nothing here reached the exit trigger, and the deepest is 1,331
+  units short of the inherited best (976), on a spread that runs to 1,989.
+* **No non-console control path exists on this build, and the console path it
+  uses is a pause.** The engine's own entry points are the proof: `index.wasm`
+  exports **102 functions, every one of them libc or SDL** -- `memory`, `strchr`,
+  `malloc`, `fopen`, `cos`, `qsort`, and no `Cmd_ExecuteString`, no cvar
+  accessor, no `cbuf`, nothing that takes a string and runs it. The JS glue
+  (`engine/index.js`) has no `ccall`, no `cwrap`, no `Module.ccall` and no
+  exported command hook either. So a *command* -- `viewpos`, `mapname`,
+  `map demo1` -- can only be issued through the in-game console, and opening the
+  console pauses single-player, which makes every position probe a pause. What
+  this pass did about it is remove the console from the path that least needed
+  it: the trigger is now a **held mouse button** (`mouseHold`, the same
+  `+attack` the engine's own config binds), not `+attack` typed at a console,
+  which takes two console round trips per firing leg out of the fight. Position
+  still costs one probe, because a command is the only way to ask for it and
+  there is no way to ask that is not the console. **Whether the console really
+  does pause this build was not measured before the game left the browser** --
+  the A/B that would settle it (walk a fixed wall-clock distance with no probes,
+  then the same distance while probing every 250 ms; a pause shows up as less
+  ground covered) is written and unrun, and no claim is made here about it
+  either way.
+* **The comparison run the change was meant to earn could not be made.** Part
+  way through the pass the kiosk browser left the game -- its CDP target list
+  stopped containing `/apps/quake2/` and showed other apps instead -- and the
+  device refuses to navigate that browser back to a local address (`the device
+  refused that address`). Without a game there is no `finish` attempt to
+  compare, no `goto-test.mjs`, and no way to leave the level fresh. That is the
+  state this pass stopped in, and it is a missing measurement, not a good one.
 
 It also prints **every engine position it read**, leg by leg, as
 `a<attempt> leg <n>  x y z  short <units>`. That is deliberate: "where it
@@ -1116,7 +1288,9 @@ browser: that `movementKeys()` turns a bearing into the right forward/strafe
 combination and never walks a player sideways at a soldier behind them, that
 `levelShotReaches()` reaches a soldier on the corridor's own floor and not one
 two storeys up or through the wall between two rooms, that `threats()` keeps to
-its range and its arc, orders what it finds by what the fight costs, honours a
+its range and its arc -- and that a soldier behind the way forward *and out of
+answering range* is not a target, while one behind and close enough to shoot
+back at is -- orders what it finds by what the fight costs, honours a
 caller's `skip` and returns nothing on a level with no monsters. It pins the
 three faults that all look the same from outside -- a leg that covers 0 units:
 that `clearWalk()` is blocked by the 16-unit brush that closes demo1's dead-end
@@ -1129,7 +1303,17 @@ plan's own way out of the pocket and not at the point beyond it through the
 wall; and, on a stub whose `goto()` answers `reached` and leaves the position
 alone, that the walker re-plans instead of spending the attempt standing on the
 same 24 units, and that a level restart costs a restart rather than an attempt.
-79 checks in all.
+
+It also pins the two readings this pass added, again with no browser. That the
+furthest reading is kept apart from the last one: handed a trail whose last
+point is a corpse 500 units back from the deepest point, `deepestReading()`
+returns the deeper one and says which attempt and leg took it there. And that
+the status bar can be read: it paints a bar out of the archive's *own* digit
+pictures -- on a background that is not flat, because the one the HUD really
+sits on is a lit wall -- and reads every number back, including a health number
+on a dark background and the same number on a lit one, and it checks that an
+armour number (the archive's other family of digits) is read as armour and not
+as health. 96 checks in all.
 
 **`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
 a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP

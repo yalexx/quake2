@@ -1147,6 +1147,48 @@ export class QuakeControl {
     return { used: release.held !== false, holdMs: holdMs };
   }
 
+  // Hold a mouse button down, or let it up, without touching the console.
+  //
+  // `click()` is a tap; this is the two halves of it kept apart, and it exists
+  // because the trigger is the one control a fight *holds* for seconds at a
+  // time. The console path (`+attack` through `command()`) opens and shuts the
+  // in-game console twice per firing leg, and the console is a pause: measured
+  // on this box a `position()` probe costs about 1.2 s of wall clock, and a
+  // firing leg spends two of those on the trigger alone. A bound mouse button
+  // is the same command the engine already has bound to `+attack` in its own
+  // config, issued through the input stack the engine is actually listening
+  // to, and it reaches the game without a console round trip.
+  async mouseHold(button = "left", down = true) {
+    const name = String(button).toLowerCase();
+    if (!["left", "right", "middle"].includes(name)) {
+      throw new ControlError('button must be "left", "right" or "middle"', "BAD_REQUEST");
+    }
+    const bit = { left: 1, right: 2, middle: 4 }[name];
+    return this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      const point = this.cursor || JSON.parse(await game.evaluate(`(function () {
+        const canvas = document.getElementById("canvas");
+        const box = canvas.getBoundingClientRect();
+        return JSON.stringify({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+      })()`));
+      this.heldButtons = this.heldButtons instanceof Set ? this.heldButtons : new Set();
+      if (down) this.heldButtons.add(bit); else this.heldButtons.delete(bit);
+      let buttons = 0;
+      for (const held of this.heldButtons) buttons |= held;
+      await game.session.send("Input.dispatchMouseEvent", {
+        type: down ? "mousePressed" : "mouseReleased",
+        x: point.x, y: point.y, button: name, buttons, clickCount: down ? 1 : 0, modifiers: this.modifiers,
+      });
+      // Whether the *left* button is held, which is what `attacking` means to
+      // a caller that uses it to decide whether the trigger needs releasing.
+      // Setting it from the argument alone got it wrong as soon as a second
+      // button was involved: a right-press after a left-press left the left
+      // button down and `attacking` false, and nothing would ever let it up.
+      this.attacking = this.heldButtons.has(1);
+      return { held: !!down, button: name, buttons };
+    });
+  }
+
   // The engine's fire button, as a hold rather than a tap -- the same shape as
   // useHold(), for the same reason, and one more of its own. `+attack` is the
   // command behind every fire binding, so it works whatever the player's config
@@ -1158,7 +1200,8 @@ export class QuakeControl {
   // Held down, the engine re-fires at the weapon's own refire rate until
   // release() is called. Nothing here leaves it held: a stuck trigger is not
   // harmless, because fire is also the key that leaves the death camera and
-  // skips an intermission.
+  // skips an intermission. Prefer `mouseHold` for a fight: this one types the
+  // command into the console, and the console is a pause.
   async attackHold(down = true) {
     const answer = await this.command([down ? "+attack" : "-attack"]);
     if (!answer.ran) {
@@ -1551,7 +1594,12 @@ export class QuakeControl {
 
   // A PNG of the game frame as a Buffer. A framed game is cropped to its frame,
   // so the ClawBox shell around it never appears in the picture.
-  async screenshot() {
+  //
+  // `options.clip` is passed straight to CDP's `Page.captureScreenshot`, which
+  // is how a caller that only wants part of the picture -- control/hud.mjs
+  // wants the forty rows of status bar, and nothing else -- avoids decoding a
+  // whole frame of level to get them.
+  async screenshot(options = {}) {
     return this.#withSession(async (game, target) => {
       // Which page may take the picture is decided by the frame's own
       // ancestors, not by the target's type: the desktop frames the app in an
@@ -1564,7 +1612,9 @@ export class QuakeControl {
       if (!framing.framed) {
         // Nothing draws the game: it is its own tab, and its target is
         // top-level, so the whole of it may be captured as it stands.
-        const { data } = await game.session.send("Page.captureScreenshot", { format: "png" });
+        const params = { format: "png" };
+        if (options.clip) params.clip = options.clip;
+        const { data } = await game.session.send("Page.captureScreenshot", params);
         return Buffer.from(data, "base64");
       }
       if (!game.isWholeTarget) {

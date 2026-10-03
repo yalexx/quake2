@@ -50,7 +50,10 @@
 // absence of enemies changes is whether a leg shoots on the way, not where it
 // goes.
 
+import fs from "node:fs";
+import path from "node:path";
 import { RouteWalker } from "./walker.mjs";
+import { hudShot, readHealth } from "./hud.mjs";
 
 // The player's eye sits this far above the floor they stand on (24 of the
 // player's 32x32x56 box, plus 22 more to the view). map data places floors and
@@ -77,6 +80,21 @@ export const ENGAGE_DEFAULTS = {
   // soldier the player can shoot while passing it, which is exactly what a
   // player does and what walking *at* it cannot do.
   engageArc: 80,
+  // ...unless the soldier is this close, in which case the angle does not
+  // matter and it is a target wherever it stands.
+  //
+  // This is the one fight rule that came out of reading the player's own
+  // health rather than the level's geometry, and it is the reading that
+  // explained a whole run. Measured on run 5 of the `finish` instrument: at the
+  // deepest point it reached (`-728 321 -1`) there were two soldiers the level
+  // shot could reach -- one at 58 units and one at 151 -- and the walker fired
+  // on neither, because they stood 116 and 82 degrees off the way forward and
+  // the arc is 80. The second of those misses by two degrees. The player was
+  // killed by soldiers it could have shot and simply would not turn for; the
+  // per-leg record shows it arriving in the corridor at 9 health and dying on
+  // the next leg, and the aim on the legs it did take was 0 to 3 degrees, so
+  // the firing was never the problem.
+  answerRange: 200,
   // How long one firing leg lasts. At the player's 300 units per second this is
   // about 150 units of ground and, with the trigger held, several blaster bolts
   // -- three of them kill a soldier, and they are aimed the whole way in.
@@ -147,6 +165,17 @@ export const ENGAGE_DEFAULTS = {
   // the spawn, which is this far from anywhere they died, so a fresh attempt
   // fights the same soldiers again rather than walking past their corpses.
   forgetDistance: 600,
+  // Whether every firing leg takes a picture of the status bar and reads the
+  // player's health and armour off it. Off by default because it costs a
+  // screenshot and an image decode per leg, and because a caller that does not
+  // want a health record should not pay for one; `finish` turns it on. See
+  // control/hud.mjs for why the numbers cannot be had any other way.
+  readHud: false,
+  // Where to put the per-leg HUD crops. They are the evidence behind the
+  // health numbers: a reading that is wrong is visible in the picture it came
+  // from, and a report whose numbers cannot be checked is a nicer story than
+  // the one that happened.
+  hudCropDir: null,
 };
 
 // Local compass arithmetic, matching the engine's: 0 is +X, 90 is +Y, and the
@@ -311,16 +340,20 @@ export function clearWalk(map, from, to, options = {}) {
 // What in the level's own entity list is worth shooting from here, best first.
 //
 // `from` is where the player is (the engine reports the eye). `options.bearing`
-// is the way the walker is already heading, in degrees; a soldier behind the
-// player is not a soldier this walk can turn for without giving up the route.
-// Enemies are scored by how much of the fight it costs to deal with them now:
-// the distance to walk, plus a penalty for every degree off the way forward.
+// is the way the walker is already heading, in degrees; a soldier far behind
+// the player is not a soldier this walk can turn for without giving up the
+// route, and `answerRange` is where that stops being true -- inside it, a
+// soldier is a target whatever the angle, because it can shoot the player
+// wherever it stands. Enemies are scored by how much of the fight it costs to
+// deal with them now: the distance to walk, plus a penalty for every degree off
+// the way forward.
 export function threats(map, from, options = {}) {
   const eye = point(from);
   if (!eye) return [];
   const enemies = options.enemies || map.waypoints("enemy");
   const range = numberOr(options.engageRange, ENGAGE_DEFAULTS.engageRange);
   const arc = numberOr(options.engageArc, ENGAGE_DEFAULTS.engageArc);
+  const answerRange = numberOr(options.answerRange, ENGAGE_DEFAULTS.answerRange);
   const angleCost = numberOr(options.angleCost, 3);
   const bearing = options.bearing === undefined || options.bearing === null ? null : Number(options.bearing);
   const skip = typeof options.skip === "function" ? options.skip : () => false;
@@ -336,13 +369,23 @@ export function threats(map, from, options = {}) {
     let off = 0;
     if (bearing !== null && Number.isFinite(bearing)) {
       off = Math.abs(shortestTurn(bearingTo(eye, origin) - bearing));
-      if (off > arc) continue;
+      // Off the way forward is only a reason to leave a soldier alone while
+      // leaving it alone is cheap. Inside `answerRange` it is not: a soldier
+      // that close can shoot the player wherever it stands, and the walker
+      // taking damage from one it will not turn for is the measured way a
+      // `finish` run dies in demo1's corridor. So the arc decides what is
+      // worth *walking towards*, and this decides what has to be answered.
+      if (off > arc && distance > answerRange) continue;
     }
     // A soldier close enough to be touching the player is not something to
     // turn the view onto: the bearing to it changes with every step, and the
     // leg would spend its half second spinning instead of firing. It is a
     // collision to be walked out of, not a target, and the walker's own stuck
-    // handling is what deals with that.
+    // handling is what deals with that. This is deliberately *not* relaxed by
+    // `answerRange`: measured on run 7 of the instrument, the one leg that
+    // answered a soldier inside this radius (`monster_soldier` at 39 units, 95
+    // degrees off) covered 0 units and died on the spot, which is the fault the
+    // radius was put here to avoid.
     if (distance < numberOr(options.minimumRange, 40)) continue;
     if (!levelShotReaches(map, eye, origin, options)) continue;
     out.push({
@@ -551,7 +594,16 @@ export class CombatWalker extends RouteWalker {
     // The press is asked for and reported on: a trigger the engine never took
     // is a leg that walked and aimed and did not shoot, and saying otherwise
     // would make the fight summary a nicer story than the one that happened.
-    const press = await this.game.attackHold(true);
+    //
+    // Through the mouse, not the console. `+attack` as a console command opens
+    // and shuts the in-game console twice for one firing leg, and the console
+    // pauses the game -- which is a strange thing for a leg to be doing while
+    // it is trying to measure a fight. `mouseHold` presses the button the
+    // engine's own config already binds to `+attack`; the console path is kept
+    // for a game object that has no mouse (the stubs in `scripts/route-test.mjs`).
+    const press = typeof this.game.mouseHold === "function"
+      ? await this.game.mouseHold("left", true)
+      : await this.game.attackHold(true);
     let walked = null;
     try {
       walked = await this.game.walkKeys(keys, stepMs, options);
@@ -559,12 +611,18 @@ export class CombatWalker extends RouteWalker {
       // The trigger comes up even if the walk threw: fire is also the key that
       // leaves the death camera, and a stuck trigger would respawn the player
       // onto the engine's autosave instead of the level's own spawn.
-      await this.game.attackHold(false);
+      if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", false);
+      else await this.game.attackHold(false);
     }
     const after = await this.game.position();
     const at = (after && after.position) || before.position;
-    this.fights.push({
+    const record = {
       classname: target.enemy.classname,
+      // Where the soldier was and how far off the way forward it stood: which
+      // soldier a leg cost health to is only answerable if the leg says who it
+      // was fighting and where.
+      enemyAt: target.enemy.position,
+      enemyDistance: Math.round(target.enemy.distance),
       fired: !!press.held,
       aimed: !!(aimed && aimed.facing),
       aimError: aimed && aimed.error !== undefined ? Math.round(aimed.error) : null,
@@ -574,20 +632,81 @@ export class CombatWalker extends RouteWalker {
       at,
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
       holdMs: walked ? walked.heldMs : 0,
-    });
+      dead: !!(after && after.dead),
+    };
+    // The one reading the engine will not give: how much of the player is left
+    // after this leg. Taken here, with the trigger up, because that is the
+    // only moment the status bar is showing the player's own state rather than
+    // a death camera -- and because a leg is the unit the fight is fought in.
+    const health = await this.#readHud(options);
+    if (health) Object.assign(record, health);
+    this.fights.push(record);
     return { ...(after || { position: before.position }), fired: !!press.held, position: at };
   }
 
+  // The player's own state off the status bar, and the picture it was read
+  // from. Never throws: a leg that could not be measured is a leg with no
+  // health reading, which the summary says out loud rather than filling in.
+  async #readHud(options) {
+    if (!this.engage.readHud) return null;
+    if (typeof this.game.evaluate !== "function" || typeof this.game.screenshot !== "function") return null;
+    const where = "a" + (options && options.attempt !== undefined ? options.attempt : "?") +
+      (options && options.leg !== undefined ? "l" + options.leg : "");
+    try {
+      const shot = await hudShot(this.game);
+      const reading = readHealth(shot.png, shot.readOptions);
+      let crop = null;
+      let cropReason = null;
+      if (this.engage.hudCropDir) {
+        // Saving the picture is evidence-keeping, not measuring, and a
+        // write that fails must not throw away a reading that succeeded:
+        // a full disk would otherwise turn every leg into `health: null`
+        // and the run's own report would blame the status bar.
+        try {
+          fs.mkdirSync(this.engage.hudCropDir, { recursive: true });
+          crop = path.join(this.engage.hudCropDir,
+            "leg-" + where + "-" + String(this.fights.length + 1).padStart(3, "0") + ".png");
+          fs.writeFileSync(crop, shot.png);
+        } catch (error) {
+          crop = null;
+          cropReason = error.message;
+        }
+      }
+      return {
+        health: reading.health,
+        healthScore: reading.healthReading ? Number(reading.healthReading.score.toFixed(3)) : null,
+        healthMargin: reading.healthReading ? Number(reading.healthReading.margin.toFixed(3)) : null,
+        armour: reading.armour ? reading.armour.value : null,
+        barNumbers: reading.numbers.map((number) => number.value),
+        hudCrop: crop,
+        ...(cropReason ? { hudCropReason: cropReason } : {}),
+      };
+    } catch (error) {
+      this._note("could not read the status bar", { reason: error.message });
+      return { health: null, healthReason: error.message };
+    }
+  }
+
   // The same walk the base class runs, plus a summary of the fight so far --
-  // a count of firing legs, and how many of them the turn actually landed on.
+  // a count of firing legs, how many of them the turn actually landed on, and
+  // the health the player had left after each of them. The health series is the
+  // point of the summary: "the fight got better" is not a claim a run can make
+  // about itself on the strength of a body count, and this is the number that
+  // can be checked leg by leg.
   async follow(goal, options = {}) {
     const result = await super.follow(goal, options);
+    const measured = this.fights.filter((fight) => typeof fight.health === "number");
     return {
       ...result,
       combat: {
         enemiesInLevel: this.enemies.length,
         firingLegs: this.fights.length,
         onTarget: this.fights.filter((fight) => fight.aimed).length,
+        healthReadings: measured.length,
+        // A restart puts the player back at 100, so this is the lowest the
+        // fight ever took them, not the lowest reading of one life.
+        minHealth: measured.length ? Math.min(...measured.map((fight) => fight.health)) : null,
+        lastHealth: measured.length ? measured[measured.length - 1].health : null,
         fights: this.fights,
       },
     };

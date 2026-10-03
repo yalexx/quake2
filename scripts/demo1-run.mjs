@@ -111,7 +111,14 @@ async function finish() {
   }
   const map = await loadMap("demo1");
   const exit = map.exitPoint();
-  const walker = new CombatWalker(game, map);
+  // The fight is instrumented: every firing leg reads the player's health and
+  // armour off the status bar and, when a directory is named, keeps the picture
+  // it read them from. Without the series, "the fight got better" is a claim
+  // about the shape of a run rather than about the player, and this run has no
+  // way to tell one from the other. See control/hud.mjs.
+  const walker = new CombatWalker(game, map, {
+    engage: { readHud: true, hudCropDir: process.env.QUAKE2_HUD_DIR || null },
+  });
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
   if (!plan.points.length) {
@@ -129,10 +136,32 @@ async function finish() {
   const result = await walker.follow(exit.aim, { attempts: 8, tolerance: 96 });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
-  report("walker stopped at", result.position);
+  // Two different readings, and a run that ends on a death has them in two
+  // different places. `position` is the last thing the engine said, and the
+  // last thing it says before a restart is where the corpse was; `deepest` is
+  // the closest the player was ever *measured* to be. One run on this level
+  // ended with them 489 units apart (deepest -951 1023, last read -462 19 -19),
+  // so printing one as though it were the other understates the walk.
+  report("walker last read at", result.position);
+  if (result.deepest) {
+    report("deepest reading", { x: Math.round(result.deepest.x), y: Math.round(result.deepest.y), z: Math.round(result.deepest.z),
+      short: Math.round(result.deepest.distance), attempt: result.deepest.attempt, leg: result.deepest.leg });
+  }
+  if (result.deaths !== undefined) report("level restarts the walker lived through", result.deaths);
+  const lastRead = result.position;
+  const apart = result.deepest && lastRead &&
+    Math.hypot(result.deepest.x - lastRead.x, result.deepest.y - lastRead.y) > 1;
+  if (apart) {
+    report("note", "the last read is not the deepest reading: the run ended with the player " +
+      Math.round(Math.hypot(result.deepest.x - lastRead.x, result.deepest.y - lastRead.y)) +
+      " units from the furthest point it had reached");
+  }
   if (result.combat) {
     report("soldiers in the level", result.combat.enemiesInLevel);
     report("firing legs", result.combat.firingLegs + " (" + result.combat.onTarget + " with the turn landed on the soldier)");
+    report("firing legs with a health reading", result.combat.healthReadings);
+    report("lowest health the fight took the player to", result.combat.minHealth);
+    report("health after the last firing leg", result.combat.lastHealth);
   }
   if (result.distance !== null && result.distance !== undefined) report("short of the exit by", Math.round(result.distance));
   // The engine's positions, not the planner's opinion of them: the closest the
@@ -155,6 +184,29 @@ async function finish() {
       report("  a" + point.attempt + leg + "  " + Math.round(point.x) + " " + Math.round(point.y) + " " + Math.round(point.z) +
         "  short " + Math.round(point.distance));
     }
+  }
+  // And the fight's own record, leg by leg: the health the player had left
+  // after each firing leg, read off the status bar. This is the measurement
+  // that makes "the fight got better" falsifiable, and the soldier each leg was
+  // aimed at is next to it because "which one is doing the damage" is the
+  // question a health series answers.
+  const fights = (result.combat && result.combat.fights) || [];
+  if (fights.length) {
+    report("per-leg fight record (leg, soldier, aimed, fired, ground covered, health after, armour)");
+    for (let index = 0; index < fights.length; index++) {
+      const fight = fights[index];
+      report("  " + String(index + 1).padStart(2, " ") + "  " + fight.classname + (fight.enemyDistance === undefined ? "" : " d" + fight.enemyDistance) +
+        "  aimed " + (fight.aimed ? "yes" : "no") +
+        (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg)") +
+        "  fired " + (fight.fired ? "yes" : "no") +
+        "  covered " + fight.travelled +
+        "  health " + (fight.health === null || fight.health === undefined ? "?" : fight.health) +
+        (fight.armour === null || fight.armour === undefined ? "" : "  armour " + fight.armour) +
+        (fight.dead ? "  DIED ON THIS LEG" : "") +
+        (fight.hudCrop ? "  " + fight.hudCrop.split("/").pop() : ""));
+    }
+    const missed = fights.filter((fight) => fight.health === null || fight.health === undefined).length;
+    if (missed) report("firing legs with no health reading", missed);
   }
   // And the walker's own last words, which are what explains a run that did not
   // finish: every death it restarted, every leg it re-planned, and what stopped
@@ -201,6 +253,9 @@ try {
   // Fire is not a harmless key to leave down: it also leaves the death camera
   // and skips an intermission, so a run cut short must not hand the game a
   // player who is firing at nothing.
-  if (game.attacking) await game.attackHold(false).catch(() => {});
+  if (game.attacking) {
+    if (typeof game.mouseHold === "function") await game.mouseHold("left", false).catch(() => {});
+    else await game.attackHold(false).catch(() => {});
+  }
   await game.close().catch(() => {});
 }
