@@ -510,8 +510,13 @@ check("and the walk does not end on the one miss", flakyResult.reason !== "DEAD"
 // on the first refusal with the budget unspent.
 const stubbornStub = {
   respawns: 0,
+  mapRestarts: 0,
   async position() { return { probed: true, position: { x: -427, y: 111, z: -1 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo1", dead: true }; },
-  async respawn() { this.respawns++; return { respawned: false, reason: "NOT_RESPAWNED", how: "fire" }; },
+  async respawn(options = {}) {
+    this.respawns++;
+    if (options.how === "map") this.mapRestarts++;
+    return { respawned: false, reason: "NOT_RESPAWNED", how: options.how || "fire" };
+  },
   async goto(point) { return { reached: true, reason: "reached", target: point, position: { x: -427, y: 111, z: -1 }, rounds: 0, travelled: 0, trail: [] }; },
   async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
   async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
@@ -524,7 +529,14 @@ const stubbornResult = await new RouteWalker(stubbornStub, map, {}).follow(map.e
 check("a player that will not come back ends on the restart budget, not on one refusal",
   stubbornResult.reason === "DEATHS", stubbornResult.reason);
 check("with three presses of fire spent on each of the three restarts it was allowed",
-  stubbornStub.respawns === 9, { respawns: stubbornStub.respawns, deaths: 3 });
+  stubbornStub.respawns === 12, { respawns: stubbornStub.respawns, deaths: 3 });
+// ...and the fourth, once per death, is the engine's own restart by name --
+// `map demo1`, the command a player's death runs for them. A level that will
+// not hand the player back to the fire button is still a level this walker is
+// standing in, and giving up on it there is what ended four traced runs on
+// their first death with seven restarts unspent.
+check("and one restart by name per death as the fire button's fallback",
+  stubbornStub.mapRestarts === 3, stubbornStub.mapRestarts);
 
 // The furthest reading is a different reading from the last one, and on a run
 // that ends in a death they are hundreds of units apart. The walker's `position`

@@ -33,6 +33,20 @@ function report(label, value) {
   console.log(label + ": " + (typeof value === "string" ? value : JSON.stringify(value)));
 }
 
+// A budget knob read from the environment. Read so that an explicit zero
+// survives: `Number(x) || fallback` throws a zero away because zero is falsy,
+// and zero is the value this knob most needs to be able to say -- "do not
+// restart the level at all" is the one-life diagnostic, and quietly turning it
+// into the default makes a run that was asked for one life report eight without
+// saying so. An absent or unreadable knob is null, and the caller picks the
+// default.
+function askedFor(name) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 // The engine's answer to "which map is running". This is the finish line: not a
 // position the script believes it reached, but the level the engine itself says
 // it loaded. Quake 2 prints it as `"mapname" is "demo2"`.
@@ -116,9 +130,34 @@ async function finish() {
   // it read them from. Without the series, "the fight got better" is a claim
   // about the shape of a run rather than about the player, and this run has no
   // way to tell one from the other. See control/hud.mjs.
+  // The fight's levers, each one a knob so that a run can be made and read back
+  // without editing the walker: which weapon to ask the engine for (by the name
+  // the engine's own config uses), and how a firing leg moves while the trigger
+  // is down. Defaults are the behaviour that was measured before this pass.
   const walker = new CombatWalker(game, map, {
-    engage: { readHud: true, hudCropDir: process.env.QUAKE2_HUD_DIR || null },
+    engage: {
+      readHud: true,
+      hudCropDir: process.env.QUAKE2_HUD_DIR || null,
+      weapon: process.env.QUAKE2_WEAPON || null,
+      fireWhile: process.env.QUAKE2_FIRE_WHILE || "advance",
+      ...(process.env.QUAKE2_PICKUP_RANGE ? { pickupRange: Number(process.env.QUAKE2_PICKUP_RANGE) } : {}),
+    },
   });
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange });
+  // QUAKE2_ARM=1 makes the walk call at the level's own super shotgun on the
+  // way. The planner's route leaves it 336 units to one side, so this is the
+  // "detour" the level's own design invites: the gun and three boxes of shells
+  // stand together 391 units from the spawn, past two soldiers. Whether that
+  // trade is worth making is measured (deepest position and level restarts),
+  // not assumed, which is why it is off unless it is asked for.
+  if (process.env.QUAKE2_ARM === "1") {
+    const gun = map.waypoints("item").find((item) => item.classname === "weapon_supershotgun");
+    report("arming at", gun && gun.position);
+    if (gun) {
+      const armed = await walker.follow(gun.position, { attempts: 2, deaths: 2, tolerance: 48 });
+      report("arm walk", { reached: armed.reached, reason: armed.reason, position: armed.position, deaths: armed.deaths });
+    }
+  }
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
   if (!plan.points.length) {
@@ -133,7 +172,16 @@ async function finish() {
   // -301 110, beside demo1's dead-end pocket at -427 111: three legs per
   // attempt instead of eight means three times as many of the 400 ms sideways
   // steps that end an attempt, and that step is taken across the route.
-  const result = await walker.follow(exit.aim, { attempts: 8, tolerance: 96 });
+  // The budgets, and the knobs that shorten them for a diagnostic. A run asked
+  // for one attempt and no restarts is a reading of where one life gets to;
+  // `QUAKE2_ATTEMPTS=0` is read as the minimum of one, because a walk with no
+  // attempt at all never asks the engine anything and reports nothing.
+  const attemptKnob = askedFor("QUAKE2_ATTEMPTS");
+  const deathKnob = askedFor("QUAKE2_DEATHS");
+  const attempts = Math.max(1, attemptKnob === null ? 8 : attemptKnob);
+  const deaths = Math.max(0, deathKnob === null ? attempts : deathKnob);
+  report("budget", { attempts, deaths });
+  const result = await walker.follow(exit.aim, { attempts, deaths, tolerance: 96 });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
   // Two different readings, and a run that ends on a death has them in two
@@ -162,6 +210,19 @@ async function finish() {
     report("firing legs with a health reading", result.combat.healthReadings);
     report("lowest health the fight took the player to", result.combat.minHealth);
     report("health after the last firing leg", result.combat.lastHealth);
+    if (result.combat.weapon) report("weapon the fight asked for", result.combat.weapon);
+    if (result.combat.fireModes && result.combat.fireModes.length) {
+      report("what each way of firing cost (mode, legs, ground covered, health spent, per leg)");
+      for (const row of result.combat.fireModes) {
+        report("  " + row.mode.padEnd(8) + " legs " + row.legs + "  covered " + row.covered +
+          "  spent " + (row.healthSpent === null ? "?" : row.healthSpent) +
+          "  per leg " + (row.spentPerLeg === null ? "?" : row.spentPerLeg) +
+          "  readings " + row.healthReadings);
+      }
+    }
+    if (result.combat.onRoutePickups && result.combat.onRoutePickups.length) {
+      report("pickups the route ran over", result.combat.onRoutePickups);
+    }
   }
   if (result.distance !== null && result.distance !== undefined) report("short of the exit by", Math.round(result.distance));
   // The engine's positions, not the planner's opinion of them: the closest the
@@ -200,6 +261,8 @@ async function finish() {
         (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg" + (fight.aimMethod ? " " + fight.aimMethod : "") + ")") +
         "  fired " + (fight.fired ? "yes" : "no") +
         "  covered " + fight.travelled +
+        (fight.fireMode && fight.fireMode !== "advance" ? "  " + fight.fireMode : "") +
+        (fight.pickupOnRoute ? "  over " + fight.pickupOnRoute : "") +
         "  health " + (fight.health === null || fight.health === undefined ? "?" : fight.health) +
         (fight.armour === null || fight.armour === undefined ? "" : "  armour " + fight.armour) +
         (fight.dead ? "  DIED ON THIS LEG" : "") +
