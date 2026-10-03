@@ -601,6 +601,20 @@ export function readBar(lum, width, height, options = {}) {
   const templates = templatesFor(families, family, options.scale || 1);
   const cellWidth = templates[0].width;
   const cellHeight = templates[0].height;
+  // How sure a *cell* has to be before it is a digit at all.
+  //
+  // This is deliberately low, and it was measured rather than assumed: the
+  // floor is what a number is grown out of, cell by cell, so raising it does
+  // not merely reject weak readings -- it *splits* a real number whose weakest
+  // glyph is faint. Measured on a bar painted out of the archive's own digits,
+  // with one glyph dimmed towards the background: a `100` whose trailing `0`
+  // is faint reads **`100`** at 0.6 and **`10`** at 0.65 (score 0.849, so
+  // nothing downstream can tell it is half a number), and a `100` whose
+  // leading `1` is faint reads **`100`** at 0.6 and **`0`** at 0.65. What a
+  // weak reading is rejected by is the *number* floor in `readHealth`, which
+  // turns a reading nobody should trust into no reading rather than into half
+  // of one. See `scripts/route-test.mjs` for the digits another floor has to
+  // keep reading, and `readHealth` for the phantom this exists beside.
   const minScore = options.minScore === undefined ? 0.6 : options.minScore;
   // The strip a `hudShot` returns puts the status bar in its first rows; a
   // whole screenshot puts it wherever the canvas bottom is. Searching only the
@@ -753,7 +767,24 @@ export function readHealth(pngBuffer, options = {}) {
   // Health is drawn with the `num` pictures; a reading the other family fits
   // better is the armour number and is left for a caller that wants it.
   const health = usable.filter((candidate) => candidate.family === "num");
-  const number = (health.length ? health : usable)[0] || null;
+  const candidate = (health.length ? health : usable)[0] || null;
+  // How sure the *number* has to be to be handed back as the player's health.
+  //
+  // A number the reader is only just sure of is a number it may have invented.
+  // Measured on the live game at a fresh `map demo1` spawn -- where the bar
+  // carries exactly one number, the 100 health -- the reader returned that 100
+  // (score 0.819) **and a phantom `4` (score 0.619)** read out of the bar's own
+  // art beside the digits. Without this floor, a leg whose real digits could not
+  // be read hands back the phantom as the player's health: that is the `4` a
+  // kept crop of the earlier pass shows against a bar reading **100**. A miss is
+  // a reading a caller knows it did not get; a phantom is one it believes, and
+  // the fight report is written to survive a miss (`health` comes back as `?`).
+  //
+  // The floor belongs here rather than on `readBar`'s cells because a cell floor
+  // high enough to drop a phantom also splits a real number whose weakest glyph
+  // is faint -- measured, `100` read as `10`. See the note there.
+  const floor = options.numberScore === undefined ? 0.65 : options.numberScore;
+  const number = candidate && candidate.score >= floor ? candidate : null;
   return {
     ...status,
     health: number ? number.value : null,
