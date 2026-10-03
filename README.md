@@ -1012,6 +1012,103 @@ capture is smaller than the canvas, so the status bar has to be photographed
 so it waits 150 ms -- measured, two of three reads on a live player came back
 framed for the un-framed canvas and read nothing.
 
+### What this branch adds to the fight
+
+`clawbox/team-s5p49gdb` already carries the console-free harness, the
+turn-on-the-move firing leg and the `binding()` reader that answers "which key
+does the engine's own config press for this command" -- `use supershotgun`
+included. What this branch adds on top of it is four levers on the fight, one
+hardening in the bridge and one guard in the walker. The numbers quoted below
+are from runs of `node scripts/demo1-run.mjs finish` against the live game made
+while these were developed; the raw reports are the pass's own evidence, not
+this file.
+
+**Choosing a weapon is now an act, not an assumption.** `selectWeapon(name)`
+presses and releases the key that `binding("use <weapon>")` answers, as a real
+key event -- no console, so no pause. A weapon the player does not own is not an
+error: Quake 2 ignores the command and keeps the weapon in hand, so this reports
+what it pressed and lets the caller judge the fight by its health. Measured
+live: `{"selected":true,"weapon":"Super Shotgun","method":"key","key":"3",
+"command":"use Super Shotgun"}`.
+
+The walker asks once per **life**, not once per attempt (`weapon: "Super
+Shotgun"`). A death restarts the level and gives the player the level's own
+starting loadout, and the walker does not spend an attempt on that restart
+(`attempt--` in `follow`) -- so an attempt-keyed switch counts the ask as
+already made, and every life after the first is fought with the blaster while
+the report says shotgun. `RouteWalker.restarts` is the counter that makes the
+difference visible, and `scripts/route-test.mjs` checks it.
+
+**How a firing leg moves is a lever.** `fireWhile` is `advance` (walk the route,
+the behaviour the fight was measured with, and the default), `retreat` (walk the
+route backwards, away from the soldier being shot), `hold` (stand, which the
+level punishes and which is here to be measured rather than recommended), or
+`adapt`, which gives each of the three `fireModeWarmup` legs and then follows the
+health the status bar cost, counted per life. What each way cost is in the report
+(`fireModes`), and in the run that used it, `advance legs 4 covered 336 spent 48
+per leg 12 readings 3`.
+
+**Health and armour on the route: measured, and demo1 has none.** `pickupRange`
+lets a plan point whose pickup is close be nudged onto it, guarded by a walkable
+line and by a `pickupTurn` limit so that taking an item never bends the route.
+Measured at range 96 on demo1's exit route: exactly two points move, onto the
+level's two `item_health_small` at route units 629 and 677, for 53 extra units
+of walking -- **and the player is at full health when it passes unit 630** (the
+first firing leg of every traced run is past route unit 900), so both items are
+picked up and thrown away. Measured against the route *line* rather than its
+points, the one item this route could use -- `item_health_large` at `-1176 1520`,
+50 health, 64 units off the line at unit 2770 -- is more than 96 units from any
+plan point, so no nudge reaches it. Default `0`: the lever is here for a level
+where the measurement is different, and off where it is this.
+
+**How a firing leg moves is now a lever.** `fireWhile` is `advance` (walk the
+route, the behaviour the fight was measured with), `retreat` (back along the
+route, away from the soldier being shot), `hold` (stand), or `adapt` -- which
+gives each of the three `fireModeWarmup` legs and then follows the health the
+status bar cost, per life. The cost of each way is in the report
+(`fireModes`), and in the run that used it, `advance legs 4 covered 336 spent 48
+per leg 12 readings 3`.
+
+**The walker finishes the soldier it started.** The threat list is scored fresh
+every leg, and the score moves as the player walks; the per-leg record of four
+traced runs shows legs aimed at `monster_soldier` from 127 to 407 units, with
+the aim landing every time and the trigger down every time, and the player dead
+at 1 health. A soldier is 30 health and shoots until it is dead, so the leg
+targets the soldier the last leg fired at until it leaves `found`.
+
+**A point that is not all three coordinates ends a walk rather than failing
+inside one.** `finitePoint()` refuses a goal with a non-finite `x`, `y` or `z`
+at the seam, with a reason, before any distance against it is computed -- every
+comparison against a NaN is false, so a bad goal does not degrade the walk, it
+grinds out the whole budget aiming at a place the engine can never report the
+player as standing.
+
+**The fire press is held across a frame, not clicked.** Quake 2 restarts the
+level from its death camera on the *edge* of the attack button, and the engine
+samples its buttons once a frame: a click is a press and a release dispatched
+back to back, so on a 60 Hz game both can land between two samples and the edge
+never happens. `respawn()` therefore holds the button for 400 ms (`pressMs`)
+rather than clicking it. This branch keeps the base's own fallback behind it --
+fire, then the console restart by name -- which is the path that actually
+brought the traced runs back.
+
+**And the reading the fight is judged by is not trustworthy on this box.** The
+per-leg health numbers in the report disagree with the pictures they were read
+from: crop `leg-a2l5-002.png` shows **100** health on the status bar where the
+reader returned **4**, and `leg-a2l7-004.png` shows **25** where it returned
+**80**. The crops are kept with the run's evidence. The outcome measures this
+pass reports are therefore the ones read out of the engine's own memory -- where
+the player was, and whether it was alive -- and the health series is reported
+beside them, labelled as the reading it is.
+
+**What a run of this fight looked like.** The deepest a traced run of this work
+reached was `short 955` from the exit (at `-952 1063`), over 8 attempts and 5
+level restarts it lived through, with 26 firing legs -- and it did not finish.
+A level restart puts the player back on the spawn, so the attempts a life spends
+before it dies are spent again: the deepest reading came at attempt 3, the run
+died there, and the restarts after it re-walked ground it had already covered.
+The level is not finished.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),

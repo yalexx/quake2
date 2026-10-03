@@ -1554,6 +1554,35 @@ export class QuakeControl {
     return described;
   }
 
+  // Press and release the key the engine's own config binds to `use <weapon>`.
+  //
+  // Choosing a weapon is the engine's own act, so it is the same kind of thing
+  // as firing: a real key event through the input stack the engine listens to,
+  // not a console command -- the console is a pause and this is used in the
+  // middle of a fight. The weapon is named the way the config names it ("Super
+  // Shotgun"); the lookup is `binding()`, which flattens case and whitespace,
+  // so a config that writes `use supershotgun` and one that writes `use Super
+  // Shotgun` name the same weapon.
+  //
+  // A weapon the player does not own is not an error: Quake 2 ignores the
+  // command and keeps the weapon in hand. So this reports what it pressed and
+  // lets the caller judge the fight by its health rather than by this answer.
+  async selectWeapon(weapon) {
+    const bound = await this.binding("use " + String(weapon === undefined || weapon === null ? "" : weapon).trim());
+    if (!bound.found) return { selected: false, weapon, reason: bound.reason || "NO_WEAPON_BINDING", key: null };
+    if (bound.button) {
+      const held = await this.mouseHold(bound.button, true);
+      await this.mouseHold(bound.button, false).catch(() => {});
+      return { selected: !!held.held, weapon, method: "mouse", key: bound.key, button: bound.button };
+    }
+    await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      await this.#sendKey(game, bound.key, true);
+      await this.#sendKey(game, bound.key, false);
+    });
+    return { selected: true, weapon, method: "key", key: bound.key, command: bound.command };
+  }
+
   // The engine names bindings in its own spelling ("SPACE", "MOUSE1", "e").
   //
   // Returns whether anything was bound at all, and whether this bridge can
@@ -1742,7 +1771,25 @@ export class QuakeControl {
     }
     const useConsole = options.how === "map" || options.console === true;
     if (!useConsole) {
-      await this.click("left").catch(() => {});
+      // The button is *held* across a frame, not clicked.
+      //
+      // Quake 2 restarts the level from its death camera on the edge of the
+      // attack button -- `latched_buttons`, which the engine sets by comparing
+      // the keys it samples this frame against the ones it sampled last frame.
+      // It samples once a frame, and a click is a press and a release
+      // dispatched back to back: on a 60 Hz game both can land between two
+      // samples, so the engine sees the button at rest on every frame and the
+      // edge never happens. Holding it for a few frames cannot be missed.
+      // Measured on this box: every traced run that died logged NOT_RESPAWNED
+      // from the click, which is why the console fallback below is the path
+      // that ended up bringing those runs back.
+      const hasMouse = typeof this.mouseHold === "function";
+      if (hasMouse) await this.mouseHold("left", true).catch(() => {});
+      else await this.click("left").catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, numberOr(options.pressMs, 400)));
+      // Released whatever happened above: a button left down is a player firing
+      // at the level's own spawn screen for the rest of the run.
+      if (hasMouse) await this.mouseHold("left", false).catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
       const afterFire = await this.position();
       if (afterFire && !afterFire.dead) {
