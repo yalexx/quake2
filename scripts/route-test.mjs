@@ -480,6 +480,48 @@ check("and the walk stops on its own restart budget, not on its attempts",
 // the player 1,802 units short, four attempts unspent. One press of fire is
 // enough in a clean experiment -- measured live: a click, 2.5 s, roll -1.50 to
 // 0.00, alive -- and evidently not always enough under fire on a live level.
+// The weapon a fighting walker asks the engine for is per *life*, not per
+// attempt. A death restarts the level and hands the player the level's own
+// starting loadout, and the walker does not spend an attempt on that restart
+// (`attempt--` in follow) -- so the same attempt number comes round again on a
+// spawn that no longer carries the weapon. Keyed on the attempt alone, every
+// life after the first was fought with the blaster while the report said
+// shotgun: measured on this stub, one ask across four lives.
+console.log("the weapon a fighting walker asks the engine for");
+{
+  const enemy = map.waypoints("enemy").filter((e) => e.classname === "monster_soldier")
+    .sort((a, b) => Math.hypot(a.position.x + 856, a.position.y - 240) - Math.hypot(b.position.x + 856, b.position.y - 240))[0];
+  // On the soldier's own floor: its origin is 24 above its feet and the
+  // player's eye is 46 above its own, so the eye is 22 above that origin --
+  // inside the soldier's box, which is what a level shot needs.
+  const standing = { x: enemy.position.x + 150, y: enemy.position.y, z: enemy.position.z + 22 };
+  const fightStub = {
+    asked: 0, dead: false, keys: 0, respawns: 0,
+    async position() { return { probed: true, position: standing, angles: { pitch: 0, yaw: 0, roll: this.dead ? 39 : 0 }, map: "demo1", dead: this.dead }; },
+    async respawn() { this.respawns++; this.dead = false; return { respawned: true, how: "fire", position: standing }; },
+    async selectWeapon(name) { this.asked++; return { selected: true, weapon: name, method: "key", key: "3" }; },
+    async face() { return { facing: true, yaw: 0, error: 0, rounds: 1 }; },
+    async key(key, down) { this.keys++; if (this.keys > 4) this.dead = true; return { held: !!down, key }; },
+    async mouseHold() { return { held: true }; },
+    async attackHold() { return { held: true }; },
+    async useHold() { return { held: true }; },
+    async goto(point) { return { reached: true, reason: "reached", target: point, position: standing, rounds: 1, travelled: 10, trail: [] }; },
+    async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+    async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+    async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  };
+  const armed = new CombatWalker(fightStub, map, { engage: { weapon: "Super Shotgun", readHud: false, maxEngagements: 20 } });
+  // Four attempts, not more: the stub's player is dead by the third, and every
+  // attempt is a full A* over demo1's grid, which is the slowest thing in this
+  // file.
+  const armedResult = await armed.follow(map.exitPoint().aim, { attempts: 4, deaths: 2, tolerance: 96, maxLegs: 2 });
+  check("the walk fought, died and was put back on the spawn",
+    armed.restarts >= 1 && armedResult.reason !== "NO_POSITION",
+    { lives: armed.restarts + 1, reason: armedResult.reason, asks: fightStub.asked });
+  check("and asked the engine for its weapon once in every life it fought",
+    fightStub.asked === armed.restarts + 1, { lives: armed.restarts + 1, asks: fightStub.asked });
+}
+
 console.log("a missed respawn does not end the walk");
 const flakyStub = {
   respawns: 0,

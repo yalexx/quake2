@@ -501,8 +501,9 @@ export class CombatWalker extends RouteWalker {
     // One row per way of firing: how many legs it took, and what the status bar
     // says they cost. See #fireMode.
     this.fireModes = new Map();
-    // Which attempt the weapon was already asked for, and the answer.
-    this.weaponAttempt = null;
+    // Which attempt of which life the weapon was already asked for (see
+    // #ensureWeapon), and the answer.
+    this.weaponAsked = null;
     this.weaponSelection = null;
     // The soldier the last leg fired at, so that the next leg can finish it.
     // See _legTarget.
@@ -609,11 +610,22 @@ export class CombatWalker extends RouteWalker {
   // start of the attempt, because the first thing a restarted level does is put
   // the player back on the spawn with the spawn's own weapon, and a switch made
   // before that is a switch thrown away.
-  async #ensureWeapon(attempt) {
+  async #ensureWeapon(attempt, life) {
     const wanted = this.engage.weapon;
-    if (!wanted || this.weaponAttempt === attempt) return this.weaponSelection;
+    if (!wanted) return null;
+    // Keyed on the attempt *and* the life, not on the attempt alone.
+    //
+    // A death restarts the level and hands the player the level's own starting
+    // loadout, and the walker does not spend an attempt on that restart (see
+    // `attempt--` in walker.follow) -- so the same attempt number comes round
+    // again on a spawn where the weapon this asked for is no longer carried.
+    // Keyed on the attempt alone, the switch asked for before the death would
+    // count as already made, and every life after the first would be fought
+    // with the blaster while the report said the level's own shotgun.
+    const key = String(attempt) + ":" + String(life === undefined || life === null ? 0 : life);
+    if (this.weaponAsked === key) return this.weaponSelection;
     if (typeof this.game.selectWeapon !== "function") return null;
-    this.weaponAttempt = attempt;
+    this.weaponAsked = key;
     this.weaponSelection = await this.game.selectWeapon(wanted).catch((error) => ({ selected: false, weapon: wanted, reason: error.message }));
     this._note(this.weaponSelection && this.weaponSelection.selected
       ? "asked for the level's own " + wanted
@@ -863,7 +875,7 @@ export class CombatWalker extends RouteWalker {
     // Which weapon the fight is using, asked of the engine's own config once
     // per attempt. The press lands before the trigger goes down so that the
     // first leg of the attempt is already firing the weapon the level gave out.
-    await this.#ensureWeapon(options && options.attempt);
+    await this.#ensureWeapon(options && options.attempt, this.restarts);
     const press = typeof this.game.mouseHold === "function"
       ? await this.game.mouseHold("left", true)
       : await this.game.attackHold(true);

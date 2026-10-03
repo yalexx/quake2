@@ -122,6 +122,12 @@ export class RouteWalker {
     this.levelName = map && map.name ? map.name : null;
     this.options = { ...WALK_DEFAULTS, ...options };
     this.log = [];
+    // How many times this walk has been put back on a restarted level. A death
+    // does not spend an attempt (see `attempt--` in follow), so the attempt
+    // number alone cannot tell a subclass that the player is a *different*
+    // player now -- back on the spawn with the level's own starting loadout.
+    // This is what does.
+    this.restarts = 0;
   }
 
   #note(message, detail) {
@@ -448,6 +454,10 @@ export class RouteWalker {
           this.#note("still dead after the restart; the level gets another go");
           continue;
         }
+        // Alive again, on a level that has just been restarted: this is a new
+        // life, and the choices a subclass made about the old one -- which
+        // weapon it asked the engine for -- are spent with it.
+        this.restarts++;
         current = restarted;
       }
       position = current.position;
