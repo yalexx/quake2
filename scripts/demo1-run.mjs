@@ -332,6 +332,18 @@ async function finish() {
     if (result.combat.onRoutePickups && result.combat.onRoutePickups.length) {
       report("pickups the route ran over", result.combat.onRoutePickups);
     }
+    // What the plan was *routed* over, rather than what a leg happened to pass:
+    // a health or armour item beside a step of the route is inserted into the
+    // plan as a waypoint of its own (see CombatWalker.snapPickups), and this is
+    // the list of insertions. "The walk tops up on the way" is a claim about the
+    // plan, and a claim about a plan is one the plan can be asked to prove.
+    if (result.combat.pickupDetours && result.combat.pickupDetours.length) {
+      report("top-ups the plan was routed over (item, at, how far off the line)");
+      for (const detour of result.combat.pickupDetours) {
+        report("  " + detour.classname + "  " + Math.round(detour.x) + " " + Math.round(detour.y) + " " + Math.round(detour.z) +
+          "  " + detour.offRoute + " off the route line");
+      }
+    }
   }
   if (result.distance !== null && result.distance !== undefined) report("short of the exit by", Math.round(result.distance));
   // The engine's positions, not the planner's opinion of them: the closest the
