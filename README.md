@@ -985,7 +985,15 @@ than taste:
   walls that pocket off is 16 units thick in x and a 16-unit stride steps
   straight over it. A point with no walkable line to it is skipped and the next
   one back is tried, so a leg aims at something the player can actually walk to
-  rather than merely see.
+  rather than merely see -- with one measured exception, added by the pass that
+  stopped a leg aiming at a point the player was already standing on. When
+  *nothing* beyond the leg's own arrival radius has a clear line, the last
+  resort is the nearest point ahead whatever its line looks like, on the
+  reasoning that a leg which walks at a wall still covers ground and a leg aimed
+  inside the arrival radius covers none. Measured on 105 positions along
+  demo1's own route, that last resort is taken 11 times; it is the exception and
+  not the rule, and it is why a leg can still end against something the plan
+  called clear.
 * **`clearWalk()` has to follow the floor, and the point it hands back has to be
   one worth walking to.** Both were measured to be wrong in ways that look
   identical from outside -- a leg that covers 0 units:
@@ -1173,8 +1181,10 @@ first firing leg of every traced run is past unit 900), so both items are picked
 up and thrown away. Measured against the route *line* rather than its points,
 the one item this route could use -- `item_health_large` at `-1176 1520`, 50
 health, 64 units off the line at unit 2770 -- is more than 96 units from any
-plan point, so no nudge reaches it. Default `0`: the lever is kept for a level
-where the measurement is different, and off where it is this.
+plan point, so no nudge reaches it. That measurement is what this pass acted on:
+`pickupRange` is now **96**, and the *step*-based insert below reaches the
+`item_health_large` the point-based nudge could not. See
+[the pass after](#the-pass-after-why-the-walk-was-standing-still).
 
 **How a firing leg moves is now a lever.** `fireWhile` is `advance` (walk the
 route, the behaviour the fight was measured with), `retreat` (back along the
@@ -1238,6 +1248,190 @@ short of the exit: a level restart puts the player back on the spawn, so the
 attempts a life spends before it dies are spent again -- the deepest reading
 came at attempt 3, the run died there, and the restarts after it re-walked
 ground it had already covered. The level is not finished.
+
+### The pass after: why the walk was standing still
+
+The pass above named the blocker as damage -- 12 to 18 health a firing leg, a
+life arriving at the exit complex on 1 to 4 health -- and left the deepest run
+at `-952 1063`, 955 units short. This pass re-ran the same command before
+changing anything, and **the run it measured did not get that far**:
+
+```
+walker reason: ATTEMPTS
+firing legs: 8 (5 with the turn landed on the soldier)
+positions the engine reported: 99
+furthest position reached: -888 323, short 1509
+level restarts lived through: 3
+```
+
+Five of its eight attempts never got past the corridor's west end: attempts 3,
+4, 6, 7 and 8 each ended within 1,924 to 2,011 units of the exit, and their own
+position lists show why. `-464 20` on attempt 1 legs 6 and 7, the same place on
+attempt 6 legs 1 to 3, `-456 20` on attempt 8 legs 1 to 4 -- a walk that has
+stopped is not a walk that is being shot at, and the damage model was not what
+was ending this run. What was ending it was one line of `_walkPoint`.
+
+**A leg was aiming at a point the player was already standing on.** `goto()` is
+called with a tolerance of `max(24, tolerance/2)` -- **48** on a `finish` run --
+and it answers `reached` to a target it is already inside that of *without
+taking a step and without reading the position again*. `CombatWalker._legTarget`
+hands it `_walkPoint`'s answer, and `_walkPoint`'s three passes were written
+like this:
+
+```js
+for (const radius of [bodyRadius, 0])       // radius outermost
+  for (const candidate of within)           // farthest-first
+    if (clearWalk(map, feet, candidate, { radius })) return candidate;
+```
+
+The radius was the outer loop, so *every* candidate was tried with the shoulder
+test before *any* was tried without it -- and the shoulder test is the stricter
+one. Measured offline against demo1's own plan from the spot the run stalled at
+(`-438 13`): the line to `-600 48`, four points along, is 166 units and clears
+at radius 0 but not at 16; the line to `-456 24`, the next point, is **21 units**
+and clears at both. So a point 21 units away -- inside `goto`'s own arrival
+radius of 48 -- beat a point 166 units away, `goto` returned
+`reached, rounds: 0, 0 units covered`, and the walker's own `moved > 8` test
+called it a stall. The traced run is exactly that: legs covering 3, 0 and 0
+units in a row, with a clear 166-unit line sitting right there unused, three
+`func_wall`s named 20 and 46 units away that were never the obstruction.
+
+The fix is to make distance the outer question and the margin the inner one,
+and to refuse a point the leg's own arrival radius already covers:
+
+```js
+for (const candidate of within)
+  for (const radius of [bodyRadius, 0])
+    if (clearWalk(map, feet, candidate, { radius })) return candidate;
+```
+
+A short leg is not a cheaper leg. It spends one of the attempt's eight legs to
+cross a fifth of the ground, and at 21 units it spends one to cross none -- and
+the walker's stall handling is the only thing that pays for the difference,
+one back-off and one re-plan at a time. Measured on the same command, after the
+fix:
+
+| Measured per `finish` run | Before this pass | After (leg targeting) | After (and top-ups) |
+|---|---|---|---|
+| firing legs | 8 | 25 | **30** |
+| firing legs with the turn landed | 5 | 12 | **29** |
+| firing legs with a health reading | 4 | 24 | 24 |
+| ground covered on firing legs | 814 | 4,426 | **7,386** |
+| positions the engine reported | 99 | 80 | 100 |
+| furthest position reached | `-888 323`, short 1,509 | `-935 1262`, short 887 | **`-951 1550`, short 825** |
+| health spent / firing leg | 9.88 over 8 legs | 17.44 over 25 legs | **11.63 over 30 legs** |
+
+The last row is the one that says the fight is finally being fought rather than
+merely arrived at: 349 health over 30 firing legs, against the 9.88 over 8 legs
+the stalled run was spending. The best run reached route unit ~2,750 of 4,693 --
+`-951 1550`, 825 units short, past the corridor's north end and inside the last
+straight before the exit complex. That is 130 units short of nothing: the
+`item_health_large` the top-up inserts is at route unit 2,887. The run died
+between the two.
+
+Four `finish` runs of the fixed code reached **887, 825, 1,224 and 1,297** units
+short, against a stalled baseline of 1,509 -- so the honest claim is a walk that
+now fights its way through the corridor and dies in or past it, not a walk that
+has a repeatable position, and the deepest of the four is one sample rather than
+a best case. What did *not* move between them is the shape: 25, 30, 31 and 31
+firing legs, and 4,426, 7,386, 6,643 and 6,357 units of ground covered on them --
+against 8 legs and 814 units for the run whose legs were being thrown away. Runs
+before this pass spent their budget standing still; these spend it walking and
+shooting. The distance moved much less than the fighting did, and it is the
+distance that the exit is measured in.
+
+The spread belongs to the level, and it did not narrow: the pass before this one
+measured ten runs at 1,331 to 1,989 short, and this pass's four at 825 to 1,297.
+A `finish` run is still one sample of a walk through a level that shoots back.
+
+**The walk now starts before the aim, not after it.** `face()` is the longest
+thing in a firing leg that is not walking -- 242 ms when the mouse converges
+first time, and the whole of the trigger-down period when it does not -- and the
+movement keys used to go down only once it had finished. So every firing leg
+began with the player standing still in the open with the trigger down, which is
+the one posture this file's own measurements say demo1 kills: 100 health and no
+armour is a corpse after six seconds of standing still in the corridor. The keys
+for the view the player *has* now go down first, so the leg is already walking
+when the turn starts, and `holdKeys()` then swaps them for the set the view the
+aim actually left behind wants -- a diff, not a release and a re-press, so a key
+both sets want is never let go and there is no gap in the walk. `route-test.mjs`
+pins the new shape: the walk starts before the turn, it is corrected after it,
+and the keys are still down when the status bar is photographed.
+
+**And the level's own top-ups were re-measured, with the answer changed.**
+`pickupRange` nudges plan *points* onto items near them, and the pass above
+measured that on demo1 it moves two points onto two `item_health_small` for 53
+units of walking the player does not need -- it is at full health when it passes
+them. The one item the route could use, `item_health_large` at `-1176 1520`,
+is 64 units off the route *line* at unit 2,770 and more than twice `pickupRange`
+from any of the plan's own points, so no nudge reached it. The plan has 37 points
+over 4,693 units -- a step is 130 units long -- and that is the gap the nudge
+could not see. `snapPickups` now also asks the question of each *step*: an item
+whose perpendicular lands in the middle of a step is inserted into the plan as a
+waypoint of its own, at the foot of the detour and at the item.
+
+Three measurements decided how that insert is guarded, and all three were the
+difference between the mechanism working and not:
+
+* **The detour is approached from its own perpendicular, not from the plan's
+  vertex.** `clearWalk` from `-1176 1520` to the vertex at `-960 1584` -- 216
+  units back up the line -- is **false** at every radius, because the two rooms
+  share a wall. From the perpendicular at `-1176 1584` it is true, body width and
+  all. The first version asked the vertex and refused the one item it was written
+  for.
+* **`pickupTurn` is not applied to an insert.** It measures a deflection from
+  the line, and every insert is a step straight off the line and back, so its
+  angle is 90 degrees by construction. Measured at 45, it refused all of them.
+  What bounds an insert is `pickupDetour` -- the round trip -- which is 128 units
+  for this item against a default of 140, set between it and the next item out
+  (the 91-unit `item_health_small` at `-384 80`, 182 of round trip, measured
+  harmful from demo1's pocket by the pass before this one).
+* **The line along the route to the foot is tested at the radius the plan's own
+  rows were built on.** The plan's step from `-960 1584` to `-1488 1584` does not
+  clear the shoulder test at any point along it, so requiring it of a part of
+  that same step would refuse the route's own ground.
+
+Measured, `pickupRange: 96` takes exactly one pickup on demo1's exit route --
+`item_health_large` at `-1176 1520 -48`, 64 units off the line at route unit
+2,887 -- and inserts two points for it, the foot of the detour on the line and
+the item itself, so the plan's 37 points become 39 and the walk is 123 units
+longer. It is 50 health, and it is now the
+default rather than a knob with no measurement behind it. The next items out are
+208 units off the line, and a 416-unit round trip through a corridor this level
+shoots down is a different route with a health item at the end of it, not a
+top-up; 96 is where the measurement puts the ceiling. Whether the player is
+still alive at unit 2,887 to take it is the trail's answer and not this
+paragraph's -- the best run of this pass died 130 units short of it -- and the
+run reports the insertions it made (`top-ups the plan was routed over`) so that
+the claim can be checked against the run rather than believed.
+
+**What still ends a run is not the fight.** The last four attempts of the
+leg-targeting run (the middle column above) are legs 18 to 25 of its fight
+record: eight firing legs with `covered 0`, the aim reported as `keys` with
+residuals of 177 and -126.83
+degrees, and the engine's own position unchanged at `-1007 208` throughout. The
+floor there is clear in five of eight directions at every body height (checked
+against the level's own BSP), so it is not a wall and not the route: the player
+cannot be turned, and a leg that cannot turn walks the bearing it happens to
+have. That is the same fault the pass before this one traced at `-427 111` --
+`face()` retiring both its turning methods on readings a dead player produces --
+and it is a `bridge.mjs` calibration problem, not a combat or a routing one. It
+cost this run four of its eight attempts, and it is the largest single thing
+still between the walk and the exit.
+
+**The level is still not finished, and the engine said so every time.** All five
+`finish` runs of this pass -- the stalled baseline, the one-life diagnostic, and
+the three with the fixes in -- ended with the engine's own answer, taken from
+its console after the walk gave up:
+
+```
+engine says the map is: demo1
+proof: ["\"mapname\" is \"demo1\""]
+result: NOT finished -- the engine is still on demo1
+```
+
+The raw reports are the run's evidence, not this file. `"mapname" is "demo2"`
+appears in none of them.
 
 ### What finishing `demo1` means
 

@@ -386,16 +386,45 @@ await legWalker._leg({
   route: { x: -696, y: 192, z: -48 },
 }, { attempt: 1, leg: 1 });
 const firstDown = legCalls.findIndex((call) => /^key:.+\+$/.test(call));
-const firstUp = legCalls.findIndex((call) => /^key:.+-$/.test(call));
 const capture = legCalls.indexOf("hud:capture");
 const fireDown = legCalls.indexOf("fire:true");
 const fireUp = legCalls.indexOf("fire:false");
+// The movement keys that are down at a point in the trace, replayed from the
+// key events themselves. This is what "the player is walking" means -- a set
+// that is non-empty -- and it is stronger than counting presses and releases,
+// which a swap of one key for another moves around without changing.
+const heldAt = (index) => {
+  const held = new Set();
+  for (const call of legCalls.slice(0, index)) {
+    const match = /^key:(.+)([+-])$/.exec(call);
+    if (!match) continue;
+    if (match[2] === "+") held.add(match[1]);
+    else held.delete(match[1]);
+  }
+  return held;
+};
 check("the trigger goes down before the turn and before any movement key",
   fireDown > 0 && fireDown < legCalls.indexOf("face:mouse") && fireDown < firstDown, legCalls);
 check("the turn onto the soldier is taken with the mouse",
   legCalls.indexOf("face:mouse") > fireDown && legCalls.indexOf("face:keys") === -1, legCalls);
-check("the walk's keys go down after the aim", firstDown > legCalls.indexOf("face:mouse"), legCalls);
-check("the status bar is photographed while the player is still walking", capture > firstDown && capture < firstUp, legCalls);
+// The walk starts *before* the turn, not after it. A leg used to take its aim
+// with nothing held, so every firing leg began with the player standing still
+// in the open with the trigger down -- the one posture this level's own
+// measurements say kills (100 health and no armour is a corpse after six
+// seconds of standing still in demo1's corridor). The keys for the view the
+// player *has* go down first and the turn is taken in motion.
+check("the walk starts before the turn, not after it",
+  firstDown > fireDown && firstDown < legCalls.indexOf("face:mouse"), legCalls);
+// ...and they are then swapped for the ones the view the aim actually left
+// behind wants, because Quake 2 moves a player along their view and a leg that
+// walked on the requested bearing after the turn landed somewhere else would
+// walk off the route.
+check("and they are swapped for the ones the aim's own view wants",
+  legCalls.slice(legCalls.indexOf("face:mouse"), capture).some((call) => /^key:.+\+$/.test(call)), legCalls);
+check("the status bar is photographed while the player is still walking",
+  capture > firstDown && heldAt(capture).size > 0, { atCapture: [...heldAt(capture)], trace: legCalls });
+check("and no movement key is still down when the leg ends",
+  heldAt(legCalls.length).size === 0, { atEnd: [...heldAt(legCalls.length)], trace: legCalls });
 check("and still firing", capture < fireUp, legCalls);
 check("nothing comes up between the read and the trigger except the walk's own keys",
   fireUp > capture && legCalls.slice(capture + 1, fireUp).every((call) => /^key:.+-$/.test(call) || call === "hud:style"), legCalls);
@@ -404,6 +433,33 @@ check("the leg's own record says which way it turned", legRecord.aimMethod === "
 check("and how close the turn landed, to a hundredth of a degree",
   legRecord.aimError === 0.01, { aimError: legRecord.aimError });
 check("a leg that fired says so", legRecord.fired === true, { fired: legRecord.fired });
+
+// ...and a leg that a key press throws inside still lifts every key it put down.
+// A press the bridge throws on can leave the write half-done -- the engine takes
+// the key and the caller is answered with an error anyway -- so a key recorded
+// as held only *after* its press returns is a key the release never lifts, and
+// the player walks into a wall for the rest of the run. Measured on a stub whose
+// `key()` throws on the way down, the release-first order left both of a firing
+// leg's movement keys held when the leg ended.
+console.log("a firing leg lifts its keys even when a press throws");
+const throwingHeld = new Set();
+const throwingStub = {
+  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+  async mouseHold(button, down) { return { held: !!down, button, buttons: down ? 1 : 0 }; },
+  async face(bearing) { return { facing: true, target: bearing, yaw: bearing, error: 0.01, rounds: 2, method: "mouse" }; },
+  async key(key, down) {
+    if (down) { throwingHeld.add(key); throw new Error("the press was taken and the caller was refused"); }
+    throwingHeld.delete(key);
+    return { key, down };
+  },
+};
+const throwingWalker = new CombatWalker(throwingStub, map, {});
+await throwingWalker._leg({
+  x: -672, y: 336, z: 14,
+  enemy: { index: 0, classname: "monster_soldier", position: { x: -672, y: 336, z: -16 }, distance: 46 },
+  route: { x: -696, y: 192, z: -48 },
+}, { attempt: 1, leg: 1 });
+check("no movement key is left down by a press that threw", throwingHeld.size === 0, [...throwingHeld]);
 
 // A failed aim is retried, and the retry has to measure again rather than
 // re-run the first attempt's arithmetic. `face()` skips its opening probe when
