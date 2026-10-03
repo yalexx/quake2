@@ -1106,10 +1106,17 @@ export class CombatWalker extends RouteWalker {
     // Down before the first turn: the leg is moving before it has turned a
     // degree, which is the whole point of this method.
     let keys = walkBearing === null ? [] : startKeys;
-    if (keys.length) await this.game.holdKeys(keys, true);
     let aimed = null;
     let turnMs = 0;
     try {
+      // The press goes inside the `try` so that the `finally` below covers it.
+      // A key-down that throws on the way out -- the bridge's own `holdKeys`
+      // catches a refused key, but a session that dies while the keys are going
+      // down does not -- would otherwise leave movement keys held with nothing
+      // left to lift them, and a key left down is a player walking into a wall
+      // for the rest of the run. Releasing keys that were never pressed costs a
+      // keyup the engine ignores.
+      if (keys.length) await this.game.holdKeys(keys, true);
       const turnedAt = Date.now();
       aimed = await this.game.face(facing, faceOptions);
       turnMs = Date.now() - turnedAt;
