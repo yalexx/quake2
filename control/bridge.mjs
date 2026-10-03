@@ -112,10 +112,6 @@ const directStateExpression = () => `(function () {
   return JSON.stringify({ read: out.read, watch: out.watch, map });
 })()`;
 
-// The key the engine's own config binds to `+use`, read out of its config file.
-// Quake 2 has no default `+use` binding -- a door opens by walking into it --
-// so on a stock config this answers null, and useHold() says so instead of
-// quietly falling back to the console. A config that binds one is honoured.
 // The engine's own key bindings, as a list of { key, command }, after the last
 // `unbindall` (the engine's config opens with one, so only the lines after it
 // count). One reader, because every question about the config is this question:
