@@ -225,8 +225,21 @@ async function finish() {
   // short attempt -- a diagnostic that stops after two deaths still says where
   // the player got to and how the fight went, and it says it in a fraction of
   // the wall clock -- while the proof itself still runs the full budget.
-  const attempts = Math.max(1, Number(process.env.QUAKE2_ATTEMPTS) || 8);
-  const deaths = Math.max(0, Number(process.env.QUAKE2_DEATHS) || attempts);
+  // Read so that an explicit zero survives. `Number(x) || fallback` throws a
+  // zero away because zero is falsy, and zero is the value this knob most needs
+  // to be able to say: "do not restart the level at all" is the one-life
+  // diagnostic, and quietly turning it into "eight" makes a run that was asked
+  // for one life report eight without saying so.
+  const askedFor = (name) => {
+    const raw = process.env[name];
+    if (raw === undefined || raw === "") return null;
+    const value = Number(raw);
+    return Number.isFinite(value) ? value : null;
+  };
+  const attemptBudget = askedFor("QUAKE2_ATTEMPTS");
+  const deathBudget = askedFor("QUAKE2_DEATHS");
+  const attempts = Math.max(1, attemptBudget === null ? 8 : attemptBudget);
+  const deaths = Math.max(0, deathBudget === null ? attempts : deathBudget);
   report("budget", { attempts, deaths });
   // The calls the walk makes before the exit: the level's own weapon and the
   // ammunition for it. `via` is inside the attempt loop, so a death that loses

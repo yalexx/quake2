@@ -409,8 +409,14 @@ export class RouteWalker {
     // a sequence of separate calls from outside -- a sequence of calls would
     // walk the exit route from the spawn with nothing but the spawn's own
     // blaster on every second attempt, and report that as the level's fault.
+    // All three coordinates, not just the two the route is walked on. A call
+    // with no height is not a call this walk can use, and `map.path()` throws
+    // `BAD_REQUEST` on a goal it cannot parse -- so a malformed entry left in
+    // the list does not degrade the walk, it ends it with an exception from
+    // inside the follower. The filter is where a bad call is supposed to stop.
     const via = Array.isArray(options.via)
-      ? options.via.filter((point) => point && Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)))
+      ? options.via.filter((point) => point &&
+        Number.isFinite(Number(point.x)) && Number.isFinite(Number(point.y)) && Number.isFinite(Number(point.z)))
       : [];
     // How close a leg walking to a call has to aim. This is the distance the
     // player really ends up at, because `goto` stops as soon as it is inside
