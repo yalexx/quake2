@@ -143,6 +143,18 @@ async function finish() {
     const closest = trail.reduce((best, point) => (point.distance < best.distance ? point : best));
     report("furthest position reached", { x: Math.round(closest.x), y: Math.round(closest.y), z: Math.round(closest.z), short: Math.round(closest.distance) });
     report("positions the engine reported", trail.length);
+    // Every one of them, in the order the engine gave them. "Where it stopped"
+    // is an argument about a run; this is the run's own record of where it was,
+    // leg by leg, and a stall is what a run of readings that do not move looks
+    // like. The position is the eye, as the engine reports it (see
+    // EYE_ABOVE_FEET in control/walker.mjs); `short` is the ground distance from
+    // that reading to the exit's aim point.
+    report("positions per leg (attempt, leg, x y z, units short of the exit)");
+    for (const point of trail) {
+      const leg = point.leg === undefined ? "" : " leg " + point.leg;
+      report("  a" + point.attempt + leg + "  " + Math.round(point.x) + " " + Math.round(point.y) + " " + Math.round(point.z) +
+        "  short " + Math.round(point.distance));
+    }
   }
   // And the walker's own last words, which are what explains a run that did not
   // finish: every death it restarted, every leg it re-planned, and what stopped

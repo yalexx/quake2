@@ -427,6 +427,12 @@ class CdpSession {
 const PROBE_SETTLE_MS = 150;
 // Face() stops when the bearing is this close, in degrees.
 const FACE_TOLERANCE_DEGREES = 4;
+// How many turns in a row may come back as nothing before a method is retired.
+// More than one, because a single miss is what a dead player looks like -- and
+// what a key hold too short to land on a frame looks like (see #turnBy); fewer
+// than many, because a method that is really gone should not keep costing a
+// round of every turn for the whole run.
+const TURN_MISSES_BEFORE_RETIRING = 3;
 // Quake 2's own defaults: sensitivity 3 against m_yaw 0.022 is about a
 // fifteenth of a degree per mouse count. Only ever a starting guess -- face()
 // measures the real ratio on its first successful turn and uses that instead.
@@ -497,12 +503,15 @@ export class QuakeControl {
     this.attacking = false;
     // What face() has learned about turning: how far one mouse count turns the
     // player, how fast the arrow keys turn, and whether each works at all.
-    // null means "not measured yet".
+    // null means "not measured yet". `misses` counts consecutive turns that
+    // came back as no turn at all, per method, because one of those is not
+    // evidence of anything -- see #learnTurn.
     this.turnCalibration = {
       mouseDegreesPerUnit: this.#optionsDegreesPerUnit(options),
       keyDegreesPerMs: null,
       mouseWorks: null,
       keysWork: null,
+      misses: { keys: 0, mouse: 0 },
     };
   }
 
@@ -1024,6 +1033,16 @@ export class QuakeControl {
       return { method: "keys", amount: Math.sign(wanted) * ms * rate, ms: Math.round(ms), key };
     }
     if (mode === "keys" || this.turnCalibration.mouseWorks === false) {
+      // Both methods are believed dead. A retired method is never tried again,
+      // so believing that is believing the player cannot turn for the rest of
+      // the run -- and a player who cannot turn can only ever walk the bearing
+      // they happen to have, which is what the legs around demo1's pocket look
+      // like. So the arrow keys are put back on probation: this round answers
+      // "none", and the next one tries them, which costs a short key hold.
+      if (mode !== "keys" && this.turnCalibration.keysWork === false) {
+        this.turnCalibration.keysWork = null;
+        this.turnCalibration.misses = { keys: 0, mouse: 0 };
+      }
       return { method: "none", message: "neither the arrow keys nor the mouse turned the player (the game may be paused, dead, or in a menu)" };
     }
     const perUnit = this.#mouseDegreesPerUnit() === null ? DEFAULT_DEGREES_PER_MOUSE_UNIT : this.#mouseDegreesPerUnit();
@@ -1050,10 +1069,31 @@ export class QuakeControl {
     // one. Learning is safe from either size -- the ratio windows below throw
     // away a measurement that is not physically possible.
     if (Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4 && Math.abs(attempted.amount) >= FACE_TOLERANCE_DEGREES) {
-      if (attempted.method === "mouse" && this.turnCalibration.mouseWorks !== false) this.turnCalibration.mouseWorks = false;
-      if (attempted.method === "keys" && this.turnCalibration.keysWork !== false) this.turnCalibration.keysWork = false;
+      // One miss is not evidence that the method is dead. A turn that comes
+      // back as nothing is the *expected* reading whenever the player is not in
+      // a state to be turned -- and one of those states is routine on this
+      // level: the death camera holds the view, so every key and every mouse
+      // count does nothing while it is up, and a player who walks into demo1's
+      // soldiers dies several times a run. Retiring a method on a single miss
+      // therefore retired *both* of them, one death apart, and face() then
+      // answered NO_TURN without sending anything at all for the rest of the
+      // run -- measured, and the reason a walk can be seen covering 0 units on
+      // every leg from -427 111 while looking at a valid route out of it: the
+      // view had stopped turning, so `+forward` pushed the player at the same
+      // bearing into the same wall on every round of every attempt.
+      const misses = this.turnCalibration.misses || (this.turnCalibration.misses = { keys: 0, mouse: 0 });
+      misses[attempted.method] = (misses[attempted.method] || 0) + 1;
+      if (misses[attempted.method] >= TURN_MISSES_BEFORE_RETIRING) {
+        if (attempted.method === "mouse" && this.turnCalibration.mouseWorks !== false) this.turnCalibration.mouseWorks = false;
+        if (attempted.method === "keys" && this.turnCalibration.keysWork !== false) this.turnCalibration.keysWork = false;
+      }
       return;
     }
+    // A turn that landed clears the method's misses: the counter is about a
+    // method that has stopped working, not about a method that once hiccuped.
+    // It is also how a method retired in error gets back into use -- see the
+    // retry in #turnBy.
+    if (this.turnCalibration.misses) this.turnCalibration.misses[attempted.method] = 0;
     if (attempted.method === "mouse" && attempted.units) {
       const perUnit = Math.abs(achieved / attempted.units);
       // A sanity window: a value outside it means the turn was observed while
@@ -1304,6 +1344,21 @@ export class QuakeControl {
 
     while (rounds < maxRounds) {
       const position = last.position;
+      // A dead player cannot be turned and cannot be walked, and saying so is
+      // worth more than the rounds it would cost to find out: Quake 2 hands the
+      // view to the death camera, so every movement key does nothing and every
+      // turn comes back as no turn at all -- which is exactly the reading that
+      // teaches face() that the arrow keys and the mouse both do not work, and
+      // leaves the walk unable to turn for the rest of the run. demo1 kills, so
+      // this is a routine state, not an error.
+      if (last.dead) {
+        return {
+          reached: false, reason: "DEAD", target: point, tolerance, zTolerance,
+          position, distance: horizontalDistance(position, point), rounds,
+          travelled: horizontalDistance(startPosition, position), trail: trail.slice(-16),
+          message: "the player is dead: the death camera holds the view and the movement keys do nothing",
+        };
+      }
       const horizontal = horizontalDistance(position, point);
       if (horizontal <= tolerance && Math.abs(position.z - point.z) <= zTolerance) {
         return {
