@@ -2554,7 +2554,19 @@ export class QuakeControl {
         // capture is taken on the same socket.
         const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
         const params = { format: "png" };
-        if (rect) params.clip = rect;
+        // Same rule as the host-page branch below: the caller's clip is in the
+        // game frame's pixels and the capture is of the page that draws it.
+        if (rect) {
+          params.clip = options.clip
+            ? {
+              x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+              y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+              width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+              height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+              scale: options.clip.scale || 1,
+            }
+            : rect;
+        } else if (options.clip) params.clip = options.clip;
         const { data } = await game.session.send("Page.captureScreenshot", params);
         return Buffer.from(data, "base64");
       }
@@ -2572,7 +2584,24 @@ export class QuakeControl {
         });
         const rect = JSON.parse(measured.result ? measured.result.value : "null");
         if (!rect) throw new GameNotRunningError("the game's frame is no longer in the top-level page");
-        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip: rect });
+        // A caller's clip is in the *game frame's* own viewport pixels, and this
+        // capture is of the page that draws the frame -- so the clip has to ride
+        // on the frame's box here. Dropping it is not a small thing: it returns
+        // the whole desktop instead of the strip that was asked for, and the
+        // reader of that strip then reads whatever the desktop happens to be
+        // showing. That is exactly how `hudShot()`'s status-bar read came back
+        // empty on every firing leg of a `finish` run while the picture it kept
+        // plainly showed a health number.
+        const clip = options.clip
+          ? {
+            x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+            y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+            width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+            height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+            scale: options.clip.scale || 1,
+          }
+          : rect;
+        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip });
         return Buffer.from(data, "base64");
       } finally {
         session.close();
