@@ -881,6 +881,14 @@ fighting and where that soldier stood. `finish` prints the series, and the
 crops are kept, so a number that is wrong is visible in the picture it came
 from.
 
+Point `QUAKE2_HUD_DIR` at a directory and the crops are kept as well, one per
+firing leg, named `leg-a<attempt>l<leg>-<n>.png`, so every number in the report
+can be checked against the picture it came from:
+
+```
+QUAKE2_HUD_DIR=./hud-crops node scripts/demo1-run.mjs finish
+```
+
 That is what turned "the walk dies in the corridor" into a mechanism. Run 5 of
 the instrument, firing at `monster_soldier` with the aim landing within 0 to 3
 degrees on every leg it took:
@@ -993,18 +1001,20 @@ the **restart budget** (`DEATHS`), each having lived through **nine level
 restarts**: the player is killed, the level puts them back at the spawn, and the
 walk covers the same ground again. The deepest, run 9, fired on 18 legs and the
 turn landed on the soldier on 14 of them; it took the player from `128 -320 32`
-to `-960 492`, through seven consecutive firing legs holding roughly 41 health,
-and then lost four legs in a row with the health at 5. What stands between this
-build and `"mapname" is "demo2"` is that the player is outgunned, not
-out-manoeuvred: the per-leg record says the aim lands (0 to 6 degrees, at 95 to
-365 units) and the ground is covered (the surviving legs walk 80 to 190 units
-each), and a firing leg still costs 24 to 72 health, because the blaster is
-answering one soldier while three to five shoot back.
+to `-960 492`, through seven firing legs in a row without dying (the last four
+of them holding 41 health), and then lost four legs in a row dying on each. What
+stands between this build and `"mapname" is "demo2"` is that the player is
+outgunned, not out-manoeuvred. The per-leg record says so directly: the aim
+lands (0 to 6 degrees, at 95 to 365 units), the surviving legs cover ground (38
+to 186 units each), and on the legs where two health readings are next to each
+other the cost is **23 to 72 health per leg** -- more than one soldier's blaster
+can do in half a second, which is the arithmetic of several firing at once while
+the walker answers one of them.
 
 **What the level's monsters do to a player, measured.** Two live experiments
 on demo1 in the corridor, both with 100 health and no armour, both read off the
-HUD in a screenshot ([Reading the HUD](#reading-the-hud-controlhudmjs) is the
-reader; `position()` cannot report health):
+HUD in a screenshot (`position()` cannot report health -- see
+[Reading the HUD](#reading-the-hud-controlhudmjs)):
 
 **What the level's monsters do to a player, measured.** Two live experiments
 on demo1 in the corridor, both with 100 health and no armour, both read off the
