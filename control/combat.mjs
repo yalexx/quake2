@@ -129,6 +129,19 @@ export const ENGAGE_DEFAULTS = {
   // points ahead keeps the leg on the path the planner actually cleared.
   walkAhead: 4,
   walkReach: 240,
+  // Half the player's 32x32 box, for the shoulder test a leg's line is held to.
+  // A line clear down its centre is not a line a body fits down: the plan's way
+  // past demo1's pocket `func_wall` leaves 7 units of margin, which a point
+  // sample calls open and a player 32 units across calls a wall. The walker tries this radius
+  // first and falls back to the centre line, so a corridor genuinely narrower
+  // than the player is still walked.
+  bodyRadius: 16,
+  // How far a route point has to be from the player before walking to it is
+  // worth a leg. This is the bridge's own `goto` tolerance (48): a target
+  // inside it comes back `reached` with no step taken, so a leg aimed there is
+  // a leg spent standing still -- measured, seven in a row, and the attempt was
+  // over with the player at the same (-99,-84,46) it started from.
+  minLegReach: 48,
   // How far the player has to move away from an engagement before the count
   // against that soldier starts again. A level restart puts the player back at
   // the spawn, which is this far from anywhere they died, so a fresh attempt
@@ -216,6 +229,42 @@ export function levelShotReaches(map, eye, origin, options = {}) {
   return true;
 }
 
+// The four heights a standing player occupies above the floor they are on:
+// knees, waist, chest, top of the head. Every clearance test in this module and
+// in walker.mjs samples the same four, so that "the player fits" means one thing.
+const BODY_LIFTS = [8, 24, 40, 52];
+
+// The corners of a 32x32 player's footprint, as multipliers of a half-width.
+// Corners and not a circle, because a doorway is square: a rounded test closes
+// a gap the player walks through.
+const SHOULDERS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
+
+// Which floor a player crossing at (x, y) would be standing on, looked for from
+// `z` outwards: the same height first, then a step up or a step down, whichever
+// is nearer. Returns null where there is no floor a player fits on within reach.
+//
+// This is what makes a walk a *walk*. The old clearWalk sampled the straight
+// chord between two route points and lifted the body off that, which is only
+// the floor while the floor is level: the route's own second step drops 52
+// units in the 24 it takes -- from -120 -72 4 down to -144 -72 -48, just west
+// of demo1's start room -- and halfway along that chord the sample is *inside*
+// the floor it is supposed to be standing on. Every point on the plan past the
+// drop was therefore rejected, every leg collapsed to the nearest next point,
+// and the nearest next point is one `goto` answers `reached` to without moving
+// -- which is how a walk ends up standing still for a whole attempt and then
+// reporting "no progress".
+export function floorNear(map, x, y, z, options = {}) {
+  if (!map || typeof map.standable !== "function") return null;
+  const up = numberOr(options.maxStepUp, 45);
+  const down = numberOr(options.maxDrop, 300);
+  const step = Math.max(1, numberOr(options.probeStep, 4));
+  for (let reach = 0; reach <= Math.max(up, down); reach += step) {
+    if (reach <= up && map.standable(x, y, z + reach)) return z + reach;
+    if (reach <= down && reach > 0 && map.standable(x, y, z - reach)) return z - reach;
+  }
+  return null;
+}
+
 // Can a standing player walk a straight line between two floors?
 //
 // The same four heights walker.mjs samples -- knees, waist, chest, head, above
@@ -224,17 +273,37 @@ export function levelShotReaches(map, eye, origin, options = {}) {
 // over it: a line check that walks in 16-unit strides reports the way clear and
 // sends the player into the wall, which is how a walk ends up stopped at
 // -427 111 with a valid route to the exit in hand.
+//
+// `options.radius` is the half-width to insist on: 0 keeps the centre-line test
+// the planner's own rows are built on, and 16 is the player's actual 32 units of
+// shoulder. A line that is clear down its centre is not a line a body fits down
+// -- the plan's way past that same `func_wall` leaves 7 units of margin -- so the
+// caller can ask for the wider test and fall back to the narrower one.
 export function clearWalk(map, from, to, options = {}) {
   if (!map || typeof map.isSolid !== "function") return true;
   if (!from || !to) return false;
+  const radius = Math.max(0, numberOr(options.radius, 0));
   const span = Math.hypot(to.x - from.x, to.y - from.y);
   const steps = Math.max(2, Math.ceil(span / numberOr(options.step, 10)));
   for (let index = 1; index < steps; index++) {
     const t = index / steps;
     const x = from.x + (to.x - from.x) * t;
     const y = from.y + (to.y - from.y) * t;
-    const z = from.z + (to.z - from.z) * t;
-    for (const lift of [8, 24, 40, 52]) if (map.isSolid(x, y, z + lift)) return false;
+    const chord = from.z + (to.z - from.z) * t;
+    const floor = floorNear(map, x, y, chord, options);
+    if (floor === null) {
+      // No floor within a step of the line: a gap, a shaft, the middle of a
+      // fall. This is the centre-line test the function used to be, kept so
+      // that nothing which was walkable before stops being walkable now.
+      for (const lift of BODY_LIFTS) if (map.isSolid(x, y, chord + lift)) return false;
+      continue;
+    }
+    for (const lift of BODY_LIFTS) {
+      if (map.isSolid(x, y, floor + lift)) return false;
+      for (const [ox, oy] of SHOULDERS) {
+        if (radius && map.isSolid(x + ox * radius, y + oy * radius, floor + lift)) return false;
+      }
+    }
   }
   return true;
 }
@@ -347,21 +416,51 @@ export class CombatWalker extends RouteWalker {
     // The player's feet, because a route point is a floor and the engine reports
     // the eye (see EYE_ABOVE_FEET).
     const feet = { x: position.x, y: position.y, z: position.z - EYE_ABOVE_FEET };
+    // The point the player is *nearest to* is where the plan says they are, and
+    // that is not the same as where they have got to. The planner snaps the
+    // start of a route onto the nearest floor, so a walk that stops 111 units
+    // short of the plan's own first point still reads as "nearest to point 1" --
+    // which is exactly what demo1's pocket does, from -427 111. Aiming only at
+    // points *after* the nearest one then aims at point 2, whose straight line
+    // crosses the 16-unit `func_wall` the pocket is walled by, and the leg stops
+    // dead against it twice and the attempt is abandoned -- measured, on two
+    // consecutive attempts, with the plan's own way out sitting at point 1.
+    //
+    // So the nearest point is a target too, whenever the player has not
+    // actually arrived at it: `minLegReach` is `goto`'s own arrival radius, and
+    // inside it the walker is standing on the point it is nearest to.
+    const short = Math.hypot(points[nearest].x - position.x, points[nearest].y - position.y) <= this.engage.minLegReach;
+    const stop = short ? nearest + 1 : nearest;
     // A point that has to be jumped to is never walked past: the jump is aimed
     // and timed one point at a time (see walker.mjs), so the leg stops there.
-    for (let index = nearest + 1; index <= Math.min(nearest + this.engage.walkAhead, points.length - 1); index++) {
+    const last = Math.min(nearest + this.engage.walkAhead, points.length - 1);
+    for (let index = stop; index <= last; index++) {
       if (points[index].jump) return points[index];
     }
     // Farthest first, and back towards the player until one of them can be
     // *walked to* and not merely seen: a plan point across a wall is a leg that
     // ends against it, and a walk that ends against a wall is a walk that stops
     // still in the open, which is the one thing demo1 punishes.
-    for (let index = Math.min(nearest + this.engage.walkAhead, points.length - 1); index > nearest; index--) {
-      const candidate = points[index];
-      if (Math.hypot(candidate.x - position.x, candidate.y - position.y) > this.engage.walkReach) continue;
-      if (clearWalk(this.map, feet, candidate, this.engage)) return candidate;
+    const within = [];
+    for (let index = last; index >= stop; index--) {
+      if (Math.hypot(points[index].x - position.x, points[index].y - position.y) > this.engage.walkReach) continue;
+      within.push(points[index]);
     }
-    return points[Math.min(nearest + 1, points.length - 1)];
+    // The player's own shoulders first, the plan's centre line second: a level
+    // that really is narrower than a player should still be walked.
+    for (const radius of [this.engage.bodyRadius, 0]) {
+      for (const candidate of within) {
+        if (clearWalk(this.map, feet, candidate, { ...this.engage, radius })) return candidate;
+      }
+    }
+    // Nothing on the plan could be walked to at all. Hand back the nearest point
+    // that is still worth a leg -- and never one the player is already inside
+    // `goto`'s own tolerance of, because that comes back `reached` without a
+    // step taken and the leg is spent standing still.
+    for (let index = stop; index <= last; index++) {
+      if (Math.hypot(points[index].x - position.x, points[index].y - position.y) > this.engage.minLegReach) return points[index];
+    }
+    return points[Math.min(stop, points.length - 1)];
   }
 
   // The seam: aim at a soldier when one is standing where the route goes, and at

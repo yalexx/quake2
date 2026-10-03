@@ -221,8 +221,10 @@ check("the turn is read the short way round the compass", movementKeys(350, 10).
 // Clear air is not the same as a walkable floor, and demo1's dead-end pocket is
 // the proof: the wall that closes it is a brush 16 units thick, so a line check
 // that strides in 16-unit steps reports the way clear and walks the player into
-// it. Three consecutive `finish` runs ended stopped at -427 111 for exactly
-// this; clearWalk() is the check that made it walkable again.
+// it. clearWalk() strides at 10 and is what keeps a leg from aiming through it.
+// (A leg that still ends at -427 111 is a different fault -- the view having
+// stopped turning, see the section on `face()` in the README -- and the checks
+// under "a leg that covers no ground" below are about that one.)
 check("the wall across demo1's pocket is not walkable through",
   !clearWalk(map, { x: -427, y: 111, z: -47 }, { x: -480, y: 24, z: -48 }));
 check("but the way the plan actually goes out of it is",
@@ -287,6 +289,82 @@ check("with a soldier on the route the leg aims at the soldier", !!(aimed && aim
 check("and it still carries the route point it displaced", !!(aimed && aimed.route && aimed.route.x !== undefined), aimed && aimed.route);
 check("the aim is level with the player's own eye", Math.abs(aimed.z - corridorEye.z) < 1, aimed.z);
 check("the soldier is counted against its own budget", fighter.engagements.size === 1, fighter.engagements.size);
+
+// Three faults of the same shape -- a leg that covers 0 units -- each measured
+// on a traced `finish` run, and none of them a wall.
+console.log("a leg that covers no ground");
+
+// The chord between two route points is not the floor between them: the route's
+// own step from -120 -72 4 to -144 -72 -48 drops 52 units in the 24 it takes,
+// and sampling the chord halfway down puts the sample inside the floor it is
+// supposed to be standing on -- which rejected every point past the drop and
+// collapsed every leg to the nearest next one. These two points are that step.
+check("clearWalk follows the floor down the route's own 52-unit step",
+  clearWalk(map, { x: -120, y: -72, z: 4 }, { x: -144, y: -72, z: -48 }));
+// ...and the longer chord from the start room that was rejected with it.
+check("and down the longer chord from the start room to the west corridor",
+  clearWalk(map, { x: -99, y: -84, z: 0 }, { x: -216, y: -72, z: -48 }));
+
+// The planner snaps a route's start onto the nearest floor, so a walk stopped
+// 111 units short of the plan's first point still reads as "nearest to point 1".
+// Aiming only *after* that point aims at point 2, through the 16-unit func_wall
+// -- which is what the traced runs did from -427 111, twice an attempt.
+const pocketOptions = { maxStepUp: 45, maxDrop: 300, maxJump: 160, maxJumpDown: 300, cell: 24, step: 4 };
+const pocketPlan = map.path({ x: -429, y: 10, z: 6 }, map.exitPoint().aim, pocketOptions);
+const pocketWalker = new CombatWalker({}, map, {});
+const pocketTarget = pocketWalker._legTarget({ x: -427, y: 111, z: -1 }, pocketPlan.points);
+check("a walk stopped in demo1's pocket aims at the plan's own way out",
+  Math.hypot(pocketTarget.x + 456, pocketTarget.y - 24) < 8, pocketTarget);
+check("and not at the point beyond it, through the 16-unit wall",
+  Math.hypot(pocketTarget.x + 480, pocketTarget.y - 24) > 8, pocketTarget);
+
+// A player who never moves must not be walked for a whole attempt. The stub's
+// goto() answers `reached` and leaves the position alone, which is exactly what
+// the bridge does for a target it is already inside its own tolerance of -- and
+// the old walker read that as arrival, cleared its stall counter, and spent all
+// eight legs of the attempt standing on the same 24 units.
+const pinned = {
+  gotos: 0,
+  async position() { return { probed: true, position: { x: -427, y: 111, z: -1 }, angles: { pitch: 0, yaw: 135, roll: 0 }, map: "demo1", dead: false }; },
+  async goto(point) { this.gotos++; return { reached: true, reason: "reached", target: point, position: { x: -427, y: 111, z: -1 }, rounds: 0, travelled: 0, trail: [] }; },
+  async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+  async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
+  async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+  async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  async attackHold() { return { held: true }; },
+  async useHold() { return { held: true }; },
+};
+const stander = new CombatWalker(pinned, map, {});
+const standerResult = await stander.follow(map.exitPoint().aim, { attempts: 3, maxLegs: 8, backOff: false });
+check("a leg that does not move the player is not progress", standerResult.reached === false, standerResult.reason);
+check("so the walk re-plans instead of spending the attempt standing still", pinned.gotos < 12, pinned.gotos);
+check("and it says so rather than reporting an arrival", standerResult.log.some((entry) => /no progress/.test(entry.message)), standerResult.log.map((e) => e.message));
+
+// A level restart is not a plan that failed. This stub's player is dead on
+// every read except the one right after a restart -- which is the shape of a
+// `finish` run on demo1, where six and seven of eight attempts went on restarts
+// and the walk was over in the corridor with its plan unspent.
+const dyingStub = {
+  respawns: 0,
+  alive: 1,
+  async position() {
+    if (this.alive) { this.alive = 0; return { probed: true, position: { x: 128, y: -319, z: 46 }, angles: { pitch: 0, yaw: 135, roll: 0 }, map: "demo1", dead: false }; }
+    return { probed: true, position: { x: 128, y: -319, z: 46 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo1", dead: true };
+  },
+  async respawn() { this.respawns++; this.alive = 1; return { respawned: true, how: "map" }; },
+  async goto(point) { return { reached: true, reason: "reached", target: point, position: { x: 128, y: -319, z: 46 }, rounds: 0, travelled: 0, trail: [] }; },
+  async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+  async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
+  async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+  async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  async attackHold() { return { held: true }; },
+  async useHold() { return { held: true }; },
+};
+const restarter = new CombatWalker(dyingStub, map, {});
+const restartResult = await restarter.follow(map.exitPoint().aim, { attempts: 2, deaths: 3, backOff: false });
+check("more restarts than attempts are lived through", dyingStub.respawns === 3, { respawns: dyingStub.respawns, attempts: 2 });
+check("and the walk stops on its own restart budget, not on its attempts",
+  restartResult.reason === "DEATHS", restartResult.reason);
 
 console.log("errors are named, never empty");
 let threw = null;

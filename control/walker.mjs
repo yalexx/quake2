@@ -15,11 +15,16 @@
 //
 //   * a leg that stops next to a brush entity that moves -- a door, a button --
 //     gets the use key held, and the leg is retried. That is what opens a door.
-//   * a leg that stops anywhere else gets the route *re-planned from where the
-//     player actually is*. The first route was drawn from the spawn; a route
-//     drawn from a position 300 units into the level sees rooms the first one
-//     did not, and this is also how a follower recovers from a drift the grid
-//     route did not intend.
+//   * a leg that stops anywhere else gets a step taken *away* from the point it
+//     was aiming at, and then the route *re-planned from where the player
+//     actually is* once the attempt gives up on this one. The first route was
+//     drawn from the spawn; a route drawn from a position 300 units into the
+//     level sees rooms the first one did not, and this is also how a follower
+//     recovers from a drift the grid route did not intend. The step back is not
+//     decoration: a follower pressed square against something the grid does not
+//     know about draws the same line again from the same spot and walks it at
+//     the same view, which is the same wall at the same angle on every round of
+//     every attempt.
 //   * a leg that keeps failing gets a sideways step and a new plan, because a
 //     follower pressed square against a wall never learns which way is open.
 //   * a leg whose next point is flagged `jump` gets the space bar: a gap too
@@ -285,6 +290,18 @@ export class RouteWalker {
       maxRounds: options.maxRounds === undefined ? 40 : options.maxRounds,
     };
     const trail = [];
+    // How many level restarts this walk will live through. A death is not a
+    // plan that failed: the level puts the player back at the spawn and the
+    // route out of it is the route that already worked, so charging the death
+    // to the attempt budget -- which is what this used to do -- makes the walk
+    // only as long as the level is survivable. demo1 is defended by 33 monsters
+    // and is not: measured, six and seven of the eight attempts in two `finish`
+    // runs went on restarts, and the walk was over in the corridor with the
+    // level's own plan unspent. The restarts get their own budget instead --
+    // `attempts` still bounds the re-plans, so a walk that cannot get anywhere
+    // still stops.
+    const deathsAllowed = Math.max(0, options.deaths === undefined ? attempts : options.deaths);
+    let deaths = 0;
     let attempt = 0;
     let bestDistance = Infinity;
     let position = null;
@@ -313,6 +330,14 @@ export class RouteWalker {
       // the spawn.
       if (current.dead && options.respawn !== false && this.game.respawn) {
         this.#note("the player is dead; restarting the level");
+        deaths++;
+        if (deaths > deathsAllowed) {
+          this.#note("the level has restarted the player too many times", { deaths, allowed: deathsAllowed });
+          return { reached: false, reason: "DEATHS", attempts: attempt, deaths, position: current.position, trail, log: this.log, plan: lastPlan, blockers: (lastPlan && lastPlan.blockers) || [] };
+        }
+        // The restart does not spend an attempt: the plan was not the thing
+        // that failed, and the next one is the same plan from the same spawn.
+        attempt--;
         const back = await this.game.respawn({ expectMap: this.levelName });
         this.#note(back.respawned ? "back in the level" : "could not get back into the level", { how: back.how, reason: back.reason });
         if (back.reason === "LEVEL_CHANGED") {
@@ -396,8 +421,33 @@ export class RouteWalker {
         legs++;
         const remaining = Math.hypot(at.x - goal.x, at.y - goal.y);
         trail.push({ x: at.x, y: at.y, z: at.z, attempt, leg: legs, distance: remaining });
-        const arrived = Math.hypot(at.x - target.x, at.y - target.y) <= Math.max(48, legOptions.tolerance * 2);
-        if (arrived || remaining < bestDistance - 1) {
+        // What the leg actually did, measured from the engine's own positions:
+        // the ground it covered, and whether it closed on the point it was
+        // aimed at. Both are needed, and neither is the same question as "is
+        // the player closer to the exit".
+        //
+        // `moved` is the first of them, because `goto` reports `reached` for a
+        // target it is already inside its own tolerance of *without taking a
+        // step*. A leg aimed at a point 24 units away comes back
+        // `reached, rounds: 0, 0 units covered`, and the walker used to read
+        // that as arrival and clear its stall counter on it -- measured, seven
+        // consecutive legs like that against (-120,-72,4) from (-99,-84,46),
+        // and the attempt was over without the player having moved at all.
+        //
+        // `advanced` is the second, because a route out of a pocket goes
+        // *farther* from the goal before it goes closer. The way out of
+        // demo1's dead-end pocket at -427 111 is 100 units of walking away
+        // from the exit before the route turns back towards it, and judged by
+        // `remaining` alone -- which is what the walker used to do -- every one
+        // of those legs is "no progress": two of them abandon the attempt, the
+        // re-plan from the same spot draws the same dog-leg, and four
+        // consecutive `finish` runs ended there with the attempt budget spent
+        // and a valid 35-point route to the exit in the walker's own hand.
+        const moved = Math.hypot(at.x - position.x, at.y - position.y);
+        const advanced = Math.hypot(position.x - target.x, position.y - target.y) >
+          Math.hypot(at.x - target.x, at.y - target.y) + 8;
+        const arrived = moved > 8 && Math.hypot(at.x - target.x, at.y - target.y) <= Math.max(48, legOptions.tolerance * 2);
+        if (arrived || advanced || remaining < bestDistance - 1) {
           if (remaining < bestDistance) bestDistance = remaining;
           position = at;
           stalled = 0;
@@ -434,6 +484,40 @@ export class RouteWalker {
           }
         }
         stalled++;
+        // Nothing to open, and the leg went nowhere. Re-planning from here is
+        // not enough on its own, because a follower pressed square against
+        // something the plan does not know about draws the same line again from
+        // the same spot -- and `+forward` walks that line at the view the leg
+        // already had, which is the same wall at the same angle on every round
+        // of every attempt. That is the whole of demo1's pocket: the plan's own
+        // way out sits 91 units from -427 111, and leg after leg aimed at it
+        // covered 0 units there, measured across three traced `finish` runs.
+        //
+        // So the first stalled leg backs the player *off* the point it was
+        // aimed at -- away from it, along the ground, on the bearing it would
+        // have to walk to get there -- and the leg after that aims again from
+        // somewhere the player has not already been stuck at, so the same plan
+        // is not walked into the same wall twice in a row. Measured on the run
+        // that argued for it: five back-offs, and the next leg covered 53, 67
+        // and 194 units after three of them. The sideways step the attempt
+        // already takes is kept for the case where backing off has nowhere to
+        // go either: a follower in a corner has to change both where it stands
+        // and which way it is looking.
+        const away = state && state.position ? (Math.atan2(at.y - target.y, at.x - target.x) * 180 / Math.PI + 360) % 360 : null;
+        if (stalled === 1 && away !== null && options.backOff !== false && typeof this.game.face === "function") {
+          this.#note("backing off the point that stopped the leg", { bearing: Math.round(away), from: at, target });
+          await this.game.face(away, { from: state, tolerance: 8, rounds: 4 });
+          await this.game.walk(options.backOffMs === undefined ? 400 : options.backOffMs);
+          const back = await this.game.position();
+          const landed = back && back.position ? back.position : at;
+          trail.push({ x: landed.x, y: landed.y, z: landed.z, attempt, leg: legs, distance: Math.hypot(landed.x - goal.x, landed.y - goal.y) });
+          if (Math.hypot(landed.x - at.x, landed.y - at.y) > 8) {
+            this.#note("backed off", { to: landed });
+            position = landed;
+            stalled = 0;
+            continue;
+          }
+        }
         if (stalled >= 2) {
           this.#note("no progress; planning again from here");
           break;

@@ -489,9 +489,28 @@ this box's build the arrow keys turn the player while the relative-motion deltas
 do not, even though the page receives them. (The mouse step in
 `scripts/quake-control-test.sh` proves the *events* arrive; `scripts/goto-test.mjs`
 proves what the engine then does with them.) `face()` measures the real rate on
-its first turn and uses the measurement afterwards; a method that demonstrably
-turns nothing is retired, so the next round tries the other one instead of the
-same dead turn again.
+its first turn and uses the measurement afterwards.
+
+**A method is retired after three turns in a row that came back as nothing, not
+after one.** A zero reading is not rare and it is not evidence: the engine
+applies a held key once per frame, so a hold of thirty-odd milliseconds can fall
+between two frames and do nothing at all, and a dead player turns nothing at all
+-- the death camera holds the view, so no key and no mouse count reaches the
+player's own angles. Retiring on a single zero reading therefore retired the
+arrow keys on the first hiccup and the mouse on the next attempt to turn, one
+missed frame or one death apart, and `face()` then answered `NO_TURN` without
+sending anything for the rest of the run. That is what a stalled walk looks
+like from the outside: every leg covering 0 units at the same frozen yaw while
+the level's own plan sits 91 units away, which is exactly the note four
+`finish` runs wrote at `-427 111`. A method retired in error is now put back on
+probation whenever both are believed dead, so the view can always be turned
+again.
+
+**A dead player is said so, not walked at.** `goto()` returns
+`reason: "DEAD"` at the first round rather than spending the rounds -- and the
+calibration -- on a player whose keys do nothing. `follow()` already restarts
+the level when it sees a death; this only stops the walk from paying for the
+death on the way there.
 
 **How it compares `z`.** A point from the map is the *floor* -- the level's own
 `info_player_start` for `demo1` is at `z = 32` -- and the engine reports the
@@ -600,14 +619,41 @@ and, when a leg fails, works out why and does the one thing that fixes it:
   -- which is what opens a door, and is sent as the engine command rather than as
   a key, because `+use` is what every binding points at and the key itself is the
   player's own choice;
-* a leg that stops **anywhere else** gets the route re-planned **from where the
-  player actually is**, which is how a follower recovers from a drift the grid
-  route did not intend;
+* a leg that stops **anywhere else** is first **backed off** -- the player is
+  turned away from the point the leg was aiming at and walked 400 ms on that
+  bearing -- and then the route is re-planned **from where the player actually
+  is**, which is how a follower recovers from a drift the grid route did not
+  intend. Re-planning on its own is not enough: a follower pressed square against
+  something the grid does not know about draws the same line again from the same
+  spot and walks it at the same view, which is the same wall at the same angle on
+  every round of every attempt;
 * a waypoint that will not come is **skipped** once (a grid point can land on a
   crate the grid calls a floor); two in a row is a wall and the plan is rebuilt;
 * a plan that fails twice gets a **sideways step**, because a follower pressed
   square against a wall never learns which way is open;
-* a waypoint flagged `jump` gets the **space bar**, run at rather than aimed.
+* a waypoint flagged `jump` gets the **space bar**, run at rather than aimed;
+* a level that **restarts the player** costs a restart, not an attempt: the plan
+  did not fail, the player died, and the next attempt is the same plan from the
+  same spawn. demo1 kills -- six and seven of the eight attempts in two measured
+  `finish` runs went on restarts, which is most of the walk's budget spent on
+  ground it had already covered.
+
+**What counts as progress**, and it takes all three readings. A leg is progress
+when it *moved the player* **and** either arrived at the point it aimed at,
+closed on that point, or came out closer to the goal:
+
+* **moved.** `goto()` answers `reached` for a target it is already inside its own
+  tolerance of, *without taking a step*, so arrival on its own is not evidence of
+  anything. Measured: seven consecutive legs aimed at `(-120,-72,4)` from
+  `(-99,-84,46)`, each one `reached, rounds: 0`, 0 units covered, and the walker
+  clearing its stall counter on every one of them until the attempt was gone.
+* **closed on the point**, not only on the goal. The way out of demo1's pocket at
+  `-427 111` is 100 units of walking *away* from the exit before the route turns
+  back towards it. Judged on distance to the goal alone, every one of those legs
+  is "no progress": two of them abandon the attempt, the re-plan from the same
+  spot draws the same dog-leg, and four consecutive `finish` runs ended there
+  with the attempt budget spent and a valid 35-point route to the exit in the
+  walker's own hand.
 
 It gives up honestly: `reached: false` with the position the player really
 stopped at, how far short it was, the plan's own `blockers` for that spot, and a
@@ -715,14 +761,51 @@ than taste:
   runs ended with the walker's own note naming that position and the `func_wall`s
   it was standing against, while the planner was holding a route the whole time
   -- `route.mjs` plans 35 points and 4,067 units to the exit from that pocket, and
-  29 points and 3,511 units from `-703 278`, where the run that got furthest of
-  all had stopped 1,660 units short. `CombatWalker` aims every leg at a route point a few steps ahead on
+  29 points and 3,511 units from `-703 278`, which is where an earlier run had
+  stopped 1,660 units short. `CombatWalker` aims every leg at a route point a few steps ahead on
   the plan instead (`walkAhead`, `walkReach`), and checks the line to it with
-  `clearWalk()` -- the four body heights `walker.mjs` samples, strided at 10
-  units rather than 16, because the brush that walls that pocket off is 16 units
-  thick in x and a 16-unit stride steps straight over it. A point with no
-  walkable line to it is skipped and the next one back is tried, so a leg aims
-  at something the player can actually walk to rather than merely see.
+  `clearWalk()`, whose step is 10 units rather than 16 because the brush that
+  walls that pocket off is 16 units thick in x and a 16-unit stride steps
+  straight over it. A point with no walkable line to it is skipped and the next
+  one back is tried, so a leg aims at something the player can actually walk to
+  rather than merely see.
+* **`clearWalk()` has to follow the floor, and the point it hands back has to be
+  one worth walking to.** Both were measured to be wrong in ways that look
+  identical from outside -- a leg that covers 0 units:
+
+  * Sampling the straight *chord* between two route points and lifting the body
+    off it is only right while the floor is level. The route's own second step
+    drops 52 units in the 24 it takes -- from `-120 -72 4` down to
+    `-144 -72 -48`, just west of the start room -- and halfway along that chord
+    the sample is *inside* the floor it is supposed
+    to be standing on. Every point past the drop was rejected, every leg
+    collapsed to the nearest next point, and the nearest next point is one
+    `goto()` answers `reached` to without moving. The line is now sampled on the
+    **floor**, looked for from the chord's own height outwards (a step up, a step
+    down, whichever is nearer), with the old chord test kept as the fallback for
+    a sample with no floor under it -- a gap, a shaft -- so nothing that was
+    walkable stopped being walkable.
+  * The leg may now aim at **the point the player is nearest to** as well as the
+    ones after it, whenever the player has not actually arrived at it. The
+    planner snaps the start of a route onto the nearest floor, so a walk that
+    stops 111 units short of the plan's own first point still reads as "nearest
+    to point 1" -- which is exactly what the pocket does. Aiming only *after*
+    that point aims at point 2, whose straight line crosses the 16-unit
+    `func_wall`, and the leg stops dead against it twice and the attempt is
+    abandoned. Measured on the plan that did it (43 points, made from
+    `-429 10 6`): the leg target was `(-480,24,-48)`, through the wall; with the
+    nearest point allowed as a target it is `(-456,24,-48)`, the plan's own way
+    out, 92 units away and walkable.
+
+  A point the player's own 32 units of shoulder fit to is preferred over one the
+  centre line merely clears, and that preference is a tie-break rather than a
+  policy: measured against the planner's own 37-point route, only **13 of the
+  138** legs in its four-point lookahead are clear with a 16-unit half-width --
+  because the planner draws its route with no player width at all, and 26 of its
+  36 consecutive point-to-point steps are inside 16 units of something. So the
+  shoulder test mostly falls through to the centre line, which is why the
+  fallback exists and why it is the fallback: a level genuinely narrower than a
+  player is still walked.
 
 `CombatWalker.follow()` adds a `combat` summary to the walker's result --
 `enemiesInLevel`, `firingLegs`, and a `fights` array with each firing leg's
@@ -753,13 +836,49 @@ from the spawn to the trigger is **37 points and 4,693 units** (`node
 scripts/demo1-run.mjs plan`), and it opens two doors on the way in: `func_door
 *31`, which `func_button *34` fires, and `func_door *32`, which opens on touch.
 
-Walking it is a fight rather than a stroll. The corridor west and north of the
-start room is covered by `monster_soldier` at `-672 336 -16` and `-856 240 -16`,
-and the exit room by three more monsters; a walker that does not shoot dies
-there, and `finish` used to stop 1,968 to 2,049 units short of the trigger. The
-fighting walker of [The fight](#the-fight-controlcombatmjs) does better and still
-does not finish: its best run to date got 1,601 units short, and every run has
-ended with the engine still answering `"mapname" is "demo1"`.
+Walking it is a fight rather than a stroll, and the fight is what stops it. The
+corridor west and north of the start room is covered by `monster_soldier` at
+`-672 336 -16` and `-856 240 -16` and by `monster_soldier_light` at
+`-856 584 -24`; the exit room by three more. `finish` has never finished: every
+run has ended with the engine still answering `"mapname" is "demo1"`.
+
+**What changed is where it stops.** Before this pass a run ended in demo1's
+dead-end pocket at `-427 111`, with the walker's own note naming the two
+`func_wall`s it was standing against and the attempt budget spent on legs that
+covered 0 units -- seven of an attempt's eight legs, on the two traced runs that
+did it. Measured since, over seven `finish` runs and two traced ones, the walk
+gets out of the pocket, down the corridor and out the far side of it, and the
+deepest it has been measured is `-951 1023`, **976 units short** of the exit --
+3,717 of the route's 4,693 units.
+
+**The honest read of the numbers.** The seven `finish` runs after the changes
+reached 976, 1,313, 1,554, 1,580, 1,604, 1,718 and 1,828 units short. One
+`finish` run on the unchanged code reached 1,315, and two traced runs on it
+stopped at 2,032 and 2,333 with the pocket named in the walker's own note. So the
+best run is 625 units deeper than the best any earlier run reported (1,601), and
+the *worst* of the new runs is not: the spread across runs is about 850 units, and
+what a single run proves is limited.
+
+What the traces and the regression checks pin down is the mechanism, and it is
+narrower than "the walk never stalls" -- legs that cover nothing still happen.
+Counted over the traced runs, the longest unbroken run of legs that moved the
+player less than a unit fell from **7** (of the eight legs in one attempt -- an
+attempt spent entirely standing still) to **3** and **2**, and the number of such
+legs fell from 17 of 36 and 11 of 34 to 14 of 32 and 14 of 51. What is gone is
+the attempt that stands still from end to end, and the frozen yaw that caused it;
+what is left is a leg here and there against a wall, followed by a leg that backs
+off and a leg that moves.
+
+**The constraint now is the fight, not the traversing.** Three of the seven runs,
+including the deepest, ended on the **restart budget** (`DEATHS`) rather than the
+re-plan budget (`ATTEMPTS`), each having lived through **nine level restarts**:
+the player is killed, the level puts them back at the spawn, and the walk covers
+the same ground again. The run that got deepest fired on 20 legs and 18 of them
+had the turn landed on the soldier, and it still ran out of restarts: its
+furthest reading is `-951 1023`, and the position it stopped at is
+`-462 19 -19` -- a corpse back by the pocket, not at the deepest point it
+reached. That -- not the geometry, and not the pocket -- is what stands between
+this build and `"mapname" is "demo2"`.
 
 **What the level's monsters do to a player, measured.** Two live experiments
 on demo1 in the corridor, both with 100 health and no armour, both read off the
@@ -786,6 +905,13 @@ holds, how many firing legs the run took, and -- when it does not finish -- the
 closest the player was ever *measured* to be to the exit, with the walker's own
 last notes.
 
+It also prints **every engine position it read**, leg by leg, as
+`a<attempt> leg <n>  x y z  short <units>`. That is deliberate: "where it
+stopped" is an argument about a run, and this is the run's own record of where it
+was, so a stall is visible in the output as a run of readings that do not move --
+which is how the pocket fault in this pass was first seen, and how a reader can
+check the claim rather than take it.
+
 Two traps are worth knowing before reading any single run's "furthest position":
 
 * **`CONTENTS_PLAYERCLIP` is not solid to this engine.** The planner used to fold
@@ -806,6 +932,25 @@ Two traps are worth knowing before reading any single run's "furthest position":
   `maxLegDistance` is only a guard rail against one leg aiming the length of the
   level, because a *tight* cap (360) was measured to stall walks sooner rather
   than later.
+* **A stall can be the view, not the geometry.** The single largest cause of a
+  leg covering 0 units on `demo1` turned out not to be a wall at all. `face()`
+  used to retire a turning method on *one* turn that came back as nothing, and a
+  zero reading is what a dead player gives every time -- the death camera holds
+  the view, so neither the arrow keys nor the mouse reach the player's own
+  angles. Retire the keys on one miss, then the mouse on the next, and there is
+  no method left: `face()` answers `NO_TURN` without sending anything, for the
+  rest of the run. A player who cannot turn can only ever walk the bearing they
+  happen to have, so `+forward` pushes them into the same wall at the same angle
+  on every round of every attempt -- which is what the traced legs at `-427 111`
+  show: unchanged yaw and 0 units covered, with `keysWork: false` and
+  `mouseWorks: false` recorded on the same leg (`trace-r5.json`, legs 12 and 13),
+  and `mouseWorks: false` with the keys on probation on the legs that followed
+  (45 and 47). The same file shows the calibration recovering -- `keysWork: true`
+  again within two legs, because of the probation rule this pass added -- and
+  the plan's own way out sitting 92 units away the whole time. That is why a
+  stall at a spot with 26 units of clear floor in five of
+  eight directions is not a wall, and why the fix is in `bridge.mjs`'s
+  calibration and not in the planner.
 
 The save slots say the same thing. `save1` is a demo1 save whose player stood at
 `-928 855 5`, on that corridor; `current` and `save0` are level-start autosaves
@@ -972,10 +1117,19 @@ combination and never walks a player sideways at a soldier behind them, that
 `levelShotReaches()` reaches a soldier on the corridor's own floor and not one
 two storeys up or through the wall between two rooms, that `threats()` keeps to
 its range and its arc, orders what it finds by what the fight costs, honours a
-caller's `skip` and returns nothing on a level with no monsters, and that
-`clearWalk()` is blocked by the 16-unit brush that closes demo1's dead-end
-pocket and clear along the way the plan actually goes out of it. 70 checks in
-all.
+caller's `skip` and returns nothing on a level with no monsters. It pins the
+three faults that all look the same from outside -- a leg that covers 0 units:
+that `clearWalk()` is blocked by the 16-unit brush that closes demo1's dead-end
+pocket, that it is clear along the way the plan actually goes out of it, and
+that it follows the *floor* down the route's own 52-unit step into the west
+corridor, and down the longer chord from the start room that was rejected with
+it, rather than the straight line between the two ends, which cuts the floor;
+that a walk stopped at `-427 111` aims at the
+plan's own way out of the pocket and not at the point beyond it through the
+wall; and, on a stub whose `goto()` answers `reached` and leaves the position
+alone, that the walker re-plans instead of spending the attempt standing on the
+same 24 units, and that a level restart costs a restart rather than an attempt.
+79 checks in all.
 
 **`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
 a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP
