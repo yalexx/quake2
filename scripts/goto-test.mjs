@@ -122,14 +122,16 @@ try {
     let reported = null;
     await step("a level is running and the engine reports a player position", async () => {
       reported = await game.position();
-      if (!reported.probed) return null; // handled below as a skip
-      assert(reported.position, "the engine answered but printed no `position:` line, so there is no player to navigate");
-      assert(reported.angles, "the engine answered but printed no angles");
+      if (!reported.position) return null; // handled below as a skip
+      assert(reported.angles, "the engine reported a position but no angles");
       start = reported.position;
-      return "map " + reported.map + ", player at " + here(start) + ", yaw " + reported.angles.yaw;
+      // Which reading answered is worth printing: `wasm-memory` is the live
+      // memory read that never opens the console, `console` is the opt-in
+      // probe. Neither is a failure; they cost different things.
+      return "map " + reported.map + " (via " + reported.source + "), player at " + here(start) + ", yaw " + reported.angles.yaw;
     });
 
-    if (!reported || !reported.probed || !start) {
+    if (!reported || !reported.position || !start) {
       const why = reported && reported.message ? reported.message : "the engine did not report a live player";
       skip("route.mjs reads the running map from the archive and finds its exit", why);
       skip("face() turns the player to a bearing it was given", why);

@@ -15,6 +15,10 @@
   <div id="detail"></div>
 </div>
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
+<!-- Live engine state, read out of the WASM memory. Loaded first and inert at
+     load time: it only defines window.quake2Engine, and it reads nothing until
+     the engine's own loader has created the memory. See engine-state.js. -->
+<script src="engine-state.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

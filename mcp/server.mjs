@@ -131,16 +131,18 @@ const TOOLS = [
     name: "quake2_state",
     description:
       "Read the game's state as JSON: whether the engine is running, whether a level is " +
-      "up, the current map, the player's position and angles, the save slots, and the " +
-      "tail of the engine's own console log. Without probe:true it sends no input at all " +
-      "and reports what the engine has already printed; with probe:true it asks the " +
-      "engine directly (opening its console for a moment and shutting it again). Quake 2 " +
-      "has no way to print health, armour, ammo or whether the player is alive -- the " +
-      "reply lists those in `unavailable`; read them from a quake2_screenshot instead.",
+      "up, the current map, the player's position and angles, whether the console is up, " +
+      "the save slots, and the tail of the engine's own console log. The position, the " +
+      "angles and whether the engine is paused come from the engine's own memory, so they " +
+      "send no input and do not pause the game. With probe:true it additionally asks the " +
+      "engine over its own console (opening it for a moment and shutting it again), which " +
+      "does pause it while it is open. Quake 2 has no way to print health or armour or " +
+      "ammo -- the reply lists those in `unavailable`; read them from a quake2_screenshot " +
+      "instead. `alive` is answered, from the live view roll.",
     inputSchema: {
       type: "object",
       properties: {
-        probe: { type: "boolean", description: "true asks the engine directly for the live position (input: the console is opened and shut again)." },
+        probe: { type: "boolean", description: "true additionally asks the engine over its console for a live viewpos/serverinfo; it opens the console, which pauses the game for as long as it is open. Not needed for the position, angles or paused state." },
       },
       additionalProperties: false,
     },

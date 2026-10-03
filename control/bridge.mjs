@@ -6,6 +6,23 @@
 // whose URL contains "/apps/quake2/"), never to the top-level ClawBox page: the
 // shell would swallow the keys, and the engine would never see them.
 //
+// No call on the hot path opens the in-game console. The console is a pause --
+// the engine stops simulating while it is up -- so a harness that read the
+// player through it was fighting its own measurement: every step of a walk
+// froze the game, and a fight could not be run honestly. Now:
+//
+//   * the player's position and view angles are read out of the engine's WASM
+//     memory by engine-state.js, which the app serves and index.html loads;
+//   * fire is the left mouse button and use is whatever key the engine's own
+//     config binds to +use, both dispatched as real input;
+//   * the console is only ever opened when a caller asks for it by name --
+//     command(), state({ probe: true }), position({ console: true }),
+//     use({ console: true }), respawn({ how: "map" }).
+//
+// The bridge counts every console key it sends (consoleMetrics()), and the page
+// keeps its own record of `cls.key_dest` (quake2Engine.watch), so "the console
+// was never opened" is something a run can show rather than assert.
+//
 // Zero dependencies. Node's built-in global WebSocket (Node 22+) speaks CDP
 // directly, so there is nothing to install. ESM is strict by default, so no
 // "use strict" pragma is needed.
@@ -60,15 +77,79 @@ const ancestorOriginsExpression = `(function () {
   }
 })()`;
 
+// ---- The direct path -------------------------------------------------------
+// The engine's live state is read straight out of the WASM linear memory by
+// engine-state.js, a small script the app serves and index.html loads. That is
+// the path every reading on the hot path takes: it is one Runtime.evaluate, it
+// sends no input, and -- unlike the console probe below -- it does not stop the
+// simulation. The console is still here, but only where a caller asks for it by
+// name (command(), state({ probe: true }), position({ console: true })).
+//
+// The page-side hook answers `quake2Engine.state()`, which is the reading plus
+// the page's own running record of `cls.key_dest` (see the console watch in
+// engine-state.js). This expression also picks the current map out of the
+// engine's console log, which is a file read and not a console visit, so
+// position() keeps reporting the map without paying for a probe.
+const directStateExpression = () => `(function () {
+  const hook = (typeof quake2Engine !== "undefined" && quake2Engine) ? quake2Engine : null;
+  const out = hook ? hook.state() : { read: { ok: false, reason: "NO_HOOK" }, watch: null };
+  let map = null;
+  const dirs = ${JSON.stringify(GAME_DIRS)};
+  for (const dir of dirs) {
+    try {
+      const log = FS.readFile(dir + "/qconsole.log", { encoding: "utf8" });
+      const lines = log.slice(-${CONSOLE_LOG_TAIL}).split("\\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        const m = line.match(/^mapname\\s+(\\S+)\\s*$/i)
+          || line.match(/^"mapname"\\s+is\\s+"([^"]+)"/i)
+          || line.match(/^Map:\\s+(\\S+)/i);
+        if (m) { map = m[1]; break; }
+      }
+      break;
+    } catch (error) { /* not this build's layout */ }
+  }
+  return JSON.stringify({ read: out.read, watch: out.watch, map });
+})()`;
+
+// The key the engine's own config binds to `+use`, read out of its config file.
+// Quake 2 has no default `+use` binding -- a door opens by walking into it --
+// so on a stock config this answers null, and useHold() says so instead of
+// quietly falling back to the console. A config that binds one is honoured.
+const useBindingExpression = () => `(function () {
+  const dirs = ${JSON.stringify(GAME_DIRS)};
+  for (const dir of dirs) {
+    for (const name of ["config.cfg", "default.cfg"]) {
+      let text = null;
+      try { text = FS.readFile(dir + "/" + name, { encoding: "utf8" }); } catch (error) { continue; }
+      const lines = text.split("\\n");
+      const binds = {};
+      // unbindall clears everything before it, and the engine's config opens
+      // with one, so only the lines after the last unbindall count.
+      let start = lines.length;
+      for (let i = lines.length - 1; i >= 0; i--) if (/^\\s*unbindall\\b/i.test(lines[i])) { start = i; break; }
+      for (let i = start; i < lines.length; i++) {
+        const m = lines[i].match(/^\\s*bind\\s+(\\S+)\\s+"([^"]*)"/i);
+        if (m) binds[m[1].toUpperCase()] = m[2];
+      }
+      for (const key of Object.keys(binds)) {
+        if (binds[key].trim() === "+use") return JSON.stringify({ key });
+      }
+    }
+  }
+  return "null";
+})()`;
+
 // ---- Reading the game's state ---------------------------------------------
 // Quake 2 has no scripting surface, and the Qwasm2 build exports no cvar or
 // command accessor (its wasm exports are libc and SDL only), so the engine's
-// own console is the one way to ask it anything. Everything the console prints
+// own console was the one way to ask it anything. Everything the console prints
 // is also mirrored, as the engine prints it, into a log file inside the
-// engine's file system -- so an answer can be read without touching the page.
+// engine's file system -- so an answer could be read without touching the page.
 // This layer has two halves: the cheap read below (the log, the save store and
 // the page: no input at all) and the probe (types Yamagi's two queries into the
-// console, which is input, and reads their answers out of the same log).
+// console, which is input, and reads their answers out of the same log). The
+// probe is now an explicit fallback; the direct path above is what runs.
 const PROBE_COMMANDS = ["viewpos", "serverinfo"];
 // The answers are read back from a `condump` (the console's own "write what you
 // have to a file" command) rather than from the live qconsole.log: the engine
@@ -82,16 +163,20 @@ const GAME_DIRS = ["/qwasm2/baseq2", "/baseq2", "/quake2/baseq2"];
 // The end of the log is all that matters, and the log only grows: reading the
 // last few thousand characters keeps the transfer bounded for a long session.
 const CONSOLE_LOG_TAIL = 12000;
-// What the engine can and cannot be asked for. The list is part of the answer,
-// so a caller never has to guess why a field is null.
-const UNREADABLE = ["health", "armour", "ammo", "alive"];
+// What the engine still cannot be asked for. The list is part of the answer, so
+// a caller never has to guess why a field is null.
+const UNREADABLE = ["health", "armour", "ammo"];
 const STATE_NOTE =
-  "Quake 2 has no console command that prints health, armour, ammo or whether the " +
-  "player is alive -- they are drawn on the HUD, so read them from a screenshot. " +
-  "The map and the server's running state are read from the engine's console log, " +
-  "which the engine writes through C stdio and can therefore lag by a few kilobytes " +
-  "of output; probed:true asks the engine directly (viewpos, serverinfo) and reads " +
-  "the answers out of a condump, so those are live.";
+  "Position and view angles come from the engine's own memory (engine-state.js), so " +
+  "reading them sends no input and does not pause the game. health, armour and ammo " +
+  "are null: Quake 2 has no console command that prints them and this pass did not " +
+  "recover those fields from the WASM image, so they are reported as unknown rather " +
+  "than guessed. alive is derived from the live view roll -- the death camera is the " +
+  "one thing that moves it -- and paused is the engine's own: it is true whenever the " +
+  "console or the menu holds the keyboard, and the engine draws PAUSED then. The map " +
+  "and the server's running state come from the engine's console log, which the engine " +
+  "writes through C stdio and can therefore lag. probe:true is the old console probe " +
+  "(viewpos, serverinfo, read back out of a condump) and pauses the game while it runs.";
 
 // The page-side half of the cheap read: where the game is mounted, what its
 // console log says, which save slots exist, and the page's own state.
@@ -425,6 +510,9 @@ class CdpSession {
 // How long the engine is given to write its `condump` file after the keys have
 // gone in. Writing is not part of the key dispatch, so it needs a moment.
 const PROBE_SETTLE_MS = 150;
+// The gap between characters when a string is typed into the console. Back to
+// back, the engine drops them (see #typeInto).
+const TYPE_KEY_GAP_MS = 15;
 // Face() stops when the bearing is this close, in degrees.
 const FACE_TOLERANCE_DEGREES = 4;
 // How many turns in a row may come back as nothing before a method is retired.
@@ -501,6 +589,24 @@ export class QuakeControl {
     // the engine has already been told to hold, so a caller that dies mid-fight
     // would otherwise leave the player firing at nothing forever.
     this.attacking = false;
+    // What this bridge has spent on the engine's console. `toggles` counts
+    // every console key sent, `opens` only those that opened it, and
+    // `roundTrips` every completed open-type-dump-close cycle. This is the
+    // bridge's half of the proof that the hot path never visits the console;
+    // the page's half is quake2Engine.watch, which samples cls.key_dest. Both
+    // are reported by consoleMetrics().
+    this.console = { toggles: 0, opens: 0, roundTrips: 0 };
+    // The key the engine's own config binds to `+use`: undefined = not looked
+    // up yet, null = the config binds none (which is what a stock Quake 2
+    // config does), a string = the key to press.
+    this.useBinding = undefined;
+    // What this bridge has learned about the current level, as { name, source }.
+    // The map name has no stable address in the image (see #readEngineState), so
+    // it is learned instead: from a `mapname` the engine answered (its own word
+    // for the level it is running), from a `map <name>` this bridge issued (a
+    // request, not a fact), and from the engine's log. The reading says which
+    // of the three answered.
+    this.mapHint = null;
     // What face() has learned about turning: how far one mouse count turns the
     // player, how fast the arrow keys turn, and whether each works at all.
     // null means "not measured yet". `misses` counts consecutive turns that
@@ -720,12 +826,21 @@ export class QuakeControl {
     });
   }
 
-  // Type a string on an open session, one key at a time.
+  // Type a string on an open session, one key at a time, with a small gap
+  // between the keys.
+  //
+  // The gap is not cosmetic. Queued back to back the engine drops characters --
+  // `map demo1` has arrived as `mo1` on this box -- because a key event that
+  // lands in the same frame as the one before it is not read. The whole point
+  // of this call is to get a command into the engine intact, so it gives each
+  // key a frame's worth of room. It costs about 15 ms per character and it is
+  // only ever on the console path, which is opt-in.
   async #typeInto(game, text) {
     const characters = [...String(text)];
-    for (const character of characters) {
-      await this.#sendKey(game, character, true);
-      await this.#sendKey(game, character, false);
+    for (let index = 0; index < characters.length; index++) {
+      if (index > 0) await new Promise((resolve) => setTimeout(resolve, TYPE_KEY_GAP_MS));
+      await this.#sendKey(game, characters[index], true);
+      await this.#sendKey(game, characters[index], false);
     }
     return characters.length;
   }
@@ -840,18 +955,49 @@ export class QuakeControl {
   // because an agent that is told "reached" when it is stuck in a corner has
   // been told something worse than nothing.
 
-  // Where the player is and which way they are looking, from the engine's own
-  // `viewpos` -- plus `mapname`, which the engine keeps as a cvar and prints as
-  // `"mapname" is "demo1"`. Much lighter than state(): no server info, no page
-  // report, and the map name is what tells an agent whether the level it is
-  // navigating is still the level it planned for.
-  async position() {
+  // Where the player is and which way they are looking, read live out of the
+  // engine's own memory (see "The direct path" at the top of this file) -- plus
+  // the current map, which comes from the engine's console log because a file
+  // read costs nothing and does not stop the game.
+  //
+  // This is the call the hot path is built on: goto() runs it once a round and
+  // face() runs it after every turn, so it must send no input and must not
+  // pause. It does neither. A caller that wants the console probe -- to check
+  // this reading against the engine's own `viewpos`, or because it is driving a
+  // page that does not serve engine-state.js -- asks for it by name:
+  //   position({ console: true })  the old probe, explicitly
+  //   position({ verify: true })   both, and a comparison of the two
+  async position(options = {}) {
     return this.#withSession(async (game) => {
+      const direct = await this.#readEngineState(game);
+      if (direct.read.ok) {
+        const result = this.#positionFromDirect(direct);
+        if (options.verify === true) result.verify = await this.#verifyAgainstConsole(game, result);
+        return result;
+      }
+      // No hook, or the engine has not laid its memory out yet. The console is
+      // the fallback and it is taken only when the caller asked for it.
+      if (options.console !== true && options.verify !== true) {
+        return {
+          probed: false,
+          source: "wasm-memory",
+          position: null,
+          angles: null,
+          map: direct.map,
+          running: false,
+          reason: direct.read.reason,
+          message: "the page did not answer with the engine's live state (" + direct.read.reason + "). " +
+            "engine-state.js is served with the app and index.html loads it; a page without it can still be " +
+            "driven through the console by asking: position({ console: true }).",
+          console: this.consoleMetrics(),
+        };
+      }
       const answer = await this.#askEngine(game, ["viewpos", "mapname"]);
       const engine = readEngineState(answer.text || "");
       if (!answer.text) {
         return {
           probed: false,
+          source: "console",
           position: null,
           angles: null,
           map: null,
@@ -859,10 +1005,118 @@ export class QuakeControl {
           reason: "NO_ANSWER",
           message: "the engine did not answer on its console. It refuses to open the console during the attract demo and drops keys while it boots; " +
             "if no level is running, start one first (command(\"map demo1\")).",
+          console: this.consoleMetrics(),
         };
       }
-      return { probed: true, position: engine.position, angles: engine.angles, map: engine.map, running: engine.running, dead: engine.dead, attempts: answer.attempts };
+      return {
+        probed: true,
+        source: "console",
+        position: engine.position,
+        angles: engine.angles,
+        map: engine.map,
+        mapSource: engine.map ? "console-log" : null,
+        running: engine.running,
+        dead: engine.dead,
+        attempts: answer.attempts,
+        console: this.consoleMetrics(),
+      };
     });
+  }
+
+  // What the engine's console has cost this bridge so far. The companion
+  // measurement is the page's own: quake2Engine.watch samples cls.key_dest and
+  // counts every sample where the keyboard was not the game's, which catches a
+  // console opened by anything, not just by this bridge.
+  consoleMetrics() {
+    return { toggles: this.console.toggles, opens: this.console.opens, roundTrips: this.console.roundTrips, open: this.consoleOpen };
+  }
+
+  // The page's answer: the live reading, the page's console watch, and the map
+  // the engine last printed. One evaluate, no input.
+  async #readEngineState(game) {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(await game.evaluate(directStateExpression()));
+    } catch {
+      // A page that threw, or an answer that was not JSON: no reading.
+    }
+    if (!parsed || typeof parsed !== "object") return { read: { ok: false, reason: "BAD_REPLY" }, watch: null, map: null, mapSource: null };
+    const read = parsed.read && typeof parsed.read === "object" ? parsed.read : { ok: false, reason: "BAD_REPLY" };
+    // The map name is the one field with no stable home in the image: this
+    // build keeps it in a heap-allocated string whose address moves between
+    // runs, so there is no offset to recover and none is guessed. The log is
+    // the engine's own words and costs a file read; when it has nothing, the
+    // level the bridge itself last asked for is the next best thing, and it
+    // says which one answered.
+    const fromLog = parsed.map === undefined ? null : parsed.map;
+    const hint = this.mapHint && this.mapHint.name ? this.mapHint : null;
+    // What the engine said about itself beats what it was asked for.
+    if (hint && hint.source === "mapname") return { read, watch: parsed.watch || null, map: hint.name, mapSource: "mapname" };
+    if (fromLog) return { read, watch: parsed.watch || null, map: fromLog, mapSource: "console-log" };
+    if (hint) return { read, watch: parsed.watch || null, map: hint.name, mapSource: "map-command" };
+    return { read, watch: parsed.watch || null, map: null, mapSource: null };
+  }
+
+  #positionFromDirect(direct) {
+    const read = direct.read;
+    return {
+      probed: false,
+      source: "wasm-memory",
+      position: read.position,
+      angles: read.angles,
+      map: direct.map,
+      mapSource: direct.mapSource === undefined ? null : direct.mapSource,
+      // A reading that came back at all means the engine is up; `inGame` says
+      // whether the game still owns the keyboard, and `paused` is the engine's
+      // own PAUSED (it draws it whenever the console or the menu has the keys).
+      running: true,
+      inGame: read.inGame,
+      paused: read.paused,
+      consoleOpen: read.consoleOpen,
+      keyDest: read.keyDest,
+      keyDestName: read.keyDestName,
+      dead: read.dead,
+      alive: read.alive,
+      aliveSource: read.aliveSource,
+      health: read.health,
+      armour: read.armour,
+      ammo: read.ammo,
+      readAt: read.readAt,
+      watch: direct.watch,
+      console: this.consoleMetrics(),
+    };
+  }
+
+  // The independent check for the direct reading: ask the engine itself, over
+  // its own console, the same question. The engine prints each of the six as an
+  // integer, so the comparison is made the way the engine made the number --
+  // truncated memory against printed text.
+  async #verifyAgainstConsole(game, direct) {
+    const answer = await this.#askEngine(game, ["viewpos", "mapname"]);
+    const engine = readEngineState(answer.text || "");
+    if (!engine.position || !engine.angles || !direct.position || !direct.angles) {
+      return { ran: !!answer.text, match: false, reason: answer.text ? "NO_CONSOLE_POSITION" : "NO_ANSWER", console: this.consoleMetrics() };
+    }
+    const same = (a, b) => Math.trunc(a) === Math.trunc(b);
+    const axes = ["x", "y", "z"];
+    const turns = ["pitch", "yaw", "roll"];
+    const positionMatch = axes.every((axis) => same(direct.position[axis], engine.position[axis]));
+    const angleMatch = turns.every((turn) => same(direct.angles[turn], engine.angles[turn]));
+    return {
+      ran: true,
+      rule: "trunc(memory) === the integer viewpos printed",
+      consolePosition: engine.position,
+      consoleAngles: engine.angles,
+      memoryPosition: direct.position,
+      memoryAngles: direct.angles,
+      positionMatch,
+      angleMatch,
+      match: positionMatch && angleMatch,
+      note: "the console probe pauses the engine and reports the pose from before the pause, so a player " +
+        "still moving when it is read will read behind the live memory; compare at rest, or expect the " +
+        "memory reading to be the newer one.",
+      console: this.consoleMetrics(),
+    };
   }
 
   // Run one or more console commands and return what the engine printed. This is
@@ -881,6 +1135,13 @@ export class QuakeControl {
   async command(text, options = {}) {
     const commands = Array.isArray(text) ? text.map(String) : [String(text)];
     const tail = Math.max(1, Math.floor(numberOr(options.tail, 24)));
+    // A `map <name>` this bridge issues is remembered for position(). It is a
+    // request rather than a fact, so it never displaces something the engine
+    // said about itself (see the `mapname` answer below).
+    for (const one of commands) {
+      const asked = one.match(/^\s*map\s+(\S+)\s*$/i);
+      if (asked && (!this.mapHint || this.mapHint.source === "map")) this.mapHint = { name: asked[1], source: "map" };
+    }
     return this.#withSession(async (game) => {
       const answer = await this.#askEngine(game, commands);
       const lines = (answer.text || "").split("\n").filter((line) => line.trim() !== "");
@@ -892,12 +1153,23 @@ export class QuakeControl {
         const line = lines[index].trim();
         if (line === echo || line.startsWith(echo + " ")) { from = index; break; }
       }
+      const output = (from === -1 ? lines.slice(-tail) : lines.slice(from, from + tail));
+      // A `mapname` answer is the engine naming the level it is actually
+      // running -- not the one it was asked for -- so it is worth keeping:
+      // position() can then name the map with no console of its own, which
+      // matters because the console log it would otherwise read is written
+      // through C stdio and can sit unflushed for a long time.
+      for (const line of output) {
+        const named = line.match(/^"mapname"\s+is\s+"([^"]+)"/i);
+        if (named) this.mapHint = { name: named[1], source: "mapname" };
+      }
       return {
         commands,
         ran: !!answer.text,
         echoFound: from !== -1,
         consoleOpen: this.consoleOpen,
-        output: (from === -1 ? lines.slice(-tail) : lines.slice(from, from + tail)),
+        map: this.mapHint ? this.mapHint.name : null,
+        output,
         reason: answer.text ? undefined : "NO_ANSWER",
         message: answer.text ? undefined : "the engine did not answer on its console (attract demo, or it is still booting)",
       };
@@ -912,6 +1184,7 @@ export class QuakeControl {
     await this.focusCanvas(game);
     const page = JSON.parse(await game.evaluate(stateExpression));
     if (!page.gameDir) return { text: null, gameDir: null, attempts: 0 };
+    this.console.roundTrips++;
     for (let attempt = 0; attempt < attempts; attempt++) {
       await this.#ensureConsole(game, true);
       for (const command of commands) {
@@ -935,10 +1208,14 @@ export class QuakeControl {
     return { text: null, gameDir: page.gameDir, attempts };
   }
 
-  // The console toggle, with the bridge's model of it kept in step.
+  // The console toggle, with the bridge's model of it kept in step. Every
+  // console key this bridge sends goes through here, so the counter below is a
+  // complete record of what it spent, not a sample.
   async #toggleConsole(game) {
     await this.#tapOn(game, "`");
     this.consoleOpen = !this.consoleOpen;
+    this.console.toggles++;
+    if (this.consoleOpen) this.console.opens++;
     return this.consoleOpen;
   }
 
@@ -1120,31 +1397,88 @@ export class QuakeControl {
     return null;
   }
 
-  // The engine's use key, as a hold rather than a tap. Quake 2 opens a door on
-  // `+use` when the player is standing in front of it, and the state has to last
-  // across the walk that carries the player into the door's reach -- so this
-  // holds `+use` on the engine's command line and leaves it held until release()
-  // is called. Held down, a door opens the moment the player touches it.
+  // The engine's use key, as a hold rather than a tap, sent as a real key event.
   //
-  // It goes in through the console rather than as a key event because the
-  // binding for `+use` is the player's own: this box's config may put it on any
-  // key, and a key that is not bound does nothing at all. `+use` is the command
-  // behind every binding, so it always works.
-  async useHold(down = true) {
-    const answer = await this.command([down ? "+use" : "-use"]);
-    if (!answer.ran) {
-      return { held: false, reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console" };
+  // The key is the one the engine's own config binds to `+use`, read out of
+  // config.cfg once and cached: a key that is not bound does nothing, so the
+  // binding has to be the engine's, not this file's opinion. On a stock Quake 2
+  // config nothing is bound to `+use` at all -- a door opens by walking into it
+  // -- and rather than fall back to the console (which would pause the game on
+  // the walker's own path) this says so and holds nothing. `{ console: true }`
+  // still reaches for the old `+use` command line, explicitly.
+  async useHold(down = true, options = {}) {
+    if (options.console === true) {
+      const answer = await this.command([down ? "+use" : "-use"]);
+      if (!answer.ran) {
+        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      }
+      return { held: true, method: "console", key: down ? "+use" : "-use", output: answer.output, console: this.consoleMetrics() };
     }
-    return { held: true, key: down ? "+use" : "-use", output: answer.output };
+    const bound = await this.useKey();
+    if (!bound) {
+      return {
+        held: false,
+        method: "key",
+        reason: "NO_USE_BINDING",
+        message: "the engine's own config binds no key to +use, so there is no real input to send. " +
+          "Quake 2 opens a door by walking into it; use({ console: true }) is the explicit console fallback.",
+        console: this.consoleMetrics(),
+      };
+    }
+    if (bound.button) {
+      const held = await this.mouseHold(bound.button, down);
+      return { held: held.held, method: "mouse", key: bound.key, button: bound.button, console: this.consoleMetrics() };
+    }
+    await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      await this.#sendKey(game, bound.key, down);
+    });
+    return { held: true, method: "key", key: bound.key, console: this.consoleMetrics() };
+  }
+
+  // Which key the engine's own config binds to `+use`, looked up once. Returns
+  // null when nothing is bound. A mouse binding is returned as a button.
+  async useKey() {
+    if (this.useBinding === undefined) {
+      let found = null;
+      try {
+        const raw = await this.#withSession((game) => game.evaluate(useBindingExpression()));
+        const parsed = raw ? JSON.parse(raw) : null;
+        if (parsed && typeof parsed.key === "string" && parsed.key !== "") found = parsed.key;
+      } catch {
+        // A page that cannot reach its file system reads as "nothing bound",
+        // which is the safe answer: it holds no key rather than the wrong one.
+      }
+      this.useBinding = found === null ? null : this.#describeUseKey(found);
+    }
+    return this.useBinding;
+  }
+
+  // The engine names bindings in its own spelling ("SPACE", "MOUSE1", "e").
+  // Mouse buttons become a button name for mouseHold; everything else is handed
+  // to the key dispatcher as written.
+  #describeUseKey(name) {
+    const upper = String(name).toUpperCase();
+    const mouse = upper.match(/^MOUSE(\d+)$/);
+    if (mouse) {
+      const button = { "1": "left", "2": "right", "3": "middle" }[mouse[1]];
+      return button ? { key: upper, button } : null;
+    }
+    return { key: String(name), button: null };
   }
 
   // Press use once and let go: walk into a lift, ride it. Wrapped as a pair so a
-  // caller cannot leave the key stuck down.
-  async use(holdMs = 200) {
-    await this.useHold(true);
+  // caller cannot leave the key stuck down. A press that could not be delivered
+  // is reported as `used: false` with the engine's reason, and no release is
+  // sent for a key that was never held.
+  async use(holdMs = 200, options = {}) {
+    const press = await this.useHold(true, options);
+    if (!press.held) {
+      return { used: false, holdMs: 0, reason: press.reason, message: press.message, console: this.consoleMetrics() };
+    }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(holdMs, 200))));
-    const release = await this.useHold(false);
-    return { used: release.held !== false, holdMs: holdMs };
+    const release = await this.useHold(false, options);
+    return { used: release.held !== false, holdMs: holdMs, method: press.method, key: press.key, console: this.consoleMetrics() };
   }
 
   // Hold a mouse button down, or let it up, without touching the console.
@@ -1189,47 +1523,49 @@ export class QuakeControl {
     });
   }
 
-  // The engine's fire button, as a hold rather than a tap -- the same shape as
-  // useHold(), for the same reason, and one more of its own. `+attack` is the
-  // command behind every fire binding, so it works whatever the player's config
-  // says, and it is a *hold* because a fight on this box is won by firing while
-  // the player keeps walking: a soldier takes three blaster bolts, a single
-  // click is one of them, and a player who stands still to aim the second and
-  // third is the player the level kills.
+  // The engine's fire button, as a hold rather than a tap. This is the left
+  // mouse button, which is what this build's config binds to `+attack`
+  // (`bind MOUSE1 "+attack"`), sent as a real input event: no console, no pause.
+  // It is a *hold* because a fight on this box is won by firing while the player
+  // keeps walking: a soldier takes three blaster bolts, a single click is one of
+  // them, and a player who stands still to aim the second and third is the
+  // player the level kills.
   //
-  // Held down, the engine re-fires at the weapon's own refire rate until
-  // release() is called. Nothing here leaves it held: a stuck trigger is not
-  // harmless, because fire is also the key that leaves the death camera and
-  // skips an intermission. Prefer `mouseHold` for a fight: this one types the
-  // command into the console, and the console is a pause.
-  async attackHold(down = true) {
-    const answer = await this.command([down ? "+attack" : "-attack"]);
-    if (!answer.ran) {
-      return { held: false, reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console" };
+  // Held down, the engine re-fires at the weapon's own refire rate until the
+  // button is released. `{ console: true }` still sends the old `+attack`
+  // command line, which is the fallback for a page with no live memory reading.
+  async attackHold(down = true, options = {}) {
+    if (options.console === true) {
+      const answer = await this.command([down ? "+attack" : "-attack"]);
+      if (!answer.ran) {
+        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      }
+      this.attacking = !!down;
+      return { held: true, method: "console", command: down ? "+attack" : "-attack", output: answer.output, console: this.consoleMetrics() };
     }
-    this.attacking = !!down;
-    return { held: true, command: down ? "+attack" : "-attack", output: answer.output };
+    const held = await this.mouseHold("left", down);
+    return { held: held.held, method: "mouse", button: "left", buttons: held.buttons, console: this.consoleMetrics() };
   }
 
   // Fire for a while and let go. The pair is wrapped so that a caller cannot
   // leave the trigger down, and the time actually spent firing is the time the
-  // caller asked for -- the console round trips around it are the bridge's.
+  // caller asked for -- the button dispatch around it is the bridge's.
   //
   // `fired` and `released` are reported separately on purpose. They are two
-  // different failures and only one of them is harmless: a press the engine did
-  // not answer means nothing was fired, while a *release* it did not answer
+  // different failures and only one of them is harmless: a press the page did
+  // not deliver means nothing was fired, while a *release* it did not deliver
   // means the player may still be firing -- and the caller has to know that,
-  // because the next `-attack` is the only thing that will stop it. Reporting
-  // the first from the second would say "nothing was fired" about a trigger that
+  // because the next release is the only thing that will stop it. Reporting the
+  // first from the second would say "nothing was fired" about a trigger that
   // is down.
-  async fire(ms = 300) {
-    const press = await this.attackHold(true);
+  async fire(ms = 300, options = {}) {
+    const press = await this.attackHold(true, options);
     if (!press.held) {
-      return { fired: false, released: true, reason: press.reason, message: press.message, holdMs: 0 };
+      return { fired: false, released: true, reason: press.reason, message: press.message, holdMs: 0, console: this.consoleMetrics() };
     }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(ms, 300))));
-    const release = await this.attackHold(false);
-    return { fired: true, released: release.held !== false, holdMs: ms };
+    const release = await this.attackHold(false, options);
+    return { fired: true, released: release.held !== false, holdMs: ms, method: press.method, console: this.consoleMetrics() };
   }
 
   // Jump. One tap of the space bar, which is what every Quake 2 config binds
@@ -1255,8 +1591,16 @@ export class QuakeControl {
   // Starting the level is not a cheat. There is no noclip, no god, no give and
   // no teleport in it; it puts the player back on the level's own spawn with the
   // level's own weapons, and it is what a single-player game does when the
-  // player dies. `how: "fire"` is still available for a caller that *wants* the
-  // save restored, and it says so in its result.
+  // player dies.
+  //
+  // Starting the level needs a command, and a command needs the console, and
+  // the console is a pause. The walker calls respawn() inside its own loops, so
+  // the console is not the default any more: the default is the engine's own
+  // "press fire to respawn", which is real input and does not stop the game.
+  // The cost is the one described above -- it restores the autosave -- so the
+  // result says `how: "fire"` and names the trap. A caller that would rather
+  // have a clean spawn, and would rather pay a console round trip for it, asks:
+  // `respawn({ how: "map" })`, or `{ console: true }`.
   async respawn(options = {}) {
     const before = await this.position();
     if (!before || !before.dead) return { respawned: false, reason: "ALIVE", position: before && before.position };
@@ -1267,13 +1611,30 @@ export class QuakeControl {
     if (options.expectMap && before.map && before.map !== options.expectMap) {
       return { respawned: false, reason: "LEVEL_CHANGED", map: before.map, expected: options.expectMap, position: before.position };
     }
-    if (options.how === "fire") {
+    const useConsole = options.how === "map" || options.console === true;
+    if (!useConsole) {
       await this.click("left").catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
       const afterFire = await this.position();
       if (afterFire && !afterFire.dead) {
-        return { respawned: true, how: "fire", position: afterFire.position, note: "the engine restored its autosave" };
+        return {
+          respawned: true,
+          how: "fire",
+          method: "mouse",
+          position: afterFire.position,
+          note: "the engine restored its autosave, so the player is wherever that save left them, not on this level's spawn; " +
+            "respawn({ how: \"map\" }) restarts the level instead, through the console",
+          console: this.consoleMetrics(),
+        };
       }
+      return {
+        respawned: false,
+        reason: "NOT_RESPAWNED",
+        how: "fire",
+        position: before.position,
+        message: "pressing fire did not get the player back into the level.",
+        console: this.consoleMetrics(),
+      };
     }
     const map = options.map || (before && before.map);
     if (!map) return { respawned: false, reason: "NO_MAP", position: before && before.position };
@@ -1283,9 +1644,11 @@ export class QuakeControl {
     return {
       respawned: !!(after && !after.dead),
       how: "map",
+      method: "console",
       map,
       position: after && after.position,
       message: after && after.dead ? "the player is still dead after restarting " + map : undefined,
+      console: this.consoleMetrics(),
     };
   }
 
@@ -1470,6 +1833,10 @@ export class QuakeControl {
           engine: {
             module: typeof Module !== "undefined" && !!Module,
             filesystem: typeof FS !== "undefined" && !!FS,
+            // engine-state.js defines this. Without it the hot path has no live
+            // reading, and the console is reached only when a caller asks for
+            // it by name.
+            liveState: typeof quake2Engine !== "undefined" && !!quake2Engine,
             // IDBFS being available means the engine's file system is up; it does
             // not yet mean the save mount has been made.
             saveMount: typeof FS !== "undefined" && !!FS.filesystems && !!FS.filesystems.IDBFS,
@@ -1493,29 +1860,35 @@ export class QuakeControl {
         url: game.frame.url,
         ...framing,
         ...state,
+        // What this bridge has spent on the engine's console since it was
+        // built. Zero on a run that stayed on the direct path.
+        console: this.consoleMetrics(),
       };
     });
   }
 
   // The game's state as JSON, for an agent that has to decide what to do next.
   //
-  // Without options.probe this sends nothing at all: it reads the engine's
-  // console log, its save slots and the page, and reports what the engine has
-  // already said. With options.probe it also asks the engine directly -- which
-  // can only happen through the engine's own console -- by opening the console,
-  // typing its two queries, closing it and reading the answers back out of the
-  // log: input, exactly like every other control call, and it toggles the
-  // console shut again once it has read the answer. The console is a plain
-  // toggle and nothing is remembered between calls, so a probe the engine did
-  // not hear leaves the toggle wherever it found it.
+  // The live half -- position, angles, whether the game owns the keyboard,
+  // whether the console is up, whether the player is dead -- is read out of the
+  // engine's memory, and the rest is the engine's console log, its save slots
+  // and the page. None of that is input, so a plain state() sends nothing and
+  // pauses nothing.
+  //
+  // `options.probe` is the old console probe, kept as the explicit fallback: it
+  // opens the console, types Yamagi's two queries, reads the answers back out of
+  // a condump and shuts the console again. It pauses the game for as long as it
+  // runs, so nothing on the hot path calls it. The console is a plain toggle and
+  // nothing is remembered between calls, so a probe the engine did not hear
+  // leaves the toggle wherever it found it.
   //
   // Quake 2 answers only part of the question, and the answer says which part:
-  // `unavailable` lists the fields the engine has no way to print. See the note
-  // in the reply.
+  // `unavailable` lists the fields it cannot answer at all. See the note.
   async state(options = {}) {
     const wantsProbe = !!options.probe;
     return this.#withSession(async (game, target) => {
       let page = JSON.parse(await game.evaluate(stateExpression));
+      const direct = await this.#readEngineState(game);
       const probe = { requested: wantsProbe, ran: false, toggles: 0, commands: [] };
       let transcript = page.log;
       if (wantsProbe && page.gameDir) {
@@ -1557,25 +1930,45 @@ export class QuakeControl {
         await game.evaluate(removeDumpExpression(page.gameDir));
       }
       const engine = readEngineState(transcript);
+      const live = direct.read.ok ? direct.read : null;
       return {
         ok: true,
         sampledAt: new Date().toISOString(),
+        // Which half answered the live fields: the memory reading when it is
+        // there, the console probe when it was asked for and the reading was
+        // not, and "none" when neither could.
+        source: live ? "wasm-memory" : (probe.ran ? "console" : "none"),
         probed: probe.ran,
-        probe,
+        probe: { ...probe, console: this.consoleMetrics() },
         cdp: { endpoint: this.cdpUrl, targetId: target.id, targetType: target.type },
         url: game.frame.url,
-        engine: { running: page.running, pointerLocked: page.pointerLocked },
-        server: { running: engine.running, map: engine.map },
+        engine: {
+          running: page.running,
+          pointerLocked: page.pointerLocked,
+          // The live half. null, not false, when the memory could not be read:
+          // "I could not tell" and "the console is shut" are different answers.
+          inGame: live ? live.inGame : null,
+          paused: live ? live.paused : null,
+          consoleOpen: live ? live.consoleOpen : null,
+          keyDest: live ? live.keyDest : null,
+          keyDestName: live ? live.keyDestName : null,
+        },
+        server: { running: engine.running, map: direct.map || engine.map },
         player: {
-          position: engine.position,
-          angles: engine.angles,
+          position: live ? live.position : engine.position,
+          angles: live ? live.angles : engine.angles,
           health: null,
           armour: null,
           ammo: null,
-          alive: null,
+          alive: live ? live.alive : null,
         },
         unavailable: UNREADABLE.slice(),
         note: STATE_NOTE,
+        // The page's own record of cls.key_dest, sampled at 10 Hz since the
+        // hook was first read, and this bridge's count of what it spent on the
+        // console. Together they are the console-free proof.
+        consoleWatch: direct.watch,
+        consoleSpend: this.consoleMetrics(),
         // `lines` counts only what the tail holds, not the whole file: the log
         // grows for as long as the game runs and only its end is read.
         console: { log: page.logPath, lines: engine.lines.length, tail: engine.lines.slice(-20) },
