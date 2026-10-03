@@ -302,6 +302,26 @@ export function deadFromRoll(read) {
   return !!(read && read.dead);
 }
 
+// Where the console echoed `command` in a transcript, or -1. The console prints
+// `]` and then the line it ran, so an echo is that line exactly, or that line
+// followed by arguments -- and the search is backwards, so an earlier command
+// that happens to read the same is not mistaken for this one.
+function lastEchoIndex(lines, command) {
+  const echo = "]" + command;
+  for (let index = lines.length - 1; index >= 0; index--) {
+    const line = lines[index].trim();
+    if (line === echo || line.startsWith(echo + " ")) return index;
+  }
+  return -1;
+}
+
+// Whether the engine echoed `command` at all. A command it never echoed is a
+// command it never ran -- the console drops a keystroke now and then -- and the
+// transcript then holds no answer from it.
+function echoedIn(transcript, command) {
+  return lastEchoIndex(String(transcript || "").split("\n"), command) !== -1;
+}
+
 // The engine's own words, parsed: it prints its map name in three different
 // places, its player position only for `viewpos`, and its level lifecycle as
 // banner lines. Everything here comes from a transcript, so nothing is
@@ -1505,15 +1525,16 @@ export class QuakeControl {
     return this.#withSession(async (game) => {
       const answer = await this.#askEngine(game, commands);
       const lines = (answer.text || "").split("\n").filter((line) => line.trim() !== "");
-      const echo = "]" + commands[0];
-      let from = -1;
-      // Backwards, so an earlier command that happens to read the same is not
-      // mistaken for this one.
-      for (let index = lines.length - 1; index >= 0; index--) {
-        const line = lines[index].trim();
-        if (line === echo || line.startsWith(echo + " ")) { from = index; break; }
-      }
-      const output = (from === -1 ? lines.slice(-tail) : lines.slice(from, from + tail));
+      const from = lastEchoIndex(lines, commands[0]);
+      // No echo, no answer. A `condump` is the whole scrollback, so its tail is
+      // whatever the engine printed last -- which on a busy line is another
+      // command's answer, from a minute ago. Handing that back as this
+      // command's output is how a `mapname` that never arrived reports the map
+      // the engine left long since, so an answer with no echo comes back empty
+      // and says so (`echoFound`), rather than quietly becoming somebody
+      // else's line.
+      const found = from !== -1;
+      const output = found ? lines.slice(from, from + tail) : [];
       // A `mapname` answer is the engine naming the level it is actually
       // running -- not the one it was asked for -- so it is worth keeping:
       // position() can then name the map with no console of its own, which
@@ -1526,14 +1547,42 @@ export class QuakeControl {
       return {
         commands,
         ran: !!answer.text,
-        echoFound: from !== -1,
+        echoFound: found,
         consoleOpen: this.consoleOpen,
         map: this.mapHint ? this.mapHint.name : null,
         output,
-        reason: answer.text ? undefined : "NO_ANSWER",
-        message: answer.text ? undefined : "the engine did not answer on its console (attract demo, or it is still booting)",
+        reason: answer.text ? (found ? undefined : "NO_ECHO") : "NO_ANSWER",
+        message: answer.text
+          ? (found ? undefined : "the engine did not echo " + JSON.stringify(commands[0]) + " back, so the dump holds no answer from this command")
+          : "the engine did not answer on its console (attract demo, or it is still booting)",
       };
     });
+  }
+
+  // The level the engine itself says it is running, asked on its own console.
+  //
+  // `position()` cannot answer this. The map name has no address in the image
+  // (see #readEngineState), so the reading it carries is either the engine's log
+  // -- written through C stdio, and able to lag by a few kilobytes -- or the
+  // last `mapname` the engine answered, cached. A cached answer goes on naming
+  // the level a run started in for as long as nobody asks again, and that is
+  // exactly the wrong answer to "has the level I was walking ended": a walk
+  // that reached `demo1`'s exit trigger went on reading `map: "demo1"` while
+  // the engine was running `demo2`. This asks every time, and `map` is what the
+  // engine answered -- `null` when it answered nothing, never a guess.
+  async level() {
+    const answer = await this.command("mapname", { tail: 4 });
+    const named = answer.output
+      .map((line) => /^"mapname"\s+is\s+"([^"]+)"/i.exec(line.trim()))
+      .find(Boolean);
+    return {
+      map: named ? named[1] : null,
+      echoFound: answer.echoFound,
+      output: answer.output,
+      reason: named ? undefined : (answer.echoFound ? "NO_ANSWER" : "NO_ECHO"),
+      message: named ? undefined : answer.message,
+      console: this.consoleMetrics(),
+    };
   }
 
   // Open the console, run `commands`, condump and read the result back, close the
@@ -1545,6 +1594,7 @@ export class QuakeControl {
     const page = JSON.parse(await game.evaluate(stateExpression));
     if (!page.gameDir) return { text: null, gameDir: null, attempts: 0 };
     this.console.roundTrips++;
+    let lastDump = null;
     for (let attempt = 0; attempt < attempts; attempt++) {
       await this.#ensureConsole(game, true);
       for (const command of commands) {
@@ -1559,13 +1609,28 @@ export class QuakeControl {
       await new Promise((resolve) => setTimeout(resolve, PROBE_SETTLE_MS));
       const dumped = await game.evaluate(readDumpExpression(page.gameDir));
       await game.evaluate(removeDumpExpression(page.gameDir));
-      if (dumped) return { text: dumped, gameDir: page.gameDir, attempts: attempt + 1 };
+      if (dumped) {
+        // Every command has to have echoed for the dump to be this command's
+        // answer. The console drops a keystroke now and then -- `cheats 0` has
+        // arrived as `cheas 0` on this box -- and a command the engine never
+        // ran has no answer in the dump at all, so believing the dump anyway is
+        // what hands the caller the tail of the scrollback instead. Retyping
+        // costs one round trip, and the console's own model is right (it did
+        // open), so the attempt is repeated rather than the model flipped.
+        const missing = commands.filter((command) => !echoedIn(dumped, command));
+        if (!missing.length) return { text: dumped, gameDir: page.gameDir, attempts: attempt + 1 };
+        lastDump = dumped;
+        continue;
+      }
       // No dump means the commands went somewhere other than the console, and
       // the only thing that can be wrong is where the bridge thinks the console
       // is. Flip the model and try again rather than repeat the same mistake.
       this.consoleOpen = !this.consoleOpen;
     }
-    return { text: null, gameDir: page.gameDir, attempts };
+    // Nothing echoed cleanly. The last dump is still returned -- a caller can
+    // see what did land -- but nothing vouched for it, and `command()` finds no
+    // echo in it and reports the empty answer that follows from that.
+    return { text: lastDump, gameDir: page.gameDir, attempts };
   }
 
   // The console toggle, with the bridge's model of it kept in step. Every
@@ -1831,8 +1896,12 @@ export class QuakeControl {
   async useHold(down = true, options = {}) {
     if (options.console === true) {
       const answer = await this.command([down ? "+use" : "-use"]);
-      if (!answer.ran) {
-        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      // `ran` alone is not enough: a dump came back, but if the engine never
+      // echoed the command back it never ran it either -- the console drops a
+      // keystroke now and then -- and the key was not held however much the
+      // transcript holds. See `command()`.
+      if (!answer.ran || !answer.echoFound) {
+        return { held: false, method: "console", reason: answer.reason || "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
       }
       return { held: true, method: "console", key: down ? "+use" : "-use", output: answer.output, console: this.consoleMetrics() };
     }
@@ -2053,8 +2122,12 @@ export class QuakeControl {
   async attackHold(down = true, options = {}) {
     if (options.console === true) {
       const answer = await this.command([down ? "+attack" : "-attack"]);
-      if (!answer.ran) {
-        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      // The same rule as `useHold`: a dump is not proof the engine ran the
+      // command, only the echo is. `this.attacking` follows the answer, never
+      // the request, because a caller that believes the trigger is down when it
+      // is not is a caller that has lost the shot.
+      if (!answer.ran || !answer.echoFound) {
+        return { held: false, method: "console", reason: answer.reason || "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
       }
       this.attacking = !!down;
       return { held: true, method: "console", command: down ? "+attack" : "-attack", output: answer.output, console: this.consoleMetrics() };
