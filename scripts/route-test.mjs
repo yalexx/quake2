@@ -405,6 +405,50 @@ check("and how close the turn landed, to a hundredth of a degree",
   legRecord.aimError === 0.01, { aimError: legRecord.aimError });
 check("a leg that fired says so", legRecord.fired === true, { fired: legRecord.fired });
 
+// A failed aim is retried, and the retry has to measure again rather than
+// re-run the first attempt's arithmetic. `face()` skips its opening probe when
+// it is handed `from`, and `from` here is the position read *before* the first
+// attempt turned the player -- so passing it back aims the second attempt at
+// the error the first one has already spent. Measured on a live `finish` run's
+// leg record: residuals of 10 to 30 degrees, and one of 109, after first
+// attempts that had already turned most of the way.
+console.log("a failed aim is retried against the view the player actually has");
+const retryCalls = [];
+const retryStub = {
+  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+  async mouseHold(button, down) { return { held: !!down, button, buttons: down ? 1 : 0 }; },
+  async face(bearing, options) {
+    retryCalls.push({ turn: (options && options.turn) || "auto", hasFrom: !!(options && options.from) });
+    // The first attempt gets most of a 29-degree miss back and still fails; the
+    // retry ends somewhere else entirely.
+    if (retryCalls.length === 1) return { facing: false, target: bearing, yaw: 25, error: 29.7, rounds: 4, reason: "NOT_CONVERGED", method: "mouse" };
+    return { facing: false, target: bearing, yaw: 200, error: 12.5, rounds: 2, reason: "NOT_CONVERGED", method: "keys" };
+  },
+  async key(key, down) { return { key, down }; },
+  async evaluate() { return "1"; },
+  async screenshot() { return fs.readFileSync(new URL("../favicon.png", import.meta.url)); },
+};
+const retryWalker = new CombatWalker(retryStub, map, { engage: { readHud: false } });
+await retryWalker._leg({
+  x: -672, y: 336, z: 14,
+  enemy: { index: 0, classname: "monster_soldier", position: { x: -672, y: 336, z: -16 }, distance: 46 },
+  route: { x: -696, y: 192, z: -48 },
+}, { attempt: 1, leg: 1 });
+check("the first aim is given the view the leg already read", retryCalls[0] && retryCalls[0].hasFrom === true, retryCalls);
+check("a miss is retried the bridge's own way", retryCalls.length === 2 && retryCalls[1].turn === "auto", retryCalls);
+check("and the retry measures again instead of reusing the spent view", retryCalls[1].hasFrom === false, retryCalls);
+const retryRecord = retryWalker.fights[0];
+check("the leg's record is the retry's answer, not the first attempt's",
+  retryRecord.aimError === 12.5 && retryRecord.aimMethod === "keys" && retryRecord.aimed === false, retryRecord);
+// The walk is walked on the yaw the aim left behind. Taken from the first
+// attempt it would be 25, and the keys for the route at 25 are not the keys at
+// 200 -- so this is what says the leg did not walk off on a spent view.
+const walkBearing = ((Math.atan2(192 - 300, -696 + 672) * (180 / Math.PI)) + 360) % 360;
+check("the walk's keys are computed from the view the retry left behind",
+  JSON.stringify(retryRecord.keys) === JSON.stringify(movementKeys(200, walkBearing)) &&
+  JSON.stringify(movementKeys(200, walkBearing)) !== JSON.stringify(movementKeys(25, walkBearing)),
+  { keys: retryRecord.keys, at200: movementKeys(200, walkBearing), at25: movementKeys(25, walkBearing) });
+
 // A level restart is not a plan that failed. This stub's player is dead on
 // every read except the one right after a restart -- which is the shape of a
 // `finish` run on demo1, where six and seven of eight attempts went on restarts

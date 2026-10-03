@@ -1193,6 +1193,16 @@ What moved is not the distance but the mechanism, and it moved a long way:
 | the aim landing inside 2 degrees | 0 of 18 | **12 of 25** |
 | legs the player "died" on that were a strafe | 24 of 171 readings | **0 of 45** |
 
+The aim row is the one number here that a later fix has moved underneath. A
+review pass found that a *failed* aim's retry was handed the view from before
+the first attempt turned the player, so it re-aimed at an error the first
+attempt had already spent -- the 10-to-30-degree residuals in those same leg
+records, and one of 109. That is fixed and pinned by
+`scripts/route-test.mjs`; the 12-of-25 above was measured before the fix, and a
+live run to re-measure it could not be made because the kiosk's game was being
+played by hand for the rest of the session. The other three rows are unaffected
+-- none of them goes through the retry.
+
 The run that reached 1,343 covered 152, 332, 184, 312, 339, 263 and 236 units on
 its firing legs -- ground the player used to spend standing still -- and its own
 health series shows the fight being fought and sometimes won: 100, 9, 19, 5
@@ -1624,7 +1634,16 @@ the trigger is the last thing released -- the shape of the fix above, with no
 browser. And **a missed respawn does not end the walk**: one stub whose respawn
 fails once and then succeeds must be asked again and must not come back `DEAD`,
 and one whose player never comes back must end on the restart budget with three
-presses spent on each restart it was allowed. 115 checks in all.
+presses spent on each restart it was allowed.
+
+And **a failed aim is retried against the view the player actually has**: a stub
+whose first turn misses is checked to be asked again *without* the `from` it was
+first handed -- `face()` skips its opening probe when it is given a view, and
+that view is from before the first attempt turned the player, so handing it back
+re-aims the second attempt at the error the first one has already spent. The
+stub's retry ends 175 degrees from where the first attempt stopped, and the test
+reads the leg's own keys back out to prove they were computed from the retry's
+view and not the spent one. 120 checks in all.
 
 **`scripts/engine-state-test.mjs`** needs no browser and no game either: it
 loads `engine-state.js` into a Node `vm` sandbox with a synthetic WASM linear

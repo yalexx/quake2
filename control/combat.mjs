@@ -688,9 +688,23 @@ export class CombatWalker extends RouteWalker {
       // bridge's own way, which is the order that puts a retired method back on
       // probation. A leg that walks off with the aim wherever it happened to be
       // is a leg that fires at the wall it is walking past.
+      //
+      // The retry measures again rather than re-running the first attempt's
+      // arithmetic. `face()` skips its opening probe when it is handed `from`,
+      // and `before` is where the view was *before* the first attempt turned
+      // it -- so handing it back aims the second attempt at the error the first
+      // one has already spent: a 29-degree miss whose first attempt recovered
+      // 25 of it turns another 29 and ends 25 degrees out the other side. It is
+      // the shape of the 10-to-30-degree residuals, and the one of 109, in a
+      // measured `finish` run's leg record.
       if (aimed && !aimed.facing) {
-        const again = await this.game.face(facing, { ...aimOptions, rounds: 2, turn: "auto" });
-        if (again && again.facing) aimed = again;
+        const { from: _spent, ...fresh } = aimOptions;
+        const again = await this.game.face(facing, { ...fresh, rounds: 2, turn: "auto" });
+        // The latest word wins even when it is a miss. The retry has turned the
+        // player, so the first attempt's `yaw` is no longer where the view is,
+        // and `viewYaw` below is what the walk's keys are computed from -- a leg
+        // that walked on the first attempt's yaw would walk off-course.
+        if (again) aimed = again;
       }
       // The walk is walked on the view the aim actually left behind, not on the
       // bearing it was asked for -- movementKeys() is what turns the difference
@@ -701,15 +715,17 @@ export class CombatWalker extends RouteWalker {
         for (const key of keys) { await this.game.key(key, true); down.push(key); }
         const started = Date.now();
         await new Promise((resolve) => setTimeout(resolve, stepMs));
-        if (this.engage.readHud === true) {
-          // Read inside the hold: the player is still walking and still firing
-          // while the status bar is photographed and decoded.
-          const reading = this.#readHud(options);
-          await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(this.engage.readWalkMs, 600))));
-          await releaseKeys();
-          health = await reading;
-        }
+        // The status bar is read inside the hold: the player is still walking
+        // and still firing while it is photographed and decoded.
+        const reading = this.engage.readHud === true ? this.#readHud(options) : null;
+        if (reading) await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(this.engage.readWalkMs, 600))));
+        await releaseKeys();
+        // Measured at the release, so `holdMs` is the time the keys were held
+        // rather than that plus however long the status bar took to decode --
+        // the decode outlives the hold, because the keys come up once the read
+        // has had its `readWalkMs` and the reading is awaited after them.
         heldMs = Date.now() - started;
+        if (reading) health = await reading;
       } else {
         // A game object with no key() -- the walker's test stubs -- keeps the
         // old path: walk, release, then read.
