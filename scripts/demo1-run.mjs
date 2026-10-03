@@ -384,7 +384,7 @@ async function finish() {
       const fight = fights[index];
       report("  " + String(index + 1).padStart(2, " ") + "  " + fight.classname + (fight.enemyDistance === undefined ? "" : " d" + fight.enemyDistance) +
         "  aimed " + (fight.aimed ? "yes" : "no") +
-        (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg)") +
+        (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg" + (fight.aimMethod ? " " + fight.aimMethod : "") + ")") +
         "  fired " + (fight.fired ? "yes" : "no") +
         "  covered " + fight.travelled +
         (fight.fireMode && fight.fireMode !== "advance" ? "  " + fight.fireMode : "") +

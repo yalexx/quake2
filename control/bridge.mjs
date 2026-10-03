@@ -62,11 +62,20 @@ const DEFAULT_TIMEOUT_MS = 5000;
 // contact. Ten degrees is six times the largest kick measured and less than half
 // the smallest death.
 //
+// The build also *leans* the view when the player strafes -- Yamagi Quake II's
+// `cl_rollangle`, which stock Quake 2 does not have -- so there is a third
+// population in the gap the threshold has to sit in. Measured on a live player
+// on `demo1`, one reading per CDP round trip: standing still 0, walking forward
+// at most 0.72, and strafing up to 2.00 over 47 samples of pure strafe, none of
+// them above 2.0 in either direction. Ten is five times that lean and still less
+// than half the smallest death measured.
+//
 // engine-state.js carries the same number and the same measurement. It is
 // repeated here because the page loads that script once, at startup: a
 // corrected constant never reaches a page that is already running, and this is
-// the reading every decision in the walker is made from.
-const ROLL_IS_DEATH = 10;
+// the reading every decision in the walker is made from. Exported because the
+// scripts that pin it import it by name.
+export const ROLL_IS_DEATH = 10;
 // CDP's Input.dispatchKeyEvent.modifiers is a bit field.
 const MODIFIER_BITS = { Alt: 1, Control: 2, Meta: 4, Shift: 8 };
 
@@ -282,6 +291,22 @@ function lastLine(lines, pattern) {
   return -1;
 }
 
+// `dead`, decided from the roll this bridge has in its hand rather than from
+// the served page's own verdict.
+//
+// The page decides it too -- `engine-state.js` reports `dead`, and an older
+// copy of that file decides it at 1 -- and the control layer is the part that
+// promises the walk a reading it can act on. A bridge that passed the page's
+// word straight through would hand a run's ground to a number it cannot
+// justify, and would change behaviour with whatever the app server happens to
+// be serving. So it decides for itself, from the field the reading does give,
+// and falls back to the page's answer only when there is no roll to judge.
+export function deadFromRoll(read) {
+  const roll = read && read.angles ? Number(read.angles.roll) : NaN;
+  if (Number.isFinite(roll)) return Math.abs(roll) > ROLL_IS_DEATH;
+  return !!(read && read.dead);
+}
+
 // The engine's own words, parsed: it prints its map name in three different
 // places, its player position only for `viewpos`, and its level lifecycle as
 // banner lines. Everything here comes from a transcript, so nothing is
@@ -302,15 +327,13 @@ function readEngineState(transcript) {
     running: started >= 0 && started > stopped,
     position: viewpos ? { x: Number(viewpos[1]), y: Number(viewpos[2]), z: Number(viewpos[3]) } : null,
     angles,
-    // A living player's view never rolls: Quake 2 has no lean, and the view
-    // angles are the ones the client smooths from the input, which keep roll at
-    // zero. The death camera is the one thing that rolls them, so a non-zero
-    // roll is how a caller learns the player is dead without a screenshot --
-    // and this engine has no console command that prints health (see "Reading
-    // the game's state"). It matters because every movement key does nothing at
-    // all while the player is dead, which otherwise reads as a follower that has
-    // walked into a wall.
-    dead: !!angles && Math.abs(angles.roll) > 1,
+    // The death camera is how a caller learns the player is dead without a
+    // screenshot -- this engine has no console command that prints health (see
+    // "Reading the game's state") -- and it matters because every movement key
+    // does nothing at all while the player is dead, which otherwise reads as a
+    // follower that has walked into a wall. See ROLL_IS_DEATH for why the
+    // threshold is where it is rather than at the first non-zero value.
+    dead: !!angles && Math.abs(angles.roll) > ROLL_IS_DEATH,
     lines,
   };
 }
@@ -1406,11 +1429,12 @@ export class QuakeControl {
     const read = direct.read;
     // Whether the player is dead, decided here rather than taken from the page:
     // see ROLL_IS_DEATH for why the page's own answer is not the one to trust.
-    // A reading with no angles in it has nothing to decide from, and the page's
-    // answer is passed through as it stands.
-    const rolled = read.angles && typeof read.angles.roll === "number" && Number.isFinite(read.angles.roll)
-      ? Math.abs(read.angles.roll) > ROLL_IS_DEATH
-      : null;
+    // The decision itself is `deadFromRoll`, which is exported because the
+    // scripts that test it call it directly; a reading with no angles in it has
+    // nothing to decide from, and the page's answer -- and the page's own word
+    // for where it came from -- is passed through as it stands.
+    const dead = deadFromRoll(read);
+    const judged = !!(read.angles && typeof read.angles.roll === "number" && Number.isFinite(read.angles.roll));
     return {
       probed: false,
       source: "wasm-memory",
@@ -1427,9 +1451,9 @@ export class QuakeControl {
       consoleOpen: read.consoleOpen,
       keyDest: read.keyDest,
       keyDestName: read.keyDestName,
-      dead: rolled === null ? read.dead : rolled,
-      alive: rolled === null ? read.alive : !rolled,
-      aliveSource: rolled === null ? read.aliveSource : "view-roll",
+      dead,
+      alive: !dead,
+      aliveSource: judged ? "view-roll-above-strafe-lean" : (read.aliveSource || "view-roll-above-strafe-lean"),
       health: read.health,
       armour: read.armour,
       ammo: read.ammo,
@@ -1660,6 +1684,19 @@ export class QuakeControl {
         await this.#sendKey(game, key, false);
       });
       return { method: "keys", amount: Math.sign(wanted) * ms * rate, ms: Math.round(ms), key };
+    }
+    // A method the caller asked for *by name* is put back on probation rather
+    // than refused. Retiring a method is how the automatic order stops spending
+    // rounds on one that has stopped working; it is not a claim that the method
+    // can never work again, and it takes only three misses to earn -- which the
+    // death camera produces on its own, because the view does not turn while it
+    // is up and a player who walks into demo1's soldiers dies several times a
+    // run. Refusing a named method is worse than one wasted round: a caller that
+    // asked for the mouse and is answered "none" has no way to turn at all, and
+    // `face()` returns NO_TURN without sending anything.
+    if (mode === "mouse" && this.turnCalibration.mouseWorks === false) {
+      this.turnCalibration.mouseWorks = null;
+      this.turnCalibration.misses = { keys: 0, mouse: 0 };
     }
     if (mode === "keys" || this.turnCalibration.mouseWorks === false) {
       // Both methods are believed dead. A retired method is never tried again,

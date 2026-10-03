@@ -448,7 +448,7 @@ The reply says so itself: `player.health`, `armour` and `ammo` are always
 `null`, `unavailable` names them, and `note` says why. A `null` field here means
 *unknown*, not *zero*, and it is never filled in with a guess. `alive` is not a
 memory field: it is derived from the live view roll and says so
-(`aliveSource: "view-roll"`).
+(`aliveSource: "view-roll-above-strafe-lean"`).
 
 **The console is now an explicit fallback, and only that.** `state({ probe:
 true })` still does what it always did -- opens the console, types the two

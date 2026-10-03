@@ -176,7 +176,7 @@
       // and a made-up zero would be worse than an honest gap. `alive` is
       // derived from the view roll, which was measured, and says so.
       alive: !dead,
-      aliveSource: "view-roll",
+      aliveSource: "view-roll-above-strafe-lean",
       health: null,
       armour: null,
       ammo: null,
