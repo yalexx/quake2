@@ -302,6 +302,20 @@ try {
     return "refused";
   });
 
+  // The fire route's refusals are checked here rather than fired: this test
+  // leaves the game as it found it, and `+attack` is not a harmless key to send
+  // at a live game. Both refusals happen before the bridge is reached, so they
+  // hold whether or not a game is open.
+  await step("POST /control/attack with an unparsable ms -> 400 BAD_REQUEST", async () => {
+    assertError(await request(live.port, "POST", "/control/attack", { body: { ms: "a while" } }), 400, "BAD_REQUEST");
+    return "refused";
+  });
+
+  await step("and one longer than the hold the API will wait for -> 400 BAD_REQUEST", async () => {
+    assertError(await request(live.port, "POST", "/control/attack", { body: { ms: 60000 } }), 400, "BAD_REQUEST");
+    return "refused";
+  });
+
   await step("a body over the 64 KiB cap -> 400, and the connection is answered", async () => {
     assertError(await request(live.port, "POST", "/control/key", { rawBody: "x".repeat(70 * 1024) }), 400, "BAD_REQUEST");
     return "70 KiB refused";

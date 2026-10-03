@@ -10,6 +10,7 @@
 
 import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker } from "../control/walker.mjs";
+import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
 
 let failures = 0;
 let checks = 0;
@@ -204,6 +205,79 @@ const after = await died.follow({ x: -1776, y: 1544, z: 4 }, { attempts: 1 });
 check("a death on the same map is restarted", dying.respawns.length === 1, dying.respawns.length);
 check("and the restart names the level it expects", dying.respawns[0] && dying.respawns[0].expectMap === "demo1", dying.respawns[0]);
 check("the walk then stops if the level had changed", after.reason === "LEVEL_CHANGED", after.reason);
+
+console.log("the fighting walker");
+// Looking one way and walking another is the whole of shooting on the move:
+// Quake 2 moves a player along the view, so a soldier to the side of the route
+// is only shootable if the walk keeps a strafe key down.
+check("looking the way you walk holds forward alone", movementKeys(90, 90).join("") === "w", movementKeys(90, 90));
+check("walking a quarter turn left holds the left strafe", movementKeys(0, 90).join("") === "a", movementKeys(0, 90));
+check("and a quarter turn right holds the right strafe", movementKeys(90, 0).join("") === "d", movementKeys(90, 0));
+check("a diagonal is forward plus the strafe", movementKeys(0, 45).join("") === "wa", movementKeys(0, 45));
+check("and the other diagonal is the other strafe", movementKeys(0, -45).join("") === "wd", movementKeys(0, -45));
+check("a soldier dead behind is not walked at sideways", movementKeys(0, 180).join("") === "s", movementKeys(0, 180));
+check("the turn is read the short way round the compass", movementKeys(350, 10).join("") === "w", movementKeys(350, 10));
+
+// Clear air is not the same as a walkable floor, and demo1's dead-end pocket is
+// the proof: the wall that closes it is a brush 16 units thick, so a line check
+// that strides in 16-unit steps reports the way clear and walks the player into
+// it. Three consecutive `finish` runs ended stopped at -427 111 for exactly
+// this; clearWalk() is the check that made it walkable again.
+check("the wall across demo1's pocket is not walkable through",
+  !clearWalk(map, { x: -427, y: 111, z: -47 }, { x: -480, y: 24, z: -48 }));
+check("but the way the plan actually goes out of it is",
+  clearWalk(map, { x: -427, y: 111, z: -47 }, { x: -432, y: 24, z: -40 }));
+check("and a soldier standing down the corridor is walkable to",
+  clearWalk(map, { x: -696, y: 192, z: -48 }, { x: -672, y: 336, z: -40 }));
+check("a line to nowhere is not walkable at all", !clearWalk(map, null, null));
+
+// The corridor route point 12 is (-696,192,-48) of floor, so a player standing
+// there has their eye at -2. A level shot leaves the muzzle at that height and
+// flies straight, which is what levelShotReaches() answers.
+const corridorEye = { x: -696, y: 192, z: -2 };
+const corridorSoldier = map.waypoints("enemy").find((e) => Math.round(e.position.x) === -672 && Math.round(e.position.y) === 336);
+check("the level's own entity lump has the corridor soldier", !!corridorSoldier, corridorSoldier && corridorSoldier.position);
+check("a level shot reaches a soldier on the corridor's own floor",
+  levelShotReaches(map, corridorEye, corridorSoldier.position));
+check("but not one two storeys up",
+  !levelShotReaches(map, corridorEye, { x: -1176, y: 1272, z: 152 }),
+  levelShotReaches(map, corridorEye, { x: -1176, y: 1272, z: 152 }));
+check("nor through the wall between two rooms",
+  !levelShotReaches(map, { x: -288, y: 0, z: -2 }, { x: -856, y: 584, z: -24 }));
+
+const enemies = map.waypoints("enemy");
+const onTheWay = threats(map, corridorEye, { bearing: 135, enemies });
+check("a soldier standing where the route goes is a target", onTheWay.length > 0, onTheWay.map((t) => t.classname));
+// The leader is the cheapest *fight*, not the nearest soldier: walking 30
+// degrees off the way forward costs something, and the score is what says so.
+check("and the list is ordered by what the fight costs",
+  onTheWay.every((t, i) => i === 0 || t.score >= onTheWay[i - 1].score), onTheWay.map((t) => Math.round(t.score)));
+check("every target is inside the arc and inside the range",
+  onTheWay.every((t) => t.off <= 80 && t.distance <= 1100), onTheWay.map((t) => Math.round(t.distance)));
+const behindUs = threats(map, corridorEye, { bearing: 315, enemies });
+check("a soldier behind the way forward is not one", behindUs.every((t) => t.off > 80), behindUs.map((t) => Math.round(t.off)));
+const skipped = threats(map, corridorEye, { bearing: 135, enemies, skip: () => true });
+check("a soldier the caller has given up on is skipped", skipped.length === 0, skipped.length);
+const outOfRange = threats(map, corridorEye, { bearing: 135, enemies, engageRange: 40 });
+check("and one further away than the range is not a target at all", outOfRange.length === 0, outOfRange.length);
+
+// The seam itself. A level with no monsters in it has to walk exactly as the
+// plain walker does -- that is what makes this an addition rather than a
+// different walker -- and a level with one on the route has to aim at it.
+const bareMap = { isSolid: () => false, waypoints: () => [] };
+const bare = new CombatWalker({}, bareMap, {});
+const plainPoints = [{ x: 5, y: 6, z: 7 }, { x: 55, y: 6, z: 7 }];
+check("with no enemies the leg target is the route point it was given",
+  bare._legTarget({ x: 0, y: 0, z: 0 }, plainPoints).x === plainPoints[1].x,
+  bare._legTarget({ x: 0, y: 0, z: 0 }, plainPoints));
+
+const fightPoints = map.path(map.playerStart().position, map.exitPoint().aim, { maxStepUp: 45, maxDrop: 300, maxJump: 160, cell: 24 }).points;
+const fighter = new CombatWalker({}, map, {});
+const aimed = fighter._legTarget(corridorEye, fightPoints);
+check("with a soldier on the route the leg aims at the soldier", !!(aimed && aimed.enemy), aimed);
+check("and it still carries the route point it displaced", !!(aimed && aimed.route && aimed.route.x !== undefined), aimed && aimed.route);
+check("the aim is level with the player's own eye", Math.abs(aimed.z - corridorEye.z) < 1, aimed.z);
+check("the soldier is counted against its own budget", fighter.engagements.size === 1, fighter.engagements.size);
 
 console.log("errors are named, never empty");
 let threw = null;

@@ -82,6 +82,13 @@ export class RouteWalker {
     return entry;
   }
 
+  // The same note, for a subclass. A fighting walker's decisions -- which
+  // soldier a leg was aimed at, and why -- belong in the log the caller reads
+  // back next to the walker's own, and the log is one list.
+  _note(message, detail) {
+    return this.#note(message, detail);
+  }
+
   // What the level says is near a point, and whether any of it moves. This is
   // how a stuck follower tells "a door is in my way" from "a wall is in my way".
   brushesNear(point, radius = 96) {
@@ -113,9 +120,24 @@ export class RouteWalker {
     }
   }
 
+  // The point a leg aims at. The base walker is a navigator and knows only the
+  // route, so it picks the farthest point the player can see -- never one behind
+  // them, and never one that needs a jump.
+  //
+  // This is the seam a fighting walker overrides: `control/combat.mjs` hands
+  // back the soldier standing where the route goes instead of the route point,
+  // and its own `_leg` looks at that soldier while it walks. Nothing else about
+  // the leg loop changes, which is the point -- "where am I going, and what am
+  // I shooting at" is one decision, made in one place.
+  _legTarget(position, points) {
+    return this.#farthestVisible(position, points) ||
+      points[Math.min(this.#nearestIndex(position, points) + 1, points.length - 1)];
+  }
+
   // Walk one leg. Returns the bridge's goto() result, plus whether the point
-  // wanted a jump on the way in.
-  async #leg(point, options) {
+  // wanted a jump on the way in. Overridable for the same reason _legTarget is:
+  // a subclass that aims at a soldier has to fire while it walks.
+  async _leg(point, options) {
     if (point.jump) {
       // Face the landing spot and run at it with the jump key down: a gap is
       // cleared by speed and timing, not by aiming.
@@ -367,9 +389,8 @@ export class RouteWalker {
         // never to the goal: an aimed-at goal from a corner is a straight walk
         // through whatever is in the way, which is how a walk ends up in a
         // pocket the route went round.
-        const target = this.#farthestVisible(position, plan.points) ||
-          plan.points[Math.min(this.#nearestIndex(position, plan.points) + 1, plan.points.length - 1)];
-        const leg = await this.#leg(target, legOptions);
+        const target = this._legTarget(position, plan.points);
+        const leg = await this._leg(target, legOptions);
         const at = (leg && leg.position) || (await this.game.position()).position;
         if (!at) { this.#note("leg produced no position", leg); break; }
         legs++;

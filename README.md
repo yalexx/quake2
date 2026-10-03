@@ -20,8 +20,8 @@ engine files in `engine/` were copied from the project's public site
 | `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
-| `control/` | `bridge.mjs` (drives the running game over CDP, and navigates it), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
-| `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as six tools, see [The MCP server](#the-mcp-server) |
+| `control/` | `bridge.mjs` (drives the running game over CDP: navigation *and* the fire button), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck), `combat.mjs` (the same walker, shooting back at the level's own monsters) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
+| `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as seven tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
 | `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
 | `clawbox.json` | ClawBox app manifest |
@@ -281,8 +281,10 @@ that the kiosk browser already exposes at `http://127.0.0.1:18801`, so
 | Path | What |
 |---|---|
 | `control/bridge.mjs` | The driver: a zero-dependency ESM module for Node 22+ (the built-in `WebSocket`, no `npm install`) that speaks CDP to the game |
+| `control/walker.mjs` | Follows a route through the live level: doors, lifts, re-planning when a leg fails. Its two seams -- which point a leg aims at, and how the leg is walked -- are what `combat.mjs` overrides |
+| `control/combat.mjs` | The level's monsters, from the level's own entity lump: which of them a level shot can reach, which of them are on the way, and a walker that shoots them as it passes. See [The fight](#the-fight-controlcombatmjs) |
 | `control/server.mjs` | A small HTTP API on `127.0.0.1:4233` (`CONTROL_PORT`) for anything that would rather use `curl` than MCP. A front door to the bridge only: it never serves game files and never touches the server on 4231 |
-| `mcp/server.mjs` | A Model Context Protocol server (JSON-RPC 2.0 over stdin/stdout) exposing the same six calls as tools |
+| `mcp/server.mjs` | A Model Context Protocol server (JSON-RPC 2.0 over stdin/stdout) exposing the same calls as tools |
 | `scripts/quake-control-test.sh` | The end-to-end proof against the live game |
 
 ### Which frame it drives
@@ -434,8 +436,10 @@ bridge closes the loop on top of the same console probe `state()` uses:
 | `command(text)` | Open the console, run one command (or an array of them), read the answer back, close it. How a level is started (`map demo1`) and how a cheat is turned on, said out loud |
 | `face(bearing)` | Turn the player to an absolute bearing, in Quake 2's degrees: `0` is `+X`, `90` is `+Y`, the yaw grows anticlockwise |
 | `walk(ms)` | Hold forward for `ms` and let go. The primitive underneath `goto()` |
+| `walkKeys(keys, ms)` | Hold several keys at once for `ms` and let go: forward *and* a strafe, which is how a player looks one way and walks another. What a firing leg uses |
 | `goto({x,y,z}, opts)` | Turn towards a point, walk, read the position again, and keep going until the player is there -- or until the position stops improving |
 | `use(ms)` / `useHold(down)` | The use key, as `+use` on the engine's command line: what opens a door, calls a lift and presses a button. Held rather than tapped, because a door opens when the player walks into it |
+| `fire(ms)` / `attackHold(down)` | The fire button, as `+attack` on the engine's command line: the command behind every fire binding, so it works whatever the player's config says. Held for the same reason `use` is -- see [The fight](#the-fight-controlcombatmjs) |
 | `jump()` | One tap of space, the engine's fixed-height jump |
 | `strafe(ms, "left")` | Step sideways without turning: how a follower backs out of a corner |
 | `respawn()` | Put a dead player back in the level by starting the level again (`how: "map"`). `{ how: "fire" }` uses the engine's own fire-to-respawn instead, which restores the autosave |
@@ -640,6 +644,88 @@ node scripts/demo1-run.mjs walk X,Y,Z    # walk the route to a point, and report
 node scripts/demo1-run.mjs finish        # fresh demo1, walk to the exit, prove it
 ```
 
+### The fight: `control/combat.mjs`
+
+The walker gets a player to the exit of a level that does not want them to
+leave. `demo1` is a level that wants them dead: its corridor is held by
+`monster_soldier` entities whose blasters do 10 damage a bolt, the player has
+100 health and no armour, and the walker above does not shoot. That is why
+`finish` used to stop two-thirds of the way in.
+
+`control/combat.mjs` is the same walker with two decisions replaced, both of
+them about the level's *own* entity list -- the `monster_*` entities a mapper
+placed, which `route.mjs` reads out of the BSP's entity lump:
+
+* **`threats(map, from, options)`** -- what is worth shooting from here, best
+  first. It is a pure function over the map data: no browser, no game, and the
+  new checks in `scripts/route-test.mjs` run it off the archive. A soldier is a
+  target when it is within `engageRange` (1,100 units -- about where a Quake 2
+  soldier opens fire), within `engageArc` (80 degrees) of the way the walk is
+  already going, and when a *level shot* can reach it.
+* **`levelShotReaches(map, eye, origin)`** -- the geometry behind that last
+  filter. A Quake 2 bolt leaves the muzzle along the view and flies straight, so
+  a shot fired with the view level crosses the world at the player's eye height,
+  46 units above the floor they stand on. A soldier standing on that same floor
+  is 56 units tall with its origin 24 above its feet, so its body spans eye-24 to
+  eye+32: the eye is *inside* it, and a level shot hits the chest with no pitch
+  at all. A soldier on the floor above, or one behind the corridor's own wall, is
+  not reachable, and both are ruled out from the level's data alone -- which
+  matters, because this engine has no way to print pitch, and the pitch controls
+  it does have are useless for aiming (holding the key bound to `+lookup` even
+  30 ms moves the view 67 degrees).
+
+`CombatWalker` extends `RouteWalker` and overrides its two seams:
+
+| Seam | What the fighting walker does with it |
+|---|---|
+| `_legTarget(position, points)` | Hands back the soldier when `threats()` finds one where the route goes, and a route point when it does not. Each soldier is counted against `maxEngagements` (3) from wherever the player stands, so a walk never spends its whole budget on one of them -- a level restart, which puts the player hundreds of units away, hands every soldier a clean slate -- and a soldier inside `closeRange` (250 units) is shot at whatever the count says, because a monster is solid and the one at arm's length may be what the leg keeps stopping against |
+| `_leg(target, options)` | A leg with a soldier on it looks at it, holds `+attack` down and **walks the route anyway**, with the strafe key that keeps the two apart (`movementKeys`) |
+
+That last row is the whole tactic, and it was arrived at by measurement rather
+than taste:
+
+* **Standing still is what kills the player, and it is not close.** In
+  `demo1`'s corridor with 100 health and no armour, a live player who stood still
+  for six seconds was dead; a player who walked the same ground into the same
+  soldiers, holding the fire button down, finished the fight at 43 health with
+  35 armour and a soldier's body on the floor. A driver that stops to aim is
+  worse than one that never fires at all, which is the result the earlier runs
+  reported.
+* **Walking *at* the soldier is the wrong walk.** The first version of the
+  fighting leg aimed at the soldier and walked at it. On `demo1` its first leg
+  travelled 28 units in half a second, its second travelled none at all -- the
+  aim had left the route and pinned the player against a wall beside the
+  corridor -- and the player, standing still in the open, was dead before the
+  third leg. Quake 2 moves a player along the view, so looking at a soldier to
+  the side of the corridor *costs the walker the corridor*; `movementKeys()`
+  buys it back by holding forward and a strafe key together, which is what a
+  player at the keyboard does.
+* **The leg has to be short.** The base walker's `goto()` runs until it arrives,
+  which on open ground is several hundred units of walking in which no combat
+  decision is taken -- and the leg that enters `demo1`'s corridor is decided
+  while the soldiers are still out of sight. `walkRounds: 2` caps an ordinary leg
+  at about 240 units, comfortably inside the range a soldier opens fire at.
+* **The walk has to follow the plan, not a chord across it.** The base walker
+  aims each leg at the farthest route point it can see. That is a straight line
+  between two points the planner cleared, and the line itself is only checked for
+  clear *air* -- not for a walkable floor. On `demo1` it is enough to walk the
+  player off the plan and into the dead-end pocket at `-427 111`: three
+  consecutive `finish` runs ended with the walker's own note naming that position
+  and the `func_wall`s it was standing against, 1,660 to 2,057 units short of the
+  exit, with a valid 38-point route from that very spot to the exit sitting unread
+  on disk. `CombatWalker` aims every leg at a route point a few steps ahead on
+  the plan instead (`walkAhead`, `walkReach`), and checks the line to it with
+  `clearWalk()` -- the four body heights `walker.mjs` samples, strided at 10
+  units rather than 16, because the brush that walls that pocket off is 16 units
+  thick in x and a 16-unit stride steps straight over it. A point with no
+  walkable line to it is skipped and the next one back is tried, so a leg aims
+  at something the player can actually walk to rather than merely see.
+
+`CombatWalker.follow()` adds a `combat` summary to the walker's result --
+`enemiesInLevel`, `firingLegs`, and a `fights` array with each firing leg's
+aim error, the keys it held and the ground it covered -- so a run says what the
+fight did rather than only where the player got to.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),
@@ -666,10 +752,33 @@ scripts/demo1-run.mjs plan`), and it opens two doors on the way in: `func_door
 
 Walking it is a fight rather than a stroll. The corridor west and north of the
 start room is covered by `monster_soldier` at `-672 336 -16` and `-856 240 -16`,
-and the exit room by three more monsters; the walker does not shoot, and it dies.
-The furthest a walker has been measured live is **`-929 420`** -- 1,407 units from
-the trigger, 3,286 units of the route behind it -- after which the soldiers killed
-it and the level restarted.
+and the exit room by three more monsters; a walker that does not shoot dies
+there, and `finish` stops 1,968 to 2,057 units short of the trigger.
+
+**What the level's monsters do to a player, measured.** Three live experiments
+on demo1 in the corridor, all with 100 health and no armour, all read off the
+HUD in a screenshot (`position()` cannot report health -- see
+[Reading the game's state](#reading-the-games-state)):
+
+| What the player did | Result |
+|---|---|
+| Walked in without firing, then stood still for six seconds | **Dead.** The death camera rolls and the view is level no longer |
+| Walked the same ground in, then stood still for seven seconds with the trigger held down | **Alive**, at 43 health with 35 armour, a soldier's body and blood on the floor, and a level view |
+
+The reading is not subtle: on this level it is *stopping* that kills, and the
+fire button is what buys the right to stop. A leg that *walked* at a soldier
+instead of the route was therefore the worst of both -- it left the plan, ended
+against a wall beside the corridor, and stood the player still in the open (28
+units covered in half a second, then none at all, then a corpse). The
+fighting walker's `_leg` walks the *route* with the strafe key that keeps the aim
+off it (`movementKeys`), and `walkRounds` keeps an ordinary leg to about 240
+units so the decision to shoot is taken every couple of hundred units rather
+than once a plan.
+
+`finish` reports the fight as well as the walk: how many soldiers the level
+holds, how many firing legs the run took, and -- when it does not finish -- the
+closest the player was ever *measured* to be to the exit, with the walker's own
+last notes.
 
 Two traps are worth knowing before reading any single run's "furthest position":
 
@@ -708,7 +817,8 @@ are JSON objects of at most 64 KiB.
 |---|---|
 | `POST /control/key` | `{"key":"w"}` taps it; `{"key":"w","down":true}` holds it and `false` releases it; `{"text":"map demo1","enter":true}` types a whole string and presses Enter |
 | `POST /control/mouse` | `{"dx":120,"dy":0}` turns the view |
-| `POST /control/click` | `{"button":"left"}` (the default), `"right"` or `"middle"` |
+| `POST /control/click` | `{"button":"left"}` (the default), `"right"` or `"middle"` -- one press and release |
+| `POST /control/attack` | `{"ms":500}` holds the fire button for that long and lets go (default 300, maximum 5000); `{"down":true}` and `{"down":false}` hold and release it explicitly. The `+attack` console command, so it works whatever the fire key is bound to. See [The fight](#the-fight-controlcombatmjs) |
 | `POST /control/status` (also `GET`) | `200` with the page's state as JSON, framing included |
 | `GET /control/state` | `200` with the game's state as JSON: the map, whether a level is up, the position and angles, the save slots and the console log tail. Sends no input |
 | `POST /control/state` | `{"probe":true}` also asks the engine over its own console for a live `viewpos`/`serverinfo` (input: the console is opened and shut again) |
@@ -719,6 +829,7 @@ are JSON objects of at most 64 KiB.
 ```sh
 curl -s -X POST 127.0.0.1:4233/control/key -d '{"key":"Escape"}'      # tap Escape
 curl -s -X POST 127.0.0.1:4233/control/mouse -d '{"dx":60,"dy":0}'    # turn right
+curl -s -X POST 127.0.0.1:4233/control/attack -d '{"ms":500}'         # hold the trigger for half a second
 curl -s -X POST 127.0.0.1:4233/control/status                          # what the game is showing
 curl -s 127.0.0.1:4233/control/state                                   # what the game is doing (no input)
 curl -s -X POST 127.0.0.1:4233/control/state -d '{"probe":true}'       # ... and ask the engine live
@@ -785,7 +896,8 @@ and no other process running than the browser showing the game.
 |---|---|
 | `quake2_key` | `key` (a key to tap), or `down` to hold/release it, or `text` (a whole string to type) with `enter` to press Enter after it |
 | `quake2_mouse` | `dx`, `dy` |
-| `quake2_click` | `button`: `"left"`, `"right"`, `"middle"` |
+| `quake2_click` | `button`: `"left"`, `"right"`, `"middle"` -- one press and release |
+| `quake2_attack` | `ms` (default 300, maximum 5000) to hold the fire button for that long, or `down` to hold and release it explicitly |
 | `quake2_status` | -- |
 | `quake2_state` | `probe` (optional): `true` asks the engine over its console for a live position; omit for a read that sends no input |
 | `quake2_screenshot` | -- (answers with an image content block, `image/png`) |
@@ -848,14 +960,26 @@ that the failure names the brushes nearest the point it reached), and that the
 walker's `brushesNear` finds the door when standing in one and nothing when
 standing in open air.
 
+It also checks the fighting walker, all of it off the archive and with no
+browser: that `movementKeys()` turns a bearing into the right forward/strafe
+combination and never walks a player sideways at a soldier behind them, that
+`levelShotReaches()` reaches a soldier on the corridor's own floor and not one
+two storeys up or through the wall between two rooms, that `threats()` keeps to
+its range and its arc, orders what it finds by what the fight costs, honours a
+caller's `skip` and returns nothing on a level with no monsters, and that
+`clearWalk()` is blocked by the 16-unit brush that closes demo1's dead-end
+pocket and clear along the way the plan actually goes out of it. 70 checks in
+all.
+
 **`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
 a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP
 endpoint that is not there, for the error paths -- and exercises every route the
 API has: `health`, `status`, `state` (plain and `probe`), `key`, `mouse`,
-`click` and `screenshot`. It asserts status codes and content types, that a
-screenshot is a real PNG (signature, IHDR, dimensions, and `HEAD` agreeing), and
-that failures are JSON with a code: an empty key, a non-numeric delta, an
-unknown button, a body over 64 KiB, a body that is not JSON, an unknown route
+`click`, `attack` and `screenshot`. It asserts status codes and content types,
+that a screenshot is a real PNG (signature, IHDR, dimensions, and `HEAD`
+agreeing), and that failures are JSON with a code: an empty key, a non-numeric
+delta, an unknown button, an `ms` that is not a number or is longer than the
+hold the API will wait for, a body over 64 KiB, a body that is not JSON, an unknown route
 (`404`), a wrong method (`405` with `Allow`), and `502 CDP_UNREACHABLE` for
 every route when the browser is gone. It never touches the live API on 4233, the
 game server on 4231 or `quake2-app.service`, and it stops only the two children
@@ -897,7 +1021,7 @@ only skips when *nothing* moves, so a genuine navigation bug still fails loudly.
 **`scripts/mcp-smoke-test.mjs`** spawns `mcp/server.mjs` and speaks its real
 transport to it: `initialize` (protocol version and server name), a
 `notifications/initialized` that must produce no answer, `ping`, `tools/list`
-(all six tools, each with an object `inputSchema`), `tools/call` for
+(every tool, each with an object `inputSchema`), `tools/call` for
 `quake2_status` and `quake2_state` (a well-formed result either way; `isError`
 with a reason when no game is open), an **unknown tool call**, which must come
 back as `isError: true` rather than a JSON-RPC error, a bad argument that must

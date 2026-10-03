@@ -99,6 +99,25 @@ const TOOLS = [
     },
   },
   {
+    name: "quake2_attack",
+    description:
+      "Hold the fire button for a while and let it go -- Quake 2's `+attack`, the " +
+      "command behind every fire binding, so it works whatever the player's config " +
+      "says. Send ms to fire for that long (default 300, maximum 5000), or down:true " +
+      "to hold it and down:false to release it. A fight in Quake 2 is won by firing " +
+      "while the player keeps moving: three blaster bolts kill a soldier, and a " +
+      "player who stops to aim is a stationary target. quake2_click fires once; this " +
+      "fires until told to stop.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ms: { type: "number", description: "How long to hold the trigger, in milliseconds (0-5000). Ignored when down is given." },
+        down: { type: "boolean", description: "true holds the trigger, false releases it; omit to fire for ms and let go." },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: "quake2_status",
     description:
       "Report what the game is showing: the frame's URL, whether the engine is running, " +
@@ -163,6 +182,18 @@ async function callTool(name, args) {
     case "quake2_click": {
       const clicked = await game.click(args.button === undefined ? "left" : String(args.button));
       return { content: [{ type: "text", text: "Clicked " + clicked.button + "." }] };
+    }
+    case "quake2_attack": {
+      if (args.down !== undefined) {
+        const held = await game.attackHold(!!args.down);
+        return { content: [{ type: "text", text: (args.down ? "Held" : "Released") + " the trigger." + (held.held ? "" : " The engine did not answer on its console.") }] };
+      }
+      const ms = args.ms === undefined ? 300 : Number(args.ms);
+      if (!Number.isFinite(ms) || ms < 0 || ms > 5000) {
+        throw new ControlError("ms must be a number from 0 to 5000 (or send down:true/false to hold and release)", "BAD_REQUEST");
+      }
+      const fired = await game.fire(ms);
+      return { content: [{ type: "text", text: (fired.fired ? "Fired for " + ms + " ms." : "The engine did not answer on its console, so nothing was fired.") }] };
     }
     case "quake2_status": {
       return { content: [{ type: "text", text: JSON.stringify(await game.status(), null, 2) }] };
