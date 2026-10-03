@@ -960,6 +960,47 @@ export class CombatWalker extends RouteWalker {
   // while the whole walk in costs nothing). So the leg faces the soldier and
   // walks the way the walker was already going, with the strafe key that keeps
   // the two apart.
+  //
+  // What the leg used to do with its *other* seconds is what this version
+  // fixes, and it was measured on the running game rather than guessed. One
+  // firing leg on this box: the turn onto the soldier 415 ms, the walk 538 ms,
+  // `hudShot` 732 ms and `readHealth` 294 ms, and the trigger was down for the
+  // 538 ms in the middle of that and up for the rest. So a 2.2 s leg was 1.4 s
+  // of the player standing still in the open with the trigger *up*, being shot
+  // at by the level's own soldiers. That is the health reading the fight
+  // instrument reports (23 to 72 lost per firing leg, more than one soldier's
+  // blaster can do in half a second) turned into a mechanism -- and it is the
+  // harness's doing, not the level's.
+  //
+  // Those are the numbers that shaped this and they are kept as they were
+  // measured. The per-call cost underneath them has since been cut at the
+  // source -- one CDP connection for the whole run instead of one per call, and
+  // the status bar read out of the canvas in the page instead of photographed
+  // through the compositor. Measured on this box after that change: `hudShot`
+  // 80 ms (was 391), `position()` 1.1 ms (was 31), a key pair 3.6 ms (was 53),
+  // `fire(120)` 140 ms (was 203, so the overhead over the 120 ms hold is 20 ms
+  // rather than 83). The shape below is what makes the *leg* short; that change
+  // is what made each call in it cheap.
+  //
+  // So the trigger goes down first and comes up last, and the two halves that
+  // used to run with it up now run with it down:
+  //
+  //   * the turn. Aiming goes through the mouse, which this build does apply to
+  //     the player's own angles -- measured, `face(40, turn: "mouse")` converges
+  //     to 0.04 degrees in two rounds and 242 ms, against the arrow keys' 415 ms
+  //     and 6-degree tolerance. Every bolt of that turn is a bolt on the way to
+  //     a soldier that is already shooting back. `face()` keeps its own
+  //     calibration and falls back to the keys by itself if the mouse ever stops
+  //     turning the player.
+  //   * the status-bar read. `hudShot()`'s restyle does not touch a held key --
+  //     the engine goes on applying them -- so the leg goes on walking and firing
+  //     while the reading is taken. It is allowed to drag the leg out by
+  //     `readWalkMs` rather than the leg standing still for the whole of its
+  //     second, and it comes up with the keys rather than after them.
+  //
+  // Neither costs anything to spend: this build's starting weapon is the
+  // blaster, which uses no ammo, so the extra bolts are free and the only
+  // question is whether they land.
   async #fight(target, options) {
     const before = await this.game.position();
     // No position to aim from is not a reason to skip the leg: falling through

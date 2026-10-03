@@ -215,15 +215,31 @@ export function readGlyph(pakBuffer, name) {
 // The ten digits of each family the status bar uses: `num_*` for health and
 // ammo, `anum_*` for armour. A caller may hand in a pak buffer; the default is
 // the level archive beside this module.
-export function loadDigits(pakBuffer = fs.readFileSync(DEFAULT_PAK)) {
+//
+// Decoded once per archive and kept. This is called from inside every firing
+// leg's health read (a read that hands in no `digits` gets the default), and
+// reading a multi-megabyte pak and decoding twenty PCX glyphs out of it was
+// **49 ms** of each one -- measured on this box, and most of a health read that
+// costs 110 ms in total. None of it changes between one leg and the next: the
+// glyphs are the level's own pictures and the level does not change under a
+// run. The cache is keyed by the buffer handed in, so a caller that loads a
+// different archive still gets that archive's glyphs.
+const DIGITS_CACHE = new Map();
+
+export function loadDigits(pakBuffer) {
+  const key = pakBuffer === undefined ? DEFAULT_PAK : pakBuffer;
+  const cached = DIGITS_CACHE.get(key);
+  if (cached) return cached;
+  const archive = pakBuffer === undefined ? fs.readFileSync(DEFAULT_PAK) : pakBuffer;
   const families = {};
   for (const family of ["num", "anum"]) {
     const digits = [];
     for (let digit = 0; digit < 10; digit++) {
-      digits.push(readGlyph(pakBuffer, "pics/" + family + "_" + digit + ".pcx"));
+      digits.push(readGlyph(archive, "pics/" + family + "_" + digit + ".pcx"));
     }
     families[family] = digits;
   }
+  DIGITS_CACHE.set(key, families);
   return families;
 }
 
@@ -254,12 +270,32 @@ function coverage(glyph, scale) {
   return { width, height, pattern };
 }
 
+// A glyph's half of the correlation, worked out once: the ink's mean and
+// variance are properties of the *glyph*, not of the picture it is looked for
+// in, and a read scores ten glyphs against every cell of three rows. Recomputing
+// them inside the scan was most of what a health read cost.
+function prepareTemplate(template) {
+  const { width, height, pattern } = template;
+  const n = width * height;
+  const centred = new Float32Array(n);
+  let meanShape = 0;
+  for (let i = 0; i < n; i++) meanShape += 2 * pattern[i] - 1;
+  meanShape /= n;
+  let shapeVariance = 0;
+  for (let i = 0; i < n; i++) {
+    const ds = 2 * pattern[i] - 1 - meanShape;
+    centred[i] = ds;
+    shapeVariance += ds * ds;
+  }
+  return { width, height, centred, shapeVariance };
+}
+
 // Normalised cross-correlation between a glyph's shape and the picture at
 // (x0, y0): 1 is "exactly this digit", 0 is "nothing to do with it", negative
 // is "the ink is where the glyph has gaps". Background-brightness cancels, so a
 // number on a dark wall and the same number on a lit one read the same.
 function correlate(template, lum, imageWidth, x0, y0) {
-  const { width, height, pattern } = template;
+  const { width, height, centred, shapeVariance } = template;
   const n = width * height;
   let meanImage = 0;
   for (let y = 0; y < height; y++) {
@@ -267,24 +303,41 @@ function correlate(template, lum, imageWidth, x0, y0) {
     for (let x = 0; x < width; x++) meanImage += lum[row + x];
   }
   meanImage /= n;
-  let meanShape = 0;
-  for (let i = 0; i < n; i++) meanShape += 2 * pattern[i] - 1;
-  meanShape /= n;
   let covariance = 0;
-  let shapeVariance = 0;
   let imageVariance = 0;
   for (let y = 0; y < height; y++) {
     const row = (y0 + y) * imageWidth + x0;
+    const shapeRow = y * width;
     for (let x = 0; x < width; x++) {
-      const ds = 2 * pattern[y * width + x] - 1 - meanShape;
       const di = lum[row + x] - meanImage;
-      covariance += ds * di;
-      shapeVariance += ds * ds;
+      covariance += centred[shapeRow + x] * di;
       imageVariance += di * di;
     }
   }
   const denominator = Math.sqrt(shapeVariance * imageVariance);
   return denominator ? covariance / denominator : 0;
+}
+
+// The prepared templates for a family, at a scale, for a set of glyphs. Kept per
+// set of glyphs -- the ten digits of `num` and of `anum` do not change between
+// the legs of a run, and neither does `coverage()`'s supersampled rendering of
+// them.
+const PREPARED_TEMPLATES = new WeakMap();
+
+function templatesFor(families, family, scale) {
+  let byKey = PREPARED_TEMPLATES.get(families);
+  if (!byKey) {
+    byKey = new Map();
+    PREPARED_TEMPLATES.set(families, byKey);
+  }
+  const key = family + "@" + scale;
+  let prepared = byKey.get(key);
+  if (!prepared) {
+    const glyphs = families[family] || families.num;
+    prepared = glyphs.map((glyph) => prepareTemplate(coverage(glyph, scale)));
+    byKey.set(key, prepared);
+  }
+  return prepared;
 }
 
 // The best digit for a cell, and how much better it is than the runner-up.
@@ -307,6 +360,137 @@ function readCell(templates, lum, imageWidth, x0, y0) {
 // Taking the picture
 // ---------------------------------------------------------------------------
 
+// The status bar's pixels, read out of the canvas inside the page.
+//
+// The engine draws into the canvas's WebGL backing store and the browser clears
+// that store as soon as the frame is composited -- `preserveDrawingBuffer` is
+// false on this build (measured) -- so the read has to happen inside the
+// engine's own animation frame, after its callback has drawn and before the
+// compositor takes the buffer away. Measured on this box: a `toDataURL()` taken
+// from outside a frame returns a 1366x768 PNG whose every pixel is black, and
+// `getImageData` is not available at all (the canvas has no 2D context).
+//
+// So one frame of `requestAnimationFrame` is wrapped: the first animation
+// callback to arrive arms a read, and the read runs at the *next* frame, after
+// the engine has drawn it. `gl.readPixels` takes the canvas's bottom `band`
+// rows -- the rows the status bar is drawn in -- and GL's origin is the bottom
+// left, so the rows are flipped back to screen order, drawn into a scratch 2D
+// canvas and handed back as a PNG. What comes out has the same layout as the
+// strip the screenshot path below produced: row 0 is the top of the band, so
+// the same reader and the same `readOptions` apply to it unchanged.
+//
+// Returns null -- never throws -- when the page has no WebGL canvas to read, so
+// a caller falls back to the screenshot.
+export async function canvasStrip(game, options = {}) {
+  if (!game || typeof game.evaluate !== "function") return null;
+  const band = options.band || HUD_BAND;
+  const offsetX = options.offsetX || 360;
+  const waitMs = options.waitMs === undefined ? 400 : options.waitMs;
+  let answer;
+  try {
+    answer = await game.evaluate(canvasStripExpression({ band, waitMs, offsetX }));
+  } catch {
+    return null;
+  }
+  if (typeof answer !== "string") return null;
+  let strip;
+  try {
+    strip = JSON.parse(answer);
+  } catch {
+    return null;
+  }
+  if (!strip || strip.error || !strip.png) return null;
+  const rows = strip.band || band;
+  const digitRow = Math.max(0, rows - GLYPH_HEIGHT);
+  return {
+    png: Buffer.from(String(strip.png).split(",")[1] || "", "base64"),
+    canvasLeft: strip.left,
+    canvasTop: strip.top,
+    canvasWidth: strip.width,
+    canvasHeight: strip.height,
+    readOptions: { band: rows, rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
+    // Which way the picture was taken, so a caller reading a run back can tell
+    // an in-page read from a screenshot without guessing.
+    source: "canvas-pixels",
+  };
+}
+
+function canvasStripExpression({ band, waitMs, offsetX }) {
+  return `(function () {
+    return new Promise(function (resolve) {
+      var canvas = document.getElementById("canvas") || document.querySelector("canvas");
+      if (!canvas) { resolve(JSON.stringify({ error: "no-canvas" })); return; }
+      var gl = null;
+      try { gl = canvas.getContext("webgl2") || canvas.getContext("webgl"); } catch (error) {}
+      if (!gl || typeof gl.readPixels !== "function") { resolve(JSON.stringify({ error: "no-webgl" })); return; }
+      var width = canvas.width;
+      var height = canvas.height;
+      var rows = Math.max(1, Math.min(${band}, height));
+      var box = canvas.getBoundingClientRect();
+      var pixels = new Uint8Array(width * rows * 4);
+      var done = false;
+      var timer = setTimeout(function () {
+        finish(JSON.stringify({ error: "no-frame", waitedMs: ${waitMs} }));
+      }, ${waitMs});
+      function finish(payload) {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        resolve(payload);
+      }
+      function grab() {
+        try {
+          // GL's origin is the bottom left, so rows 0..rows-1 are the canvas's
+          // *bottom* rows: exactly the band the status bar is drawn in.
+          gl.readPixels(0, 0, width, rows, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        } catch (error) {
+          finish(JSON.stringify({ error: "read-pixels: " + error.message }));
+          return;
+        }
+        // readPixels hands the rows back bottom-first; a picture is top-first.
+        // Row at a time, as typed-array copies: this is a 1366x40 read, so the
+        // element-by-element version was 218,560 iterations inside the frame.
+        var flipped = new Uint8ClampedArray(pixels.length);
+        var stride = width * 4;
+        for (var y = 0; y < rows; y++) {
+          flipped.set(pixels.subarray(y * stride, y * stride + stride), (rows - 1 - y) * stride);
+        }
+        var scratch = window.__quake2HudStrip;
+        if (!scratch || scratch.width !== width || scratch.height !== rows) {
+          scratch = document.createElement("canvas");
+          scratch.width = width;
+          scratch.height = rows;
+          window.__quake2HudStrip = scratch;
+        }
+        scratch.getContext("2d").putImageData(new ImageData(flipped, width, rows), 0, 0);
+        finish(JSON.stringify({
+          png: scratch.toDataURL("image/png"),
+          width: width, height: height, band: rows, left: box.left, top: box.top,
+        }));
+      }
+      var original = window.requestAnimationFrame;
+      var armed = false;
+      window.requestAnimationFrame = function (callback) {
+        return original.call(window, function (time) {
+          var result = callback(time);
+          if (!armed) {
+            armed = true;
+            // The engine registers its next frame inside its own callback, so a
+            // read registered here lands after the next frame has been drawn --
+            // while its buffer is still the one on screen.
+            original.call(window, grab);
+            window.requestAnimationFrame = original;
+          }
+          return result;
+        });
+      };
+      // Nothing else is needed: the engine's own loop calls this once a frame.
+      // A page that has stopped animating (a menu, a paused build) never
+      // answers, and the timer above is what stops the wait.
+    });
+  })()`;
+}
+
 // A screenshot in which the canvas is shown at its own size, so the HUD's
 // pixels survive. A plain `screenshot()` shows the canvas at 837 CSS pixels
 // wide against a 1366-wide backing store, and the digits are blurred below the
@@ -322,7 +506,16 @@ function readCell(templates, lum, imageWidth, x0, y0) {
 // when the CSS box changes (measured: canvas.width stays 1366x768 across the
 // move), so the picture on the other side of this is the same game, framed
 // differently for the length of one screenshot.
+//
+// This is the fallback. The canvas's own pixels are read in the page when the
+// page can give them (see `canvasStrip`), which costs one animation frame
+// instead of a restyle, a settle, a compositor capture of the desktop and a PNG
+// decode; a firing leg paid about 350-440 ms for that on this box, with the
+// trigger down and the player standing in the open. The screenshot is still the
+// path a page without a readable WebGL canvas gets.
 export async function hudShot(game, options = {}) {
+  const strip = await canvasStrip(game, options);
+  if (strip) return strip;
   const before = await game.evaluate("document.querySelector('canvas').getAttribute('style')");
   const geometry = await game.evaluate(`(() => {
     const canvas = document.querySelector('canvas');
@@ -378,6 +571,7 @@ export async function hudShot(game, options = {}) {
     // it a caller that took a taller strip would hand over rows the reader
     // then filtered out, and the read would come back empty for no reason.
     readOptions: { band, rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
+    source: "screenshot",
   };
 }
 
@@ -404,7 +598,7 @@ export function readStatus(pngBuffer, options = {}) {
 export function readBar(lum, width, height, options = {}) {
   const families = options.digits || loadDigits(options.pak);
   const family = options.family || "num";
-  const templates = (families[family] || families.num).map((glyph) => coverage(glyph, options.scale || 1));
+  const templates = templatesFor(families, family, options.scale || 1);
   const cellWidth = templates[0].width;
   const cellHeight = templates[0].height;
   const minScore = options.minScore === undefined ? 0.6 : options.minScore;
