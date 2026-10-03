@@ -601,7 +601,18 @@ export function readBar(lum, width, height, options = {}) {
   const templates = templatesFor(families, family, options.scale || 1);
   const cellWidth = templates[0].width;
   const cellHeight = templates[0].height;
-  const minScore = options.minScore === undefined ? 0.6 : options.minScore;
+  // How sure a cell has to be before it is a digit at all. It was 0.6, which is
+  // low enough that the status bar's *own icons* become numbers: measured on the
+  // live game at a fresh `map demo1` spawn -- where the bar carries exactly one
+  // number, the 100 health -- the reader returned that 100 (score 0.819) **and a
+  // phantom 4 at score 0.619**, read out of the art beside the health digits. A
+  // picture of that strip is `hud-fresh-spawn.png` in this run's evidence, and
+  // the vision pass over it reads the 100 and no other number. A phantom is
+  // worse than a miss: a caller that is handed 4 believes the player is nearly
+  // dead, and a caller handed nothing knows it was not told. 0.65 sits above the
+  // phantom and below the real number, and leaves a real digit room for the
+  // score the level's own background costs it.
+  const minScore = options.minScore === undefined ? 0.65 : options.minScore;
   // The strip a `hudShot` returns puts the status bar in its first rows; a
   // whole screenshot puts it wherever the canvas bottom is. Searching only the
   // band keeps the scene -- which is full of shapes -- out of the answer.
