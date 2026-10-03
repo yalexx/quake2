@@ -724,6 +724,10 @@ export class QuakeControl {
     // See #withSession and #connection.
     this.connection = null;
     this.sessionOpening = null;
+    // Bumped by close(). An open that was already under way when the caller
+    // asked to be let go must not leave a connection behind it (see
+    // #openConnection).
+    this.connectionEpoch = 0;
     // How many times focusCanvas() has had to send the click that buys pointer
     // lock back. The click is Quake's fire button, so "the bridge does not fire
     // the weapon to move the mouse" is a number worth being able to print.
@@ -901,6 +905,7 @@ export class QuakeControl {
   // re-derived on every call: the target, the game's frame, its execution
   // contexts, and whether the canvas holds pointer lock.
   async #openConnection() {
+    const epoch = this.connectionEpoch;
     const { target } = await this.findGame();
     const session = await CdpSession.open(target.webSocketDebuggerUrl, this.timeoutMs);
     let live = null;
@@ -967,6 +972,12 @@ export class QuakeControl {
       // that has gone, and is re-resolved from /json/list.
       session.onEvent((message) => this.#onConnectionEvent(live, message));
       await this.#watchFocus(live);
+      if (epoch !== this.connectionEpoch) {
+        // close() landed while this was being opened. The caller asked for the
+        // socket, the page watcher and the binding to go, and they go -- the
+        // catch below closes the socket, and the connection is never stored.
+        throw new ControlError("the bridge was closed while it was connecting", "DISCONNECTED");
+      }
       this.connection = live;
       return live;
     } catch (error) {
@@ -981,11 +992,19 @@ export class QuakeControl {
   // frame lifecycle -- is ignored.
   #onConnectionEvent(live, message) {
     if (message.method === "Runtime.executionContextsCleared") {
-      // The page navigated or reloaded: every context id the connection holds
-      // is stale, and the new ones are announced after this. Dropping what is
-      // cached is what stops a call from evaluating into a world that is gone.
-      live.contexts.clear();
-      live.game.focus = { locked: null, pushed: false };
+      // The page navigated or reloaded: the execution contexts this connection
+      // resolved are gone, and the `evaluate` the game object carries closed
+      // over their ids when it was built. Clearing the collector is not enough
+      // -- the ids already handed out stay dead, and on this build an evaluate
+      // naming a context the page no longer has is answered `Invalid
+      // parameters` (measured). #withSession only retries a call whose
+      // *connection* is gone, so a stale id would fail every call for the life
+      // of the process. The whole connection goes instead, and the next call
+      // resolves the target, the frame, the contexts and the pointer-lock
+      // watcher again from scratch -- which is what every call did before the
+      // connection was kept, and what keeps a game that reloaded under the
+      // bridge from being talked to on a stale handle.
+      this.#dropConnection(live);
       return;
     }
     if (message.method === "Page.frameNavigated" || message.method === "Page.frameDetached") {
@@ -2579,6 +2598,7 @@ export class QuakeControl {
   // a socket, a page watcher and a binding behind it.
   async close() {
     this.cursor = null;
+    this.connectionEpoch++;
     this.#dropConnection(this.connection);
     this.connection = null;
     this.sessionOpening = null;

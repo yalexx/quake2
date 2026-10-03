@@ -360,9 +360,13 @@ the first call and reused by every call after it -- the target, the game's
 frame, its execution contexts and the canvas's pointer-lock state are all
 settled once, on that connection, rather than re-derived per call. It is thrown
 away, and re-resolved from `/json/list`, only when the socket dies or the game
-frame goes away: a page navigation clears the cached contexts (they are
-re-announced and re-waited for), and a game frame that has moved or detached
-drops the connection outright. See
+frame goes away -- and "goes away" includes its execution contexts being
+cleared, which is what a reload of it looks like from the wire: the ids the
+game's `evaluate` closed over are dead ones, and an evaluate naming a context
+the page no longer has is answered `Invalid parameters` on this build
+(measured). A socket that dies, a game frame that navigates somewhere else or
+detaches, a target that crashes, and cleared contexts all drop the connection;
+the next call re-resolves it. See
 [the pass that made the input path cheap](#the-pass-after-that-the-input-path-and-the-lag)
 for what that changed and what it measured.
 
@@ -1564,8 +1568,13 @@ Six changes, each measured:
 * **One long-lived connection.** `#withSession` now reuses a single connection
   and settles the target, the frame, the contexts and the pointer-lock state
   once, on it. It is dropped -- and re-resolved from `/json/list` -- only when
-  the socket dies or the game frame navigates away or detaches, both of which
-  are watched as CDP events rather than checked per call.
+  the socket dies, the target crashes, the game frame navigates away or
+  detaches, or its execution contexts are cleared (a reload), all of which are
+  watched as CDP events rather than checked per call. The cleared-contexts case
+  is the one that has to drop the *connection* and not just the cached ids: the
+  `evaluate` the game object carries closed over the ids it resolved at open, so
+  clearing the cache alone would leave every later call naming a dead context,
+  which this build answers `Invalid parameters` (measured).
 * **The context wait is an event with a deadline, not a poll.** The
   announcement of a frame's execution context wakes the waiter in the same tick
   it arrives; `CONTEXT_WAIT_MS` (500 ms) is only there for a frame that never
