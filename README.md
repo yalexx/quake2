@@ -1901,6 +1901,22 @@ report already writes as `?`, instead of a number read out of the scenery. The
 field is `573/1366` of the strip rather than a pixel count, so a resize scales it
 with the bar; `healthFieldRight` moves it and `healthFieldRight: null` drops it.
 
+Two things the review pass found in that fix, and fixed. The edge was computed
+from the *decimal length of the value*, which is not how wide a reading is when
+a run carries a leading zero: `digits [0,0]` is `0` as a value and two cells on
+the bar, and on two of the kept strips the decimal length put that run's edge at
+557 for a run that ends on 573 -- a run like `07` (value `7`) would have been
+rejected by one cell. The edge now comes from the cells the reader grew, which is
+what `readBar`'s own overlap rule already calls the span. And the fraction is a
+property of the strip, not of the bar: `hudShot`'s screenshot *fallback* returns
+the canvas slid left by `round(canvasWidth/2 - 360)` -- 323 px on this box -- so
+reading that strip with the canvas fraction put the field 323 px off and every
+read on the fallback path came back a miss; the fallback now hands over its own
+fraction (`healthFieldRightForStrip`). Both are checked out of the archive's own
+digit pictures -- the same technique `scripts/route-test.mjs` uses, but as a
+standalone check in the review run's evidence, because `route-test.mjs` exercises
+`readBar` and not `readHealth`.
+
 Re-read through both rules on the identical 38 pictures: **36 readings unchanged,
 2 changed, and both of those were wrong before** -- one bar-art phantom and one
 armour number, now misses. `scripts/route-test.mjs` is at all 132 checks. The
