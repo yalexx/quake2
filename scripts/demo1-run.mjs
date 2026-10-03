@@ -57,11 +57,29 @@ async function readMapName() {
   return { name: found ? found[1] : null, lines: answer.output || [] };
 }
 
+// How many times the reset is asked for before the run gives up on it.
+//
+// One send is not a start on this box, and it is not the level's fault. The
+// console drops a keystroke now and then -- `map demo1` has arrived as `ap
+// demo1` ("Unknown command") and as `mo1` -- and the engine boots into its own
+// attract demo, whose `mapname` is `q2demo1.dm2`, so a run that trusted one
+// send reported "map after reset: q2demo1.dm2" and stopped before walking a
+// step. `map demo1` is idempotent, so the answer is to ask again and then ask
+// the engine what level it is really on, rather than to believe the send.
+const RESET_TRIES = 6;
+
 async function freshDemo1() {
-  const sent = await game.command(["map demo1", "cheats 0"], { tail: 12 });
-  await new Promise((resolve) => setTimeout(resolve, 2500));
+  let sent = null;
+  let map = null;
+  for (let tries = 1; tries <= RESET_TRIES; tries++) {
+    sent = await game.command(["map demo1", "cheats 0"], { tail: 12 });
+    // The level takes a moment to come up, and a reading taken inside that
+    // moment names the level the engine is leaving, not the one it is loading.
+    await new Promise((resolve) => setTimeout(resolve, tries === 1 ? 2500 : 2000));
+    map = await readMapName();
+    if (map.name === "demo1") break;
+  }
   const state = await game.position();
-  const map = await readMapName();
   return { map: map.name, position: state.position, angles: state.angles, cheatsAnswer: sent.output || [] };
 }
 

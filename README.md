@@ -1753,6 +1753,110 @@ the previous pass fixed -- but the readings that used to make it look like a
 stall are gone, and the legs are now cheap enough that a stall would be visible
 as a stall rather than as a slow leg.
 
+### The play pass: the reset that was not a start
+
+This pass was a *play* pass: run `finish`, keep the game alive between attempts,
+and repeat until the engine's own line says `"mapname" is "demo2"`. **The engine
+never said it.** Every run in this pass ended with the engine answering
+`"mapname" is "demo1"`, and the numbers below are what it did say instead.
+
+**The first thing it said was that nothing had started.** The first run of the
+pass stopped before walking a step, with
+
+```
+map after reset: q2demo1.dm2
+result: could not start demo1; stopping rather than walking an unknown level
+```
+
+`q2demo1.dm2` is the engine's own attract demo: a freshly opened page boots into
+it, and until a real level is loaded its `mapname` is that name. The `map demo1`
+the reset sent had been mangled by the console's keystroke drop -- the echo in
+the scrollback is `]ap demo1`, and the engine answered `Unknown command "ap"` --
+so the level never loaded and `freshDemo1()` read the attract demo's name and
+refused to walk. The same drop is documented above (`mo1`, `cheas 0`); what was
+new here is that the *reset* trusted a single send, and a reset that silently
+does not happen costs the whole run. `freshDemo1()` now asks again and checks
+what the engine says it is running, up to `RESET_TRIES` (6) sends, and only then
+hands the walk a level. Measured after the fix, on the same command:
+`map after reset: demo1`, `player at: 128 -320 46`, the level's own spawn.
+
+**What the walk did, once it was walking.** Four runs, all with `cheats 0`,
+the fight's default `advance` mode unless noted, and the status bar unread
+(`QUAKE2_READ_HUD=0` -- the read costs about 40% of the ground a firing leg
+makes, and no firing leg in these runs made a damage decision from health):
+
+| run | attempts | deepest reading | at | level restarts | firing legs | ground covered |
+|---|---|---|---|---|---|---|
+| `finish-3` | 24 | **1,006 short** | -979 930 | 18 | 90 | 9,982 |
+| `finish-4` | 40 | **743 short** | -1037 1622 | 29 | 141 | 15,548 |
+| `finish-retreat` | 24, `fireWhile:retreat` | **1,633 short** | -814 224 | 17 | 57 | 3,548 |
+| `finish-5` | 60 | **901 short** | -952 1181 | 48 | 256 | 27,998 |
+
+**Kiting was tried and is worse.** `QUAKE2_FIRE_WHILE=retreat` walks the route
+*backwards* while the trigger is down, away from the soldier being shot -- the
+"fall back while firing" tactic. At the same 24-attempt budget as `finish-3` it
+reached **1,633 units short against 1,006**, covered **3,548 units of ground
+against 9,982**, and every one of its 17 deaths was between 1,500 and 2,500
+units short, so no life ever got past the corridor's entrance. Backing away
+while shooting buys the ground back at the price of the ground: the walk trades
+its whole advance for the retreat and never arrives. `advance` stays.
+
+**More attempts do not buy depth, and that is the finding of this pass.** Three
+runs at 24, 40 and 60 attempts reached 1,006, 743 and 901 units short: the best
+reading moves inside a 263-unit spread with no trend, while the deaths scale
+with the budget (18, 29, 48 -- about three restarts for every four attempts in
+all three). What more attempts buy is more *lives*, not a better walk: in the
+60-attempt run, 256 firing legs over 48 deaths is a life that survives about
+five of them, and then the corridor kills it and takes its ground back. The walk
+is not plan-limited and not distance-limited -- it covered 27,998 units of a
+4,693-unit route -- and 60 attempts did not change that. **Every death clusters
+in the same place.** Of the 48 restarts in the 60-attempt run, 31 were between
+1,000 and 1,500 units short of the exit, 16 between 1,500 and 2,000, and one
+reached 901. That is the corridor, and it is the same corridor the earlier
+passes describe: the walk survives the open ground and the pocket, enters the
+corridor, and is ground down in it.
+
+**Two things the per-leg record says about the corridor.** First, the walk
+stalls in the pocket: the trail shows four consecutive legs of one attempt at
+`-464 20` (2,011 short) -- the dead-end pocket at `-427 111` the walker's own
+note names -- before a leg breaks out of it. Legs spent standing against a wall
+are legs spent being shot at. Second, of the 141 firing legs in the 40-attempt
+run, **114 were aimed more than 120 degrees off the way the route goes** (2
+between 91 and 120, 25 at 90 or less). The walker finishes the soldier it
+started -- that is deliberate, and documented above -- and on this level the
+soldiers it has walked past are behind it, so most of the shooting happens over
+its shoulder while it advances. Whether that is what the health is being spent
+on is not answerable from these runs: the status bar was unread, and the reader
+is not trustworthy anyway (see below).
+
+**The health reading: a phantom number, found and narrowed.** No run in this
+pass made a decision from health, but the reader was measured in the one state
+where the engine's truth is known -- a fresh spawn, where the bar carries
+exactly one number and it is 100. The reader returned that 100 (score 0.819)
+**and a phantom `4` at x=662 (score 0.619)**, read out of the bar's own art; a
+picture of the strip (`hud-fresh-spawn.png`) put to the vision pass reads the
+100 and no other number. Score 0.6 was the floor, so a weak coincidence in the
+art was a number like any other. `readBar`'s floor is now **0.65** -- above the
+phantom, below the real number -- which makes a leg more likely to report *no*
+reading than a wrong one, and misses are what the fight report is written to
+survive (`health ?` rather than a number). Verified on that same live strip (the
+phantom gone, the 100 untouched) and by `scripts/route-test.mjs` (all 132
+checks, the painted bars included). The measurement, the picture and the
+verification are in `HUD-READING.md` in this run's evidence. What is **not**
+claimed is that the read is trustworthy under fire: one state was measured, and
+the earlier pass's two crops where the bar and the reading disagreed
+(`leg-a2l5-002.png`, **100** on the bar against a reading of **4**;
+`leg-a2l7-004.png`, **25** against **80**) are the reason a per-leg health
+number is quoted here with its crop and never steered on.
+
+**Nothing else was changed, and the review branch held nothing to fold in.**
+`clawbox/run-gvr292q5` (tip `0c9744f`) was inspected commit by commit: its one
+substantive change is gating `useHold()` and `attackHold()` on
+`answer.echoFound` rather than `answer.ran` -- "the engine ran the command"
+rather than "a dump came back" -- and this line already has that rule in both
+methods (`control/bridge.mjs`). No substantive fix was left unlanded, so nothing
+was taken from a branch that diverges everywhere else.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),
