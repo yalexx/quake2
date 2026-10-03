@@ -112,11 +112,13 @@ const directStateExpression = () => `(function () {
   return JSON.stringify({ read: out.read, watch: out.watch, map });
 })()`;
 
-// The key the engine's own config binds to `+use`, read out of its config file.
-// Quake 2 has no default `+use` binding -- a door opens by walking into it --
-// so on a stock config this answers null, and useHold() says so instead of
-// quietly falling back to the console. A config that binds one is honoured.
-const useBindingExpression = () => `(function () {
+// The engine's own key bindings, as a list of { key, command }, after the last
+// `unbindall` (the engine's config opens with one, so only the lines after it
+// count). One reader, because every question about the config is this question:
+// which key does the engine itself press for this command? The matching is done
+// here in Node rather than in the page, so the page answers once and both
+// `+use` and `use <weapon>` are asked of the same answer.
+const bindMapExpression = () => `(function () {
   const dirs = ${JSON.stringify(GAME_DIRS)};
   for (const dir of dirs) {
     for (const name of ["config.cfg", "default.cfg"]) {
@@ -124,20 +126,16 @@ const useBindingExpression = () => `(function () {
       try { text = FS.readFile(dir + "/" + name, { encoding: "utf8" }); } catch (error) { continue; }
       const lines = text.split("\\n");
       const binds = {};
-      // unbindall clears everything before it, and the engine's config opens
-      // with one, so only the lines after the last unbindall count.
       let start = lines.length;
       for (let i = lines.length - 1; i >= 0; i--) if (/^\\s*unbindall\\b/i.test(lines[i])) { start = i; break; }
       for (let i = start; i < lines.length; i++) {
         const m = lines[i].match(/^\\s*bind\\s+(\\S+)\\s+"([^"]*)"/i);
-        if (m) binds[m[1].toUpperCase()] = m[2];
+        if (m) binds[m[1].toUpperCase()] = m[2].trim();
       }
-      for (const key of Object.keys(binds)) {
-        if (binds[key].trim() === "+use") return JSON.stringify({ key });
-      }
+      return JSON.stringify(Object.keys(binds).map((key) => ({ key, command: binds[key] })));
     }
   }
-  return "null";
+  return "[]";
 })()`;
 
 // ---- Reading the game's state ---------------------------------------------
@@ -1520,27 +1518,88 @@ export class QuakeControl {
   // null when nothing is bound. A mouse binding is returned as a button.
   async useKey() {
     if (this.useBinding === undefined) {
-      let raw;
-      try {
-        raw = await this.#withSession((game) => game.evaluate(useBindingExpression()));
-      } catch {
-        // The page could not answer -- so nothing is known, and nothing is
-        // remembered. Caching this would turn one unreadable moment (a page
-        // still booting, a socket that dropped) into "the config binds no key"
-        // for the rest of the run, which is a claim about the player's config
-        // that this bridge has not earned.
-        return { found: false, reason: "UNREADABLE" };
-      }
-      let name = null;
-      try {
-        const parsed = raw ? JSON.parse(raw) : null;
-        if (parsed && typeof parsed.key === "string" && parsed.key !== "") name = parsed.key;
-      } catch {
-        name = null;
-      }
-      this.useBinding = this.#describeUseKey(name);
+      const bound = await this.binding("+use");
+      if (bound.reason === "UNREADABLE") return { found: false, reason: "UNREADABLE" };
+      this.useBinding = { found: bound.found, binding: bound.binding, pressable: bound.pressable, key: bound.key, button: bound.button };
     }
     return this.useBinding;
+  }
+
+  // The engine's own bindings, read out of its config once. A read that fails
+  // is not cached: caching it would turn one unreadable moment (a page still
+  // booting, a socket that dropped) into "the config binds no key" for the rest
+  // of the run, which is a claim about the player's config this bridge has not
+  // earned.
+  async binds() {
+    if (this.configBinds !== undefined) return this.configBinds;
+    let raw;
+    try {
+      raw = await this.#withSession((game) => game.evaluate(bindMapExpression()));
+    } catch {
+      return null;
+    }
+    let parsed = null;
+    try {
+      const value = raw ? JSON.parse(raw) : null;
+      if (Array.isArray(value)) parsed = value.filter((entry) => entry && typeof entry.key === "string" && typeof entry.command === "string");
+    } catch {
+      parsed = null;
+    }
+    if (!parsed) return null;
+    this.configBinds = parsed;
+    return this.configBinds;
+  }
+
+  // Which key the engine's config binds to `command` (e.g. `+use`, `+attack`).
+  // `found` and `pressable` are different answers: a config that binds a
+  // command to a fourth mouse button has bound something, and saying it "binds
+  // no key" would be a false statement about the player's own config.
+  async binding(command) {
+    const wanted = String(command);
+    const binds = await this.binds();
+    if (!binds) return { command: wanted, found: false, binding: null, key: null, button: null, pressable: false, reason: "UNREADABLE" };
+    const entry = binds.find((candidate) => candidate.command === wanted);
+    if (!entry) return { command: wanted, found: false, binding: null, key: null, button: null, pressable: false, reason: "NO_BINDING" };
+    return { command: wanted, ...this.#describeKey(entry.key) };
+  }
+
+  // Which key the engine's config binds to `use <weapon>` -- the engine's own
+  // way of selecting a weapon, so that choosing one is the same kind of act as
+  // firing: a real key event, no console, no pause. The weapon is named the way
+  // the config names it ("Super Shotgun"), compared case-insensitively with its
+  // whitespace flattened, because a config that writes `use supershotgun` and a
+  // config that writes `use Super Shotgun` are naming the same weapon.
+  async weaponKey(weapon) {
+    const binds = await this.binds();
+    if (!binds) return { weapon, found: false, reason: "UNREADABLE", key: null, button: null, pressable: false };
+    const wanted = String(weapon).trim().replace(/\s+/g, " ").toLowerCase();
+    for (const entry of binds) {
+      const use = /^use\s+(.+)$/i.exec(entry.command);
+      if (!use) continue;
+      if (use[1].trim().replace(/\s+/g, " ").toLowerCase() !== wanted) continue;
+      return { weapon, command: entry.command, found: true, ...this.#describeKey(entry.key) };
+    }
+    return { weapon, found: false, reason: "NO_WEAPON_BINDING", key: null, button: null, pressable: false };
+  }
+
+  // Press and release the key the engine's own config binds to `use <weapon>`.
+  // A weapon the player does not own is not an error here -- Quake 2 ignores
+  // the command and keeps the weapon in hand -- so this reports what it pressed
+  // and lets the caller judge the fight by its health, not by this answer.
+  async selectWeapon(weapon) {
+    const bound = await this.weaponKey(weapon);
+    if (!bound.found) return { selected: false, weapon, reason: bound.reason, key: null };
+    if (bound.button) {
+      const held = await this.mouseHold(bound.button, true);
+      await this.mouseHold(bound.button, false).catch(() => {});
+      return { selected: !!held.held, weapon, method: "mouse", key: bound.key, button: bound.button };
+    }
+    await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      await this.#sendKey(game, bound.key, true);
+      await this.#sendKey(game, bound.key, false);
+    });
+    return { selected: true, weapon, method: "key", key: bound.key, command: bound.command };
   }
 
   // The engine names bindings in its own spelling ("SPACE", "MOUSE1", "e").
@@ -1549,7 +1608,7 @@ export class QuakeControl {
   // actually press it. Those are different answers: a config that binds `+use`
   // to a fourth mouse button has bound something, and saying it "binds no key"
   // would be a false statement about the player's own config.
-  #describeUseKey(name) {
+  #describeKey(name) {
     if (name === null || name === undefined || String(name) === "") return { found: false, binding: null, pressable: false, key: null, button: null };
     const upper = String(name).toUpperCase();
     const mouse = upper.match(/^MOUSE(\d+)$/);
@@ -1708,7 +1767,27 @@ export class QuakeControl {
     }
     const useConsole = options.how === "map" || options.console === true;
     if (!useConsole) {
-      await this.click("left").catch(() => {});
+      // The button is *held* across a frame, not clicked.
+      //
+      // Quake 2 restarts the level from its death camera on the edge of the
+      // attack button -- `latched_buttons`, which the engine sets by comparing
+      // the keys it samples this frame against the ones it sampled last frame.
+      // It samples once a frame; a click is a press and a release dispatched
+      // back to back, and on a 60 Hz game both can land between two samples, so
+      // the engine sees the button at rest on every frame and the edge never
+      // happens. That is what a `finish` run reports as NOT_RESPAWNED -- three
+      // presses, 7.5 s apart, with the player still dead -- and it is why a run
+      // that dies ends there instead of being given the rest of its budget.
+      // Measured on this box: every traced run that died logged
+      // `reason: NOT_RESPAWNED` on all three tries, where a player who presses
+      // and keeps holding the fire button is back in the level.
+      const hasMouse = typeof this.mouseHold === "function";
+      if (hasMouse) await this.mouseHold("left", true).catch(() => {});
+      else await this.click("left").catch(() => {});
+      await new Promise((resolve) => setTimeout(resolve, numberOr(options.pressMs, 400)));
+      // Released whatever happened above: a button left down is a player
+      // firing at the level's own spawn screen for the rest of the run.
+      if (hasMouse) await this.mouseHold("left", false).catch(() => {});
       await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
       const afterFire = await this.position();
       if (afterFire && !afterFire.dead) {

@@ -480,6 +480,48 @@ check("and the walk stops on its own restart budget, not on its attempts",
 // the player 1,802 units short, four attempts unspent. One press of fire is
 // enough in a clean experiment -- measured live: a click, 2.5 s, roll -1.50 to
 // 0.00, alive -- and evidently not always enough under fire on a live level.
+// The weapon a fighting walker asks the engine for is per *life*, not per
+// attempt. A death restarts the level and hands the player the level's own
+// starting loadout, and the walker does not spend an attempt on that restart
+// (`attempt--` in follow) -- so the same attempt number comes round again on a
+// spawn that no longer carries the weapon. Keyed on the attempt alone, every
+// life after the first was fought with the blaster while the report said
+// shotgun: measured on this stub, one ask across four lives.
+console.log("the weapon a fighting walker asks the engine for");
+{
+  const enemy = map.waypoints("enemy").filter((e) => e.classname === "monster_soldier")
+    .sort((a, b) => Math.hypot(a.position.x + 856, a.position.y - 240) - Math.hypot(b.position.x + 856, b.position.y - 240))[0];
+  // On the soldier's own floor: its origin is 24 above its feet and the
+  // player's eye is 46 above its own, so the eye is 22 above that origin --
+  // inside the soldier's box, which is what a level shot needs.
+  const standing = { x: enemy.position.x + 150, y: enemy.position.y, z: enemy.position.z + 22 };
+  const fightStub = {
+    asked: 0, dead: false, keys: 0, respawns: 0,
+    async position() { return { probed: true, position: standing, angles: { pitch: 0, yaw: 0, roll: this.dead ? 39 : 0 }, map: "demo1", dead: this.dead }; },
+    async respawn() { this.respawns++; this.dead = false; return { respawned: true, how: "fire", position: standing }; },
+    async selectWeapon(name) { this.asked++; return { selected: true, weapon: name, method: "key", key: "3" }; },
+    async face() { return { facing: true, yaw: 0, error: 0, rounds: 1 }; },
+    async key(key, down) { this.keys++; if (this.keys > 4) this.dead = true; return { held: !!down, key }; },
+    async mouseHold() { return { held: true }; },
+    async attackHold() { return { held: true }; },
+    async useHold() { return { held: true }; },
+    async goto(point) { return { reached: true, reason: "reached", target: point, position: standing, rounds: 1, travelled: 10, trail: [] }; },
+    async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+    async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+    async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  };
+  const armed = new CombatWalker(fightStub, map, { engage: { weapon: "Super Shotgun", readHud: false, maxEngagements: 20 } });
+  // Four attempts, not more: the stub's player is dead by the third, and every
+  // attempt is a full A* over demo1's grid, which is the slowest thing in this
+  // file.
+  const armedResult = await armed.follow(map.exitPoint().aim, { attempts: 4, deaths: 2, tolerance: 96, maxLegs: 2 });
+  check("the walk fought, died and was put back on the spawn",
+    armed.restarts >= 1 && armedResult.reason !== "NO_POSITION",
+    { lives: armed.restarts + 1, reason: armedResult.reason, asks: fightStub.asked });
+  check("and asked the engine for its weapon once in every life it fought",
+    fightStub.asked === armed.restarts + 1, { lives: armed.restarts + 1, asks: fightStub.asked });
+}
+
 console.log("a missed respawn does not end the walk");
 const flakyStub = {
   respawns: 0,
@@ -510,8 +552,13 @@ check("and the walk does not end on the one miss", flakyResult.reason !== "DEAD"
 // on the first refusal with the budget unspent.
 const stubbornStub = {
   respawns: 0,
+  mapRestarts: 0,
   async position() { return { probed: true, position: { x: -427, y: 111, z: -1 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo1", dead: true }; },
-  async respawn() { this.respawns++; return { respawned: false, reason: "NOT_RESPAWNED", how: "fire" }; },
+  async respawn(options = {}) {
+    this.respawns++;
+    if (options.how === "map") this.mapRestarts++;
+    return { respawned: false, reason: "NOT_RESPAWNED", how: options.how || "fire" };
+  },
   async goto(point) { return { reached: true, reason: "reached", target: point, position: { x: -427, y: 111, z: -1 }, rounds: 0, travelled: 0, trail: [] }; },
   async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
   async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
@@ -524,7 +571,14 @@ const stubbornResult = await new RouteWalker(stubbornStub, map, {}).follow(map.e
 check("a player that will not come back ends on the restart budget, not on one refusal",
   stubbornResult.reason === "DEATHS", stubbornResult.reason);
 check("with three presses of fire spent on each of the three restarts it was allowed",
-  stubbornStub.respawns === 9, { respawns: stubbornStub.respawns, deaths: 3 });
+  stubbornStub.respawns === 12, { respawns: stubbornStub.respawns, deaths: 3 });
+// ...and the fourth, once per death, is the engine's own restart by name --
+// `map demo1`, the command a player's death runs for them. A level that will
+// not hand the player back to the fire button is still a level this walker is
+// standing in, and giving up on it there is what ended four traced runs on
+// their first death with seven restarts unspent.
+check("and one restart by name per death as the fire button's fallback",
+  stubbornStub.mapRestarts === 3, stubbornStub.mapRestarts);
 
 // The furthest reading is a different reading from the last one, and on a run
 // that ends in a death they are hundreds of units apart. The walker's `position`

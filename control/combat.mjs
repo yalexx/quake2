@@ -52,7 +52,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { RouteWalker } from "./walker.mjs";
+import { RouteWalker, finitePoint } from "./walker.mjs";
 import { hudShot, readHealth } from "./hud.mjs";
 
 // The player's eye sits this far above the floor they stand on (24 of the
@@ -200,6 +200,49 @@ export const ENGAGE_DEFAULTS = {
   // second of standing still, and the cap is what keeps the reading from
   // dragging the leg the length of the plan.
   readWalkMs: 600,
+  // Which weapon the fight asks for, named the way the engine's own config
+  // names it ("Super Shotgun"). null leaves the player the weapon they walked
+  // in with. The press goes through the engine's own `use <weapon>` binding --
+  // the same kind of real key event as the trigger, no console -- and a weapon
+  // the player does not have is not an error: Quake 2 ignores it and keeps the
+  // weapon in hand, so what this buys is measurable and what it costs is one
+  // key press per attempt.
+  weapon: null,
+  // How a firing leg moves while the trigger is down: "advance" keeps walking
+  // the route (the way this walked before the option existed), "retreat" backs
+  // along the route away from the soldier being shot, "hold" stands. "adapt"
+  // tries each in turn and then follows the health the fight actually cost --
+  // see #fireMode, which is the measurement this option exists for.
+  fireWhile: "advance",
+  // How many firing legs each way of firing is given before "adapt" starts
+  // choosing the cheaper one. Two is the smallest number that can show a
+  // difference; more would spend the level's health learning instead of
+  // walking.
+  fireModeWarmup: 2,
+  // How far off the route a health or armour pickup may stand and still be
+  // walked over on the way past. **Off by default, and measured off.** At 96 a
+  // run of demo1's exit route does exactly what this was written to do -- two
+  // route points move onto the level's two `item_health_small`, at route units
+  // 629 and 677, for 53 extra units of walking -- and the health those items
+  // give is spent at the wrong end of the level. The player is at full health
+  // when it passes unit 630 (measured: the first firing leg of every traced
+  // `finish` run is past route unit 900), so both items are picked up and
+  // thrown away, and the walk is 53 units longer for it. The one health item
+  // this route really could use, the `item_health_large` at -1176 1520, lies 64
+  // units off the route *line* at unit 2770 -- closer than either small -- but
+  // more than 96 units from any of the plan's own points, so no nudge reaches
+  // it. The lever is a real one and this is where it lives; on this level the
+  // measurement says there is nothing on the route worth taking, so it is left
+  // for a caller that has a level where there is.
+  pickupRange: 0,
+  // ...and how much of a turn taking it may cost. A pickup is taken on the way
+  // past, so a nudge that would bend the route is not a top-up, it is a
+  // different route -- measured on demo1, the nearest health item to the exit
+  // route is 91 units off it, and nudging demo1's pocket escape onto that item
+  // turns the leg through the pocket's own wall-corner. The turn is measured
+  // between the bearing the leg had and the bearing the nudge would give it, so
+  // a point on a straight run takes a pickup beside it and a corner does not.
+  pickupTurn: 45,
 };
 
 // Local compass arithmetic, matching the engine's: 0 is +X, 90 is +Y, and the
@@ -445,6 +488,149 @@ export class CombatWalker extends RouteWalker {
     // such, because that is the difference between "the plan missed" and "the
     // engine would not turn", and only one of those is worth fixing.
     this.fights = [];
+    // The level's own health and armour, indexed once. Only the ones the route
+    // passes within `pickupRange` of are ever aimed at (see snapPickups), so
+    // this is a list of things the level offers rather than a list of errands.
+    this.pickups = (map && map.waypoints ? map.waypoints("item") : [])
+      .filter((item) => item.position && /^item_(health|armor)/.test(item.classname))
+      .map((item) => ({ classname: item.classname, position: finitePoint(item.position) }))
+      .filter((item) => item.position);
+    // The plan the pickups were snapped onto, and the snapped points. A plan is
+    // a fresh array on every re-plan, so the array itself is the cache key.
+    this.snapped = null;
+    // One row per way of firing: how many legs it took, and what the status bar
+    // says they cost. See #fireMode.
+    this.fireModes = new Map();
+    // Which attempt of which life the weapon was already asked for (see
+    // #ensureWeapon), and the answer.
+    this.weaponAsked = null;
+    this.weaponSelection = null;
+    // The soldier the last leg fired at, so that the next leg can finish it.
+    // See _legTarget.
+    this.stickTo = null;
+  }
+
+  // A route with its points nudged onto the level's own pickups where the
+  // pickup is close enough to be walked over anyway.
+  //
+  // The nudge moves the point's x and y onto the item and keeps the route
+  // point's z, because the z is a floor the planner has already cleared and an
+  // item's own z is where its centre floats, not where a player stands. A
+  // nudge is refused when the line from the point before it to the item is not
+  // walkable -- the item is beside a wall, say -- so that a pickup this
+  // walker cannot reach without leaving the route costs it nothing.
+  snapPickups(points) {
+    if (this.snapped && this.snapped.points === points) return this.snapped.result;
+    const range = numberOr(this.engage.pickupRange, 0);
+    let result = points;
+    if (range > 0 && this.pickups.length && Array.isArray(points) && points.length) {
+      result = points.map((point) => ({ ...point }));
+      const claimed = new Set();
+      for (let index = 1; index < result.length; index++) {
+        const point = result[index];
+        let best = null;
+        for (const pickup of this.pickups) {
+          const distance = Math.hypot(pickup.position.x - point.x, pickup.position.y - point.y);
+          // A pickup the route already runs over needs no nudge: the point is
+          // where the item is, and moving it would be this walker walking to
+          // where it was going anyway. demo1 has one of these -- an
+          // `item_health_small` exactly on a plan point -- and aiming at it
+          // again would only say the route had been changed when it had not.
+          if (distance < 2 || distance > range) continue;
+          if (best && distance >= best.distance) continue;
+          const key = pickup.classname + pickup.position.x + "," + pickup.position.y;
+          if (claimed.has(key)) continue;
+          best = { pickup, distance, key };
+        }
+        if (!best) continue;
+        const candidate = { ...point, x: best.pickup.position.x, y: best.pickup.position.y, pickup: best.pickup };
+        const previous = result[index - 1];
+        const turn = Math.abs(shortestTurn(bearingTo(previous, candidate) - bearingTo(previous, point)));
+        if (Number.isFinite(turn) && turn > numberOr(this.engage.pickupTurn, 45)) continue;
+        const reachable = clearWalk(this.map, previous, candidate, { radius: this.engage.bodyRadius });
+        if (!reachable) continue;
+        claimed.add(best.key);
+        result[index] = candidate;
+      }
+    }
+    this.snapped = { points, result };
+    return result;
+  }
+
+  // Which way of firing the fight is currently using, and the measurement
+  // behind the choice.
+  //
+  // "adapt" is the whole point of the option: the level decides. Each way is
+  // given `fireModeWarmup` legs, and after that the walker uses whichever one
+  // has cost the least health per leg according to the status bar. The cost is
+  // the drop in health between one firing leg's reading and the next, counted
+  // only within a life -- a level restart puts the player back at 100, and
+  // charging that to the mode would blame the mode for the death.
+  #fireMode() {
+    const wanted = this.engage.fireWhile || "advance";
+    if (wanted !== "adapt") return wanted;
+    const modes = ["advance", "retreat", "hold"];
+    const rows = modes.map((mode) => this.fireModes.get(mode)).filter((row) => row && row.legs >= numberOr(this.engage.fireModeWarmup, 2));
+    if (rows.length < modes.length) {
+      // Still learning: take the mode with the fewest legs so far.
+      let best = modes[0];
+      for (const mode of modes) {
+        const legs = (this.fireModes.get(mode) || { legs: 0 }).legs;
+        if (legs < (this.fireModes.get(best) || { legs: 0 }).legs) best = mode;
+      }
+      return best;
+    }
+    let best = rows[0];
+    for (const row of rows) {
+      const cost = row.healthSpent === null ? Infinity : row.healthSpent / Math.max(1, row.legs);
+      const bestCost = best.healthSpent === null ? Infinity : best.healthSpent / Math.max(1, best.legs);
+      if (cost < bestCost) best = row;
+    }
+    return best.mode;
+  }
+
+  // Record what one firing leg cost, so #fireMode has something to choose on.
+  #recordFireMode(mode, covered, reading) {
+    const row = this.fireModes.get(mode) || { mode, legs: 0, covered: 0, healthSpent: null, healthReadings: 0 };
+    row.legs++;
+    row.covered += covered;
+    if (reading && typeof reading.health === "number") {
+      row.healthReadings++;
+      const before = this.lastHealth;
+      // A reading that went *up* is a pickup, not a cost, and a reading after a
+      // restart is a different life: neither is charged to the mode.
+      if (typeof before === "number" && before >= reading.health) row.healthSpent = (row.healthSpent === null ? 0 : row.healthSpent) + (before - reading.health);
+      this.lastHealth = reading.health;
+    }
+    this.fireModes.set(mode, row);
+  }
+
+  // Ask the engine for the weapon once per attempt, through the engine's own
+  // `use <weapon>` binding. Done at the first firing leg rather than at the
+  // start of the attempt, because the first thing a restarted level does is put
+  // the player back on the spawn with the spawn's own weapon, and a switch made
+  // before that is a switch thrown away.
+  async #ensureWeapon(attempt, life) {
+    const wanted = this.engage.weapon;
+    if (!wanted) return null;
+    // Keyed on the attempt *and* the life, not on the attempt alone.
+    //
+    // A death restarts the level and hands the player the level's own starting
+    // loadout, and the walker does not spend an attempt on that restart (see
+    // `attempt--` in walker.follow) -- so the same attempt number comes round
+    // again on a spawn where the weapon this asked for is no longer carried.
+    // Keyed on the attempt alone, the switch asked for before the death would
+    // count as already made, and every life after the first would be fought
+    // with the blaster while the report said the level's own shotgun.
+    const key = String(attempt) + ":" + String(life === undefined || life === null ? 0 : life);
+    if (this.weaponAsked === key) return this.weaponSelection;
+    if (typeof this.game.selectWeapon !== "function") return null;
+    this.weaponAsked = key;
+    this.weaponSelection = await this.game.selectWeapon(wanted).catch((error) => ({ selected: false, weapon: wanted, reason: error.message }));
+    this._note(this.weaponSelection && this.weaponSelection.selected
+      ? "asked for the level's own " + wanted
+      : "could not ask for " + wanted, this.weaponSelection || undefined);
+    return this.weaponSelection;
   }
 
   // How many times this soldier has been walked at from roughly where the player
@@ -535,6 +721,9 @@ export class CombatWalker extends RouteWalker {
   // still decides the cone -- a walk that turns for a soldier behind it is a
   // walk that has stopped going anywhere.
   _legTarget(position, points) {
+    // The level's own pickups sitting on the plan are folded into the plan
+    // before anything is aimed at, so a walk past one is a walk *over* one.
+    points = this.snapPickups(points);
     // The near point first, for every leg and not only the firing ones. The base
     // walker aims at the farthest route point it can see, which is a *chord*
     // across the plan: it is checked for a clear line, not for a walkable floor,
@@ -558,8 +747,34 @@ export class CombatWalker extends RouteWalker {
         return !(close && spent < this.engage.maxEngagements + this.engage.closeEngagements);
       },
     });
-    if (!found.length) return route;
-    const target = found[0];
+    if (!found.length) {
+      this.stickTo = null;
+      return route;
+    }
+    // Finish what the last leg started, when it is still a target.
+    //
+    // The list is scored fresh every leg -- distance plus a penalty for every
+    // degree off the way forward -- and a soldier's score changes with every
+    // step the player takes, so the *best* target changes while the fight is
+    // going on. What the per-leg record of four traced `finish` runs shows is
+    // the fire never settling: legs aimed at `monster_soldier` at 127, 150,
+    // 154, 160, 177, 179, 181, 184, 189, 236, 243, 267, 303, 310, 373 and 407
+    // units, with the aim landing on every one (0.00 to 1.37 degrees) and the
+    // trigger down on every one -- and the player dead at 1 health on the leg
+    // after the record starts. A record of distances cannot say how many
+    // soldiers those legs were spread over, which is exactly the point: the
+    // engagement count is kept *per soldier*, and a walker whose aim moves on
+    // before a soldier is dead has no way to know it left one alive. A Quake 2
+    // soldier is 30 health and goes on shooting until it is dead, so the
+    // soldier the last leg shot at is the soldier this leg shoots at, until the
+    // `skip` above takes it out of `found` -- which is what ends it when it is
+    // out of range, out of the fight, or out of the budget, and what a soldier
+    // that dies simply does by no longer being there.
+    const kept = this.stickTo === null || this.stickTo === undefined
+      ? null
+      : found.find((candidate) => candidate.index === this.stickTo);
+    const target = kept || found[0];
+    this.stickTo = target.index;
     this._note("a soldier is on the way; looking at it with the trigger down", {
       classname: target.classname,
       at: target.position,
@@ -657,6 +872,10 @@ export class CombatWalker extends RouteWalker {
     // it is trying to measure a fight. `mouseHold` presses the button the
     // engine's own config already binds to `+attack`; the console path is kept
     // for a game object that has no mouse (the stubs in `scripts/route-test.mjs`).
+    // Which weapon the fight is using, asked of the engine's own config once
+    // per attempt. The press lands before the trigger goes down so that the
+    // first leg of the attempt is already firing the weapon the level gave out.
+    await this.#ensureWeapon(options && options.attempt, this.restarts);
     const press = typeof this.game.mouseHold === "function"
       ? await this.game.mouseHold("left", true)
       : await this.game.attackHold(true);
@@ -673,7 +892,13 @@ export class CombatWalker extends RouteWalker {
       }
     };
     let aimed = null;
-    let keys = movementKeys(facing, walkBearing);
+    // Which way this leg walks while it shoots (see #fireMode). "retreat" walks
+    // the route backwards -- away from the soldier being shot at, still on the
+    // plan; "hold" stands, which the level punishes and which is here as the
+    // third thing to measure rather than as a recommendation.
+    const mode = this.#fireMode();
+    const walk = mode === "retreat" ? walkBearing + 180 : walkBearing;
+    let keys = mode === "hold" ? [] : movementKeys(facing, walk);
     let heldMs = 0;
     let health = null;
     try {
@@ -710,7 +935,7 @@ export class CombatWalker extends RouteWalker {
       // bearing it was asked for -- movementKeys() is what turns the difference
       // between that view and the way the route goes into forward-and-strafe.
       const viewYaw = aimed && aimed.yaw !== undefined ? aimed.yaw : facing;
-      keys = movementKeys(viewYaw, walkBearing);
+      keys = mode === "hold" ? [] : movementKeys(viewYaw, walk);
       if (typeof this.game.key === "function") {
         for (const key of keys) { await this.game.key(key, true); down.push(key); }
         const started = Date.now();
@@ -762,6 +987,11 @@ export class CombatWalker extends RouteWalker {
       at,
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
       holdMs: heldMs,
+      fireMode: mode,
+      // The pickup this leg's route point was nudged onto, if any: evidence
+      // that "the walk tops up as it passes" is what happened rather than what
+      // was intended.
+      pickupOnRoute: target.route && target.route.pickup ? target.route.pickup.classname : null,
       dead: !!(after && after.dead),
     };
     // The one reading the engine will not give: how much of the player is left
@@ -770,6 +1000,10 @@ export class CombatWalker extends RouteWalker {
     // state for all of it -- a death during the leg is the one case that reads
     // as nothing, and a leg with no health reading says so rather than guessing.
     if (health) Object.assign(record, health);
+    // What this leg cost, by the way it was fought. This is the number
+    // `fireWhile: "adapt"` chooses on, and it is recorded whether or not the
+    // choice is being made, so a run can be read back and argued with.
+    this.#recordFireMode(mode, record.travelled, health);
     this.fights.push(record);
     return { ...(after || { position: before.position }), fired: !!press.held, position: at };
   }
@@ -837,6 +1071,20 @@ export class CombatWalker extends RouteWalker {
         // fight ever took them, not the lowest reading of one life.
         minHealth: measured.length ? Math.min(...measured.map((fight) => fight.health)) : null,
         lastHealth: measured.length ? measured[measured.length - 1].health : null,
+        // What each way of firing cost, so "this one is cheaper" is a claim
+        // about the run rather than about the walker's opinion. `healthSpent`
+        // is the drop between consecutive readings within one life, and null
+        // means no two readings ever landed next to each other.
+        fireModes: [...this.fireModes.values()].map((row) => ({
+          mode: row.mode,
+          legs: row.legs,
+          covered: Math.round(row.covered),
+          healthReadings: row.healthReadings,
+          healthSpent: row.healthSpent,
+          spentPerLeg: row.healthSpent === null ? null : Number((row.healthSpent / Math.max(1, row.legs)).toFixed(2)),
+        })),
+        weapon: this.weaponSelection,
+        onRoutePickups: [...new Set(this.fights.map((fight) => fight.pickupOnRoute).filter(Boolean))],
         fights: this.fights,
       },
     };

@@ -1140,6 +1140,105 @@ capture is smaller than the canvas, so the status bar has to be photographed
 so it waits 150 ms -- measured, two of three reads on a live player came back
 framed for the un-framed canvas and read nothing.
 
+### The fight's levers, and the measurements that kept or dropped them
+
+This pass added five levers to the fight and dropped two of them on the
+evidence. Every run below is `node scripts/demo1-run.mjs finish` against the
+live game; the raw reports are the pass's own evidence, not this file.
+
+**The weapon is now the engine's, not this file's.** `bridge.binds()` reads the
+keys the engine's own `config.cfg` binds, once, and caches them; `binding(what)`
+answers "which key does the engine itself press for this command";
+`weaponKey("Super Shotgun")` answers `3`; `selectWeapon(name)` presses and
+releases it as a real key event -- no console, so no pause. Measured live:
+`{"selected":true,"weapon":"Super Shotgun","key":"3","command":"use Super
+Shotgun"}`. The same reader answers `+use`, which on this box is bound to
+nothing (`reason: "NO_BINDING"`) -- that is why the walker's door handling has
+always been a no-op here and why a door opens only by walking into it.
+
+**Taking the level's own super shotgun: tried, measured, dropped.**
+`QUAKE2_ARM=1` walks to `weapon_supershotgun` before the exit route. The arm
+walk reached it (`239 65 47`) and the weapon was selected, and the run finished
+*no further than* the same run without it -- deepest reading `short 1618`
+against `1739` and `1544` unarmed. The gun's spread over the 150-300 units this
+walker fires across is the likely reason. Off by default.
+
+**Health and armour on the route: measured, and there is none.** `pickupRange`
+lets a plan point whose pickup is close be nudged onto it, guarded by a walkable
+line and by a `pickupTurn` limit so that taking an item never bends the route.
+Measured at range 96 on demo1's exit route: exactly two points move, onto the
+level's two `item_health_small` at route units 629 and 677, for 53 extra units
+of walking -- **and the player is at full health when it passes unit 630** (the
+first firing leg of every traced run is past unit 900), so both items are picked
+up and thrown away. Measured against the route *line* rather than its points,
+the one item this route could use -- `item_health_large` at `-1176 1520`, 50
+health, 64 units off the line at unit 2770 -- is more than 96 units from any
+plan point, so no nudge reaches it. Default `0`: the lever is kept for a level
+where the measurement is different, and off where it is this.
+
+**How a firing leg moves is now a lever.** `fireWhile` is `advance` (walk the
+route, the behaviour the fight was measured with), `retreat` (back along the
+route, away from the soldier being shot), `hold` (stand), or `adapt` -- which
+gives each of the three `fireModeWarmup` legs and then follows the health the
+status bar cost, per life. The cost of each way is in the report
+(`fireModes`), and in the run that used it, `advance legs 4 covered 336 spent 48
+per leg 12 readings 3`.
+
+**The walker finishes the soldier it started.** The threat list is scored fresh
+every leg, and the score moves as the player walks; the per-leg record of four
+traced runs shows legs aimed at `monster_soldier` from 127 to 407 units, with
+the aim landing every time and the trigger down every time, and the player dead
+at 1 health. A soldier is 30 health and shoots until it is dead, so the leg
+targets the soldier the last leg fired at until it leaves `found`.
+
+**Two instrument faults, found by using it.** *The budget knobs threw a zero
+away.* `QUAKE2_ATTEMPTS` / `QUAKE2_DEATHS` now read so that an explicit `0`
+survives (`Number(x) || default` cannot say "one life"), and a run reports the
+budget it is spending. *A point that is not all three coordinates ends a walk
+rather than failing inside one.* `finitePoint()` refuses a goal with a
+non-finite `x`, `y` or `z` at the seam, with a reason, before any distance
+against it is computed -- every comparison against a NaN is false, so a bad
+goal does not degrade the walk, it grinds out the whole budget aiming at a place
+the engine can never report the player as standing.
+
+**And the reading the fight is judged by is not trustworthy on this box.** The
+per-leg health numbers in the report disagree with the pictures they were read
+from: crop `leg-a2l5-002.png` shows **100** health on the status bar where the
+reader returned **4**, and `leg-a2l7-004.png` shows **25** where it returned
+**80**. The crops are kept with the run's evidence. The outcome measures this
+pass reports are therefore the ones read out of the engine's own memory -- where
+the player was, and whether it was alive -- and the health series is reported
+beside them, labelled as the reading it is.
+
+**A death used to end the run, and fixing that is what moved the numbers.**
+Quake 2 restarts the level from its death camera when the player presses attack,
+and on four traced runs that press never took: every one logged
+`NOT_RESPAWNED` on all three tries and then `deaths: 9, allowed: 8` -- one death
+spending a whole restart budget -- and the walk stopped 1,544 to 2,011 units
+short with 0 to 5 firing legs and 10 to 20 engine positions reported. So the
+fire press is now *held* across a frame rather than clicked (the engine samples
+its buttons once a frame; a click's press and release can both land between two
+samples), and when it still does not take, the walker falls back to the engine's
+own restart by name -- `map demo1`, the one console command this harness sends,
+and the same thing a player's own death does to the level.
+
+Measured, same command, same eight attempts, after the fix:
+
+```
+walker reason: ATTEMPTS            (was DEATHS, with deaths 9 of 8 allowed)
+level restarts lived through: 5
+firing legs: 26 (20 with the turn landed on the soldier)   (was 0 to 5)
+positions the engine reported: 116                          (was 10 to 20)
+furthest position reached: -952 1063, short 955             (was 1255 to 2011)
+```
+
+That is the deepest any run of this pass reached, and the walk is now spending
+the budget it was given instead of dying into a dead loop. It is still 955 units
+short of the exit: a level restart puts the player back on the spawn, so the
+attempts a life spends before it dies are spent again -- the deepest reading
+came at attempt 3, the run died there, and the restarts after it re-walked
+ground it had already covered. The level is not finished.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),

@@ -98,6 +98,20 @@ export function deepestReading(trail) {
   };
 }
 
+// A point this walk can aim at, or null. All three coordinates, not the two the
+// route is walked on: a call with no height is not a call this walk can use, and
+// a point that reaches the follower with a coordinate that is not a number does
+// not degrade the walk, it ends it -- every distance to it is NaN, every
+// comparison against that NaN is false, and the follower grinds out its whole
+// budget aiming at a place the engine can never report the player as standing.
+// The check belongs where the point enters, so that a bad one is refused with a
+// reason instead of failing somewhere inside the leg loop.
+export function finitePoint(value) {
+  if (!value || typeof value !== "object") return null;
+  const at = { x: Number(value.x), y: Number(value.y), z: Number(value.z) };
+  return [at.x, at.y, at.z].every(Number.isFinite) ? at : null;
+}
+
 export class RouteWalker {
   constructor(game, map, options = {}) {
     this.game = game;
@@ -108,6 +122,12 @@ export class RouteWalker {
     this.levelName = map && map.name ? map.name : null;
     this.options = { ...WALK_DEFAULTS, ...options };
     this.log = [];
+    // How many times this walk has been put back on a restarted level. A death
+    // does not spend an attempt (see `attempt--` in follow), so the attempt
+    // number alone cannot tell a subclass that the player is a *different*
+    // player now -- back on the spawn with the level's own starting loadout.
+    // This is what does.
+    this.restarts = 0;
   }
 
   #note(message, detail) {
@@ -309,6 +329,17 @@ export class RouteWalker {
   // planned towards; the walker stops when the player is inside `tolerance` of
   // it, or when it has run out of ideas.
   async follow(goal, options = {}) {
+    // The goal is the one point the whole walk is aimed at, so it is the last
+    // place a coordinate that is not a number should be found -- and the worst,
+    // because a walk that cannot aim at its goal has no answer to give about
+    // the level. Refused here, by name, rather than left to fail inside the
+    // leg loop (see finitePoint).
+    const aimed = finitePoint(goal);
+    if (!aimed) {
+      this.#note("the goal is not a point this walk can aim at", { goal });
+      return { reached: false, reason: "BAD_GOAL", goal: goal === undefined ? null : goal, position: null, trail: [], log: this.log };
+    }
+    goal = aimed;
     const tolerance = options.tolerance === undefined ? 64 : options.tolerance;
     const attempts = Math.max(1, options.attempts === undefined ? 6 : options.attempts);
     const legOptions = {
@@ -387,6 +418,23 @@ export class RouteWalker {
           back = await this.game.respawn({ expectMap: this.levelName });
           this.#note(back.respawned ? "back in the level" : "still could not get back into the level", { how: back.how, reason: back.reason });
         }
+        // Fire did not bring the level back, and the walk is over if nothing
+        // else does: the level restarts the player on death and a walker that
+        // cannot restart it can never use the rest of its death budget. So the
+        // last resort is the engine's own restart, by name -- `map demo1`,
+        // which is the one console command this harness is allowed to send and
+        // the same thing a player's own death does to the level.
+        //
+        // Measured: every traced `finish` run that died (four of them, with and
+        // without the fire press held across a frame instead of clicked) logged
+        // NOT_RESPAWNED on all three fire presses and then `deaths: 9,
+        // allowed: 8` -- one death ending a run with seven restarts unspent,
+        // and the walk stopped 1,544 to 2,011 units short every time.
+        if (!back.respawned && back.reason === "NOT_RESPAWNED" && this.levelName) {
+          this.#note("fire did not bring the level back; restarting it by name", { map: this.levelName });
+          back = await this.game.respawn({ how: "map", map: this.levelName, expectMap: this.levelName });
+          this.#note(back.respawned ? "back in the level" : "still could not get back into the level", { how: back.how, reason: back.reason });
+        }
         if (back.reason === "LEVEL_CHANGED") {
           return { reached: false, reason: "LEVEL_CHANGED", map: back.map, level: this.levelName, attempts: attempt, position: back.position, trail, log: this.log };
         }
@@ -406,6 +454,10 @@ export class RouteWalker {
           this.#note("still dead after the restart; the level gets another go");
           continue;
         }
+        // Alive again, on a level that has just been restarted: this is a new
+        // life, and the choices a subclass made about the old one -- which
+        // weapon it asked the engine for -- are spent with it.
+        this.restarts++;
         current = restarted;
       }
       position = current.position;
