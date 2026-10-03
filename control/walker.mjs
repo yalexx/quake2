@@ -367,14 +367,44 @@ export class RouteWalker {
         // The restart does not spend an attempt: the plan was not the thing
         // that failed, and the next one is the same plan from the same spawn.
         attempt--;
-        const back = await this.game.respawn({ expectMap: this.levelName });
+        let back = await this.game.respawn({ expectMap: this.levelName });
         this.#note(back.respawned ? "back in the level" : "could not get back into the level", { how: back.how, reason: back.reason });
+        // A rescue that failed once is not a rescue that cannot happen, and the
+        // retry is free: it is the same death, and the budget that matters --
+        // the level restarts the walk will live through -- is charged once.
+        //
+        // Measured on this box, both halves of that. A clean experiment (walk
+        // into demo1's soldiers unarmed, press fire) brought the player back
+        // every time: one click, 2.5 s, roll -1.50 to 0.00, alive. And a
+        // `finish` run ended on a single NOT_RESPAWNED at attempt 3 of 8, with
+        // the player 1,802 units short and four attempts unspent -- so on a
+        // live level, under fire, one press is not always enough. `ALIVE` and
+        // `LEVEL_CHANGED` are answers rather than failures and do not retry.
+        const tries = options.respawnTries === undefined ? 2 : Math.max(0, options.respawnTries);
+        for (let retry = 0; retry < tries && !back.respawned; retry++) {
+          if (back.reason === "ALIVE" || back.reason === "LEVEL_CHANGED") break;
+          this.#note("pressing fire again for the player", { try: retry + 2, reason: back.reason });
+          back = await this.game.respawn({ expectMap: this.levelName });
+          this.#note(back.respawned ? "back in the level" : "still could not get back into the level", { how: back.how, reason: back.reason });
+        }
         if (back.reason === "LEVEL_CHANGED") {
           return { reached: false, reason: "LEVEL_CHANGED", map: back.map, level: this.levelName, attempts: attempt, position: back.position, trail, log: this.log };
         }
         const restarted = await this.game.position();
-        if (!restarted || !restarted.position || restarted.dead) {
-          return { reached: false, reason: "DEAD", attempts: attempt, position: restarted && restarted.position, deepest: deepestReading(trail), trail, log: this.log };
+        if (!restarted || !restarted.position) {
+          // The engine stopped answering altogether: that is not a death and
+          // there is nothing left to walk.
+          return { reached: false, reason: "DEAD", attempts: attempt, position: null, deepest: deepestReading(trail), trail, log: this.log };
+        }
+        if (restarted.dead) {
+          // Still dead -- the respawn did not take, or the level put the player
+          // back into the fire that killed them. Neither is the end of the walk:
+          // it is another death, and the restart budget above is what ends a
+          // walk that cannot hold on to a player. Ending the whole run here is
+          // what threw away four attempts and 1,802 units of ground on a single
+          // missed press.
+          this.#note("still dead after the restart; the level gets another go");
+          continue;
         }
         current = restarted;
       }
