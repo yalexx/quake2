@@ -206,11 +206,20 @@ async function finish() {
   // is down. Defaults are the behaviour that was measured before they existed.
   const walker = new CombatWalker(game, map, {
     engage: {
-      readHud: true,
+      // Reading the status bar costs a screenshot and an image decode inside
+      // every firing leg, with the trigger down. `QUAKE2_READ_HUD=0` turns it
+      // off, which is the lever for "does photographing the health cost the
+      // fight?": the health series is the only thing that reading buys, and a
+      // run that does not finish has nothing to spend it on.
+      readHud: process.env.QUAKE2_READ_HUD !== "0",
       hudCropDir: process.env.QUAKE2_HUD_DIR || null,
       weapon: process.env.QUAKE2_WEAPON || null,
       fireWhile: process.env.QUAKE2_FIRE_WHILE || "advance",
       ...(process.env.QUAKE2_PICKUP_RANGE ? { pickupRange: Number(process.env.QUAKE2_PICKUP_RANGE) } : {}),
+      // How many pieces a firing leg's step is walked in, re-aimed at the leg's
+      // own route point between them (see CombatWalker). 1 is the behaviour
+      // every run before this one was measured with.
+      ...(process.env.QUAKE2_STEP_ROUNDS ? { stepRounds: Number(process.env.QUAKE2_STEP_ROUNDS) } : {}),
     },
   });
   report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange });
@@ -387,6 +396,8 @@ async function finish() {
         (fight.aimError === null || fight.aimError === undefined ? "" : " (" + fight.aimError + "deg" + (fight.aimMethod ? " " + fight.aimMethod : "") + ")") +
         "  fired " + (fight.fired ? "yes" : "no") +
         "  covered " + fight.travelled +
+        (fight.holdMs === undefined ? "" : "  held " + fight.holdMs + "ms") +
+        (fight.offCourseDegrees === undefined ? "" : "  off-course " + fight.offCourseDegrees + "deg") +
         (fight.fireMode && fight.fireMode !== "advance" ? "  " + fight.fireMode : "") +
         (fight.pickupOnRoute ? "  over " + fight.pickupOnRoute : "") +
         // How much of the leg went on turning. It is the number that says
@@ -400,10 +411,35 @@ async function finish() {
         // which weapon a picked-up weapon became.
         (fight.barNumbers && fight.barNumbers.length ? "  bar " + fight.barNumbers.join("+") : "") +
         (fight.dead ? "  DIED ON THIS LEG" : "") +
+        // Only when the engine was not the one listening: a leg fought with the
+        // console or the menu on screen is a leg that could not have walked or
+        // turned however good the plan was, and it should be visible in the
+        // record rather than inferred from a leg that covers nothing.
+        (fight.inGame === false ? "  ENGINE HAD NO KEYBOARD (" + fight.keyDest + ", paused " + fight.paused + ")" : "") +
         (fight.hudCrop ? "  " + fight.hudCrop.split("/").pop() : ""));
     }
     const missed = fights.filter((fight) => fight.health === null || fight.health === undefined).length;
     if (missed) report("firing legs with no health reading", missed);
+    // The same fault counted rather than listed: legs the engine's own state
+    // says could not have moved anything, and legs whose turn never landed.
+    const noKeyboard = fights.filter((fight) => fight.inGame === false).length;
+    if (noKeyboard) report("firing legs the engine had taken the keyboard off the game for", noKeyboard + " of " + fights.length);
+    const missedAim = fights.filter((fight) => fight.aimed === false).length;
+    report("firing legs the turn did not land on", missedAim + " of " + fights.length);
+    // The leg's own clock, because "the leg was standing in the open" is an
+    // argument about time and this is the time: the trigger is down for the
+    // whole of `holdMs`, and the walking is only part of it.
+    const held = fights.map((fight) => fight.holdMs).filter((value) => typeof value === "number");
+    if (held.length) {
+      report("firing legs held the trigger for", {
+        totalMs: held.reduce((sum, value) => sum + value, 0),
+        medianMs: held.slice().sort((a, b) => a - b)[Math.floor(held.length / 2)],
+        maxMs: Math.max(...held),
+      });
+      const covered = fights.reduce((sum, fight) => sum + (fight.travelled || 0), 0);
+      const totalMs = held.reduce((sum, value) => sum + value, 0);
+      if (totalMs > 0) report("ground covered per second with the trigger down", Math.round(covered / (totalMs / 1000)));
+    }
   }
   // And the walker's own last words, which are what explains a run that did not
   // finish: every death it restarted, every leg it re-planned, and what stopped
