@@ -294,12 +294,15 @@ check("the soldier is counted against its own budget", fighter.engagements.size 
 // on a traced `finish` run, and none of them a wall.
 console.log("a leg that covers no ground");
 
-// The chord between two route points is not the floor between them: the route
-// drops 48 units in the 24 it takes to get from the start room down into the
-// west corridor, and sampling the chord halfway down puts the sample inside the
-// floor it is supposed to be standing on -- which rejected every point past the
-// drop and collapsed every leg to the nearest next one.
-check("clearWalk follows the floor down a 48-unit drop",
+// The chord between two route points is not the floor between them: the route's
+// own step from -120 -72 4 to -144 -72 -48 drops 52 units in the 24 it takes,
+// and sampling the chord halfway down puts the sample inside the floor it is
+// supposed to be standing on -- which rejected every point past the drop and
+// collapsed every leg to the nearest next one. These two points are that step.
+check("clearWalk follows the floor down the route's own 52-unit step",
+  clearWalk(map, { x: -120, y: -72, z: 4 }, { x: -144, y: -72, z: -48 }));
+// ...and the longer chord from the start room that was rejected with it.
+check("and down the longer chord from the start room to the west corridor",
   clearWalk(map, { x: -99, y: -84, z: 0 }, { x: -216, y: -72, z: -48 }));
 
 // The planner snaps a route's start onto the nearest floor, so a walk stopped

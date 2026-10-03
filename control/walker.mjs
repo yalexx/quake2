@@ -17,13 +17,14 @@
 //     gets the use key held, and the leg is retried. That is what opens a door.
 //   * a leg that stops anywhere else gets a step taken *away* from the point it
 //     was aiming at, and then the route *re-planned from where the player
-//     actually is*. The first route was drawn from the spawn; a route drawn from
-//     a position 300 units into the level sees rooms the first one did not, and
-//     this is also how a follower recovers from a drift the grid route did not
-//     intend. The step back is not decoration: a follower pressed square against
-//     something the grid does not know about draws the same line again from the
-//     same spot and walks it at the same view, which is the same wall at the
-//     same angle on every round of every attempt.
+//     actually is* once the attempt gives up on this one. The first route was
+//     drawn from the spawn; a route drawn from a position 300 units into the
+//     level sees rooms the first one did not, and this is also how a follower
+//     recovers from a drift the grid route did not intend. The step back is not
+//     decoration: a follower pressed square against something the grid does not
+//     know about draws the same line again from the same spot and walks it at
+//     the same view, which is the same wall at the same angle on every round of
+//     every attempt.
 //   * a leg that keeps failing gets a sideways step and a new plan, because a
 //     follower pressed square against a wall never learns which way is open.
 //   * a leg whose next point is flagged `jump` gets the space bar: a gap too
@@ -494,11 +495,14 @@ export class RouteWalker {
         //
         // So the first stalled leg backs the player *off* the point it was
         // aimed at -- away from it, along the ground, on the bearing it would
-        // have to walk to get there -- and the leg after that is planned from
-        // somewhere the player has not already been stuck at. The sideways step
-        // the attempt already takes is kept for the case where backing off has
-        // nowhere to go either: a follower in a corner has to change both where
-        // it stands and which way it is looking.
+        // have to walk to get there -- and the leg after that aims again from
+        // somewhere the player has not already been stuck at, so the same plan
+        // is not walked into the same wall twice in a row. Measured on the run
+        // that argued for it: five back-offs, and the next leg covered 53, 67
+        // and 194 units after three of them. The sideways step the attempt
+        // already takes is kept for the case where backing off has nowhere to
+        // go either: a follower in a corner has to change both where it stands
+        // and which way it is looking.
         const away = state && state.position ? (Math.atan2(at.y - target.y, at.x - target.x) * 180 / Math.PI + 360) % 360 : null;
         if (stalled === 1 && away !== null && options.backOff !== false && typeof this.game.face === "function") {
           this.#note("backing off the point that stopped the leg", { bearing: Math.round(away), from: at, target });

@@ -245,13 +245,14 @@ const SHOULDERS = [[1, 1], [1, -1], [-1, 1], [-1, -1]];
 //
 // This is what makes a walk a *walk*. The old clearWalk sampled the straight
 // chord between two route points and lifted the body off that, which is only
-// the floor while the floor is level: demo1 drops 48 units in the 24 the route
-// takes to get from the start room down into the west corridor, and halfway
-// along that chord the sample is *inside* the floor it is supposed to be
-// standing on. Every point on the plan past the drop was therefore rejected,
-// every leg collapsed to the nearest next point, and the nearest next point is
-// one `goto` answers `reached` to without moving -- which is how a walk ends up
-// standing still for a whole attempt and then reporting "no progress".
+// the floor while the floor is level: the route's own second step drops 52
+// units in the 24 it takes -- from -120 -72 4 down to -144 -72 -48, just west
+// of demo1's start room -- and halfway along that chord the sample is *inside*
+// the floor it is supposed to be standing on. Every point on the plan past the
+// drop was therefore rejected, every leg collapsed to the nearest next point,
+// and the nearest next point is one `goto` answers `reached` to without moving
+// -- which is how a walk ends up standing still for a whole attempt and then
+// reporting "no progress".
 export function floorNear(map, x, y, z, options = {}) {
   if (!map || typeof map.standable !== "function") return null;
   const up = numberOr(options.maxStepUp, 45);
