@@ -1074,7 +1074,17 @@ export class CombatWalker extends RouteWalker {
       }
       for (const key of wanted) {
         if (down.includes(key)) continue;
-        try { await this.game.key(key, true); down.push(key); } catch { /* a key the engine refuses is a leg that walks less, not one that throws */ }
+        // Recorded as held *before* the press is sent, not after it. A press the
+        // bridge throws on can leave the write half-done -- the engine takes the
+        // key and the caller is answered with an error anyway -- and a key that
+        // is down and not in `down` is a key the leg's release never lifts: the
+        // player walks into a wall for the rest of the run. Measured on a stub
+        // whose `key()` throws on the way down, the release-first order left
+        // both of a firing leg's movement keys held when the leg ended. The
+        // other way round costs a keyup for a key the engine never took, which
+        // is a no-op; this way round costs the run.
+        down.push(key);
+        try { await this.game.key(key, true); } catch { /* a key the engine refuses is a leg that walks less, not one that throws */ }
       }
     };
     let aimed = null;

@@ -985,7 +985,15 @@ than taste:
   walls that pocket off is 16 units thick in x and a 16-unit stride steps
   straight over it. A point with no walkable line to it is skipped and the next
   one back is tried, so a leg aims at something the player can actually walk to
-  rather than merely see.
+  rather than merely see -- with one measured exception, added by the pass that
+  stopped a leg aiming at a point the player was already standing on. When
+  *nothing* beyond the leg's own arrival radius has a clear line, the last
+  resort is the nearest point ahead whatever its line looks like, on the
+  reasoning that a leg which walks at a wall still covers ground and a leg aimed
+  inside the arrival radius covers none. Measured on 105 positions along
+  demo1's own route, that last resort is taken 11 times; it is the exception and
+  not the rule, and it is why a leg can still end against something the plan
+  called clear.
 * **`clearWalk()` has to follow the floor, and the point it hands back has to be
   one worth walking to.** Both were measured to be wrong in ways that look
   identical from outside -- a leg that covers 0 units:
