@@ -538,6 +538,7 @@ export async function hudShot(game, options = {}) {
   // live player came back with the status bar where the un-framed canvas puts
   // it, off the bottom of the strip, and no number in it.
   await new Promise((resolve) => setTimeout(resolve, options.settleMs === undefined ? 150 : options.settleMs));
+  const clipWidth = Math.max(1, Math.round(box.viewport || options.viewportWidth || 900));
   let png;
   try {
     // Only the band that holds the status bar: a full-page capture is ~600 KB
@@ -548,7 +549,7 @@ export async function hudShot(game, options = {}) {
     png = await game.screenshot({
       clip: {
         x: 0, y: 0, scale: 1,
-        width: Math.max(1, Math.round(box.viewport || options.viewportWidth || 900)),
+        width: clipWidth,
         height: (options.band || HUD_BAND) + 8,
       },
     });
@@ -570,7 +571,15 @@ export async function hudShot(game, options = {}) {
     // `band` rides along because the reader bounds its search by it: without
     // it a caller that took a taller strip would hand over rows the reader
     // then filtered out, and the read would come back empty for no reason.
-    readOptions: { band, rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
+    // `healthFieldRight` rides along because this strip is the canvas slid
+    // left by `left`, so the field is not at the canvas's own fraction of it
+    // (see `healthFieldRightForStrip`); without it every read on this path is
+    // a miss.
+    readOptions: {
+      band,
+      rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0),
+      healthFieldRight: healthFieldRightForStrip(box.width, box.left, clipWidth),
+    },
     source: "screenshot",
   };
 }
@@ -775,6 +784,20 @@ export function readBar(lum, width, height, options = {}) {
 // drop the constraint, or another fraction to move it.
 export const HEALTH_FIELD_RIGHT = 573 / 1366;
 
+// The same field, as a fraction of a strip that is *not* the canvas's own
+// columns. The in-page read is `gl.readPixels(0, 0, width, rows)` -- the canvas
+// whole, so a canvas column is a strip column and `HEALTH_FIELD_RIGHT` is it.
+// The screenshot fallback is different: it restyles the canvas to its native
+// size and slides it left by `left`, so a canvas column is `left` pixels
+// further right in the strip. Reading that strip with the canvas fraction puts
+// the field `left` pixels off -- measured on this box, 323: the field ends at
+// strip x 250 and the default would look at 573, so every read on the fallback
+// path would come back a miss.
+export function healthFieldRightForStrip(canvasWidth, left, clipWidth) {
+  const fraction = (canvasWidth * HEALTH_FIELD_RIGHT - left) / clipWidth;
+  return Number.isFinite(fraction) ? fraction : null;
+}
+
 // The player's health, read off the status bar.
 //
 // Health is the number the bar draws in its health field -- which is a thing
@@ -799,7 +822,17 @@ export function readHealth(pngBuffer, options = {}) {
   const cellWidth = GLYPH_WIDTH * (status.scale || 1);
   const fieldEdge = fraction === null ? null : Math.round(status.width * fraction);
   const tolerance = options.healthFieldTolerance === undefined ? 2 : options.healthFieldTolerance;
-  const endsAtField = (candidate) => Math.abs(candidate.x + String(candidate.value).length * cellWidth - fieldEdge) <= tolerance;
+  // How wide a reading really is: the cells the reader grew, not the decimal
+  // length of the value it made out of them. They are not the same number when
+  // a run carries a leading zero -- `digits [0,0]` is `0` as a value and *two*
+  // cells on the bar -- and the decimal length would put that run's right edge
+  // one cell short of where it ends. Measured live: on `crops/strip-004.png`
+  // and `crops2/strip-014.png` the run `[0,0]` ends on 573 while the decimal
+  // length calls it 557. `readBar` already calls this the reading's span (see
+  // its overlap rule); this uses the same thing rather than re-deriving it.
+  const rightEdge = (candidate) => candidate.x +
+    ((candidate.cells && candidate.cells.length) || String(candidate.value).length) * cellWidth;
+  const endsAtField = (candidate) => Math.abs(rightEdge(candidate) - fieldEdge) <= tolerance;
   const aligned = fieldEdge === null ? pool : pool.filter(endsAtField);
   // More than one reading can end on the field -- overlapping runs are grown
   // from different anchors -- so the surest one wins, not the leftmost.
