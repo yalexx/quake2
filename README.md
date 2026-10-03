@@ -355,9 +355,16 @@ Two consequences of driving someone else's browser are worth knowing:
 ### The bridge
 
 `control/bridge.mjs` exports `QuakeControl` (and `createControl`, which does the
-same) plus `ControlError` / `GameNotRunningError`. Every call resolves the game
-frame afresh and opens its own short-lived CDP socket, so a game that has
-reloaded under it is picked up rather than talked to on a stale handle.
+same) plus `ControlError` / `GameNotRunningError`. One CDP connection is made on
+the first call and reused by every call after it -- the target, the game's
+frame, its execution contexts and the canvas's pointer-lock state are all
+settled once, on that connection, rather than re-derived per call. It is thrown
+away, and re-resolved from `/json/list`, only when the socket dies or the game
+frame goes away: a page navigation clears the cached contexts (they are
+re-announced and re-waited for), and a game frame that has moved or detached
+drops the connection outright. See
+[the pass that made the input path cheap](#the-pass-after-that-the-input-path-and-the-lag)
+for what that changed and what it measured.
 
 | Call | What it does |
 |---|---|
@@ -575,8 +582,9 @@ Three measured facts make it work, and each of them was wrong at first.
   instead of 1625x48**, so every read was made over the desktop, not the status
   bar. The visible symptom was a `finish` run whose per-leg record said "0
   firing legs with a health reading" while the picture it had just kept plainly
-  showed a number. `scripts/control-api-test.mjs` now checks a 400x40 clip comes
-  back 400x40 and that the status-bar strip is 48 rows, whenever a game is open.
+  showed a number. `scripts/control-api-test.mjs` now checks that a 400x40 clip
+  comes back 400x40, and that the strip a caller reads health from carries the
+  band it was read with and has a number in it, whenever a game is open.
   Measured after the fix, on the live game: health reads **100** off the strip
   both standing still and with the trigger held while walking.
 * **The digits are the level's own pictures.** `pics/num_*.pcx` are what the
@@ -597,11 +605,22 @@ ink's colour: the `num_*` pictures carry a grey ink and the `anum_*` a red one,
 and their *shapes* are the same font and do not separate them (measured: a
 painted "100" reads as its own family only by a hair).
 
-`hudShot()` costs a 150 ms settle and one clipped screenshot, and the read is
-bounded to the rows the status bar must be on, because the player is standing
-still while it happens and on `demo1` standing still is the thing that kills.
-When the player is *dead* there is no status bar to read, and `health` comes
-back `null` rather than a guess -- `finish` prints those legs as `?`.
+`hudShot()` reads the status bar's pixels out of the canvas *in the page*
+(`canvasStrip`, the same module): the engine's WebGL backing store is cleared as
+soon as a frame is composited, so `toDataURL()` from outside a frame comes back
+black (measured) and the read has to happen inside the engine's own animation
+frame. It wraps one frame of `requestAnimationFrame`, takes the canvas's bottom
+rows with `gl.readPixels` after the engine has drawn them, flips them back to
+screen order and encodes them with a scratch 2D canvas. On this box that is
+**68 ms** a read against **392 ms** for the screenshot it replaced: the
+screenshot path -- restyle the canvas, wait 150 ms for a frame to be composited,
+capture the desktop through the compositor, decode a PNG -- is still there and
+still used whenever the page has no readable WebGL canvas, and both paths return
+the same strip layout and the same `readOptions`. The read is bounded to the
+rows the status bar must be on, because the player is standing still while it
+happens and on `demo1` standing still is the thing that kills. When the player
+is *dead* there is no status bar to read, and `health` comes back `null` rather
+than a guess -- `finish` prints those legs as `?`.
 
 ### Navigating: `position`, `face`, `walk` and `goto`
 
@@ -1588,6 +1607,141 @@ anything, because a death takes the level back to the beginning.
 * **`QUAKE2_STEP_ROUNDS=2` is in the code and its run had not been read when
   this was written.** Its measurement is the one thing here that is a claim
   without a number behind it yet, and it is not counted above.
+
+### The pass after that: the input path and the lag
+
+This pass forked from `clawbox/team-s5p49gdb` and went after the one thing the
+previous passes had been paying for without naming: **the harness, not the game,
+was the thing that hitched whenever the bot shot.** The owner's report was that
+the game lags and hitches on every shot. It does not: sampled from inside the
+engine's own `requestAnimationFrame` while six `fire(120)` calls ran back to
+back, the engine drew **47 frames with an average gap of 16.7 ms and a maximum
+of 16.8 ms** -- a steady 60 Hz with no stall in it. What stalls is the control
+loop that drives it.
+
+**Per call, before and after.** Wall clock for one call, `demo1` running, 20
+reads and 10 of each pair, measured with `lag-bench.mjs` (kept in the run's
+evidence folder, not in the repository):
+
+| Call | median | p95 | max | | median | p95 | max |
+|---|---|---|---|---|---|---|---|
+| `position()` | 31 ms | 48 | 48 | → | **1 ms** | 2 | 2 |
+| key down+up | 53 ms | 58 | 58 | → | **3 ms** | 5 | 5 |
+| `attackHold` on+off | 54 ms | 57 | 57 | → | **34 ms** | 38 | 38 |
+| `fire(120)` | 203 ms | 227 | 227 | → | **135 ms** | 143 | 143 |
+| -- of which overhead over the 120 ms hold | 83 ms | | 107 | → | **15 ms** | | 23 |
+| `hudShot()` | 392 ms | 403 | 403 | → | **68 ms** | 75 | 75 |
+| engine frames during 6 fires | 68 frames | avg 16.7 | max 16.8 | → | 48 frames | avg 16.7 | max 16.8 |
+
+The burst of six fires took 1140 ms of wall clock before and 803 ms after, with
+the same 16.7 ms frame cadence on both sides -- 720 ms of that is the six 120 ms
+holds the caller asked for, so the harness's share of it went from about 420 ms
+to about 80 ms.
+
+**And the leg, which is the unit the owner actually sees.** One firing leg -- a
+position read, the turn onto the soldier, the trigger down, the walk, the
+status-bar read, the trigger up, a position read again -- costs **195 ms** of
+control overhead at the median (269 ms at its worst of eight), against the
+700 ms of trigger-down walking it wraps. Before this pass the same leg's
+overhead was the 600-1000 ms that made every shot hitch, so it is roughly a
+quarter to a fifth of what it was.
+
+| One leg, hold 700 ms | before | after |
+|---|---|---|
+| turn onto the soldier | 415 ms (keys) | **26 ms** (mouse) |
+| trigger down | 45 ms | **5 ms** |
+| health read: capture | 732 ms | **85 ms** |
+| health read: correlation | 294 ms | **69 ms** |
+| trigger up + position | 50 ms | **3 ms** |
+| **control overhead** | **~600-1000 ms** | **195 ms** |
+
+The target this pass set itself was under 150 ms, and it did not reach it: 195 ms
+is what a leg costs with the game running and firing under it. Where the rest
+goes is now known rather than suspected, and it is two things. One animation
+frame -- the read has to happen inside the engine's own frame, so it waits for
+one, about 17 ms. And a normalised cross-correlation of ten 16x24 glyphs against
+every column of three rows of a 1366-pixel strip, which is 41,000 correlations
+and cannot be made much smaller without betting that the status bar stays inside
+a narrower window of the canvas (measured: the health number's left edge sits at
+x=525 of 1366, but the level behind it inks the whole width, so a window would
+be a bet and not a fact).
+
+**The cause was one line of design.** Every public call went through
+`#withSession`, which resolved the target with a fresh HTTP `/json/list`, opened
+a **new CDP WebSocket**, sent `Page.enable` + `Runtime.enable` +
+`Page.getFrameTree`, polled up to 50 x 20 ms for the game frame's execution
+context, and closed the socket on the way out -- and `focusCanvas` sent a real
+left click, which is Quake's fire button, whenever the game was not already
+pointer-locked. A firing leg (a turn, a fire, a status-bar read and a few
+position reads) spent most of 600-1000 ms in that, sending no input at all.
+
+Six changes, each measured:
+
+* **One long-lived connection.** `#withSession` now reuses a single connection
+  and settles the target, the frame, the contexts and the pointer-lock state
+  once, on it. It is dropped -- and re-resolved from `/json/list` -- only when
+  the socket dies or the game frame navigates away or detaches, both of which
+  are watched as CDP events rather than checked per call.
+* **The context wait is an event with a deadline, not a poll.** The
+  announcement of a frame's execution context wakes the waiter in the same tick
+  it arrives; `CONTEXT_WAIT_MS` (500 ms) is only there for a frame that never
+  announces one. A target's *own* main frame does not wait at all: CDP's "no
+  context named" is that frame's default world, so no id is asked for.
+* **The focus click is not sent on faith.** The page watches its own
+  `pointerlockchange` and pushes the state to the bridge over a
+  `Runtime.addBinding`, so a game that holds pointer lock (this one does,
+  measured: `document.pointerLockElement` is the canvas) costs nothing at all.
+  The click is sent only when the page reports unlocked, which is the only case
+  where it buys the lock back. `bridge.focusClicks` counts them.
+* **Press and release share the connection**, because there is only one -- and
+  the canvas centre is measured once per connection rather than once per mouse
+  event.
+* **The status bar is read out of the canvas in the page** (`canvasStrip`) rather
+  than photographed through the compositor: one wrapped animation frame,
+  `gl.readPixels` over the canvas's bottom 40 rows, flipped and PNG-encoded in
+  the page. 68 ms against 392 ms, and it reads the same number: back to back on
+  a live game the two paths returned health `1`, numbers `[1, 100]`, score
+  0.639 and margin 0.192 -- identical -- and 30 reads in a row each carried a
+  number. When the player is dead both paths read nothing at all, which is the
+  behaviour and not a fault (there is no status bar to read). The screenshot
+  path is kept as the fallback for a page with no readable WebGL canvas.
+* **The rest of the health read was made cheap too**, which the capture alone
+  did not do. `control/hud.mjs` re-read the level archive and re-decoded twenty
+  PCX glyphs on *every* read (`loadDigits`), and re-rendered and re-centred the
+  ten digit templates on every call (`coverage`, `correlate`): 49 ms and about
+  20 ms of a read that cost 110 ms in total. Both are now done once per archive
+  and kept, and the glyph's mean and variance are computed once instead of once
+  per cell. Isolated, a health read went from 110 ms to **40 ms**, and
+  `scripts/route-test.mjs` -- which paints status bars out of the archive's own
+  digits and reads them back -- is unchanged at 132 checks, all passing.
+
+**The tests, after the change.** `node scripts/route-test.mjs` runs **132
+checks, all passing**; `node scripts/control-api-test.mjs` passes every route
+("a 400x40 clip came back 400x40; the status-bar strip 1366x40 (canvas-pixels)
+read 4,100"); `node scripts/engine-state-test.mjs` runs 35, all passing. One
+assertion in `control-api-test.mjs` was changed rather than worked around: it
+pinned `hudShot()`'s strip at exactly 48 rows, which is a property of the
+screenshot path's viewport slack, not of the reading. It now pins what the test
+was always about -- that the strip carries the band it was read with and has a
+number in it -- so it holds for both capture paths.
+
+**`demo1` is still not finished, and the engine said so.** A two-attempt run
+(`QUAKE2_ATTEMPTS=2 QUAKE2_DEATHS=1`) reached 1224 units from the exit and ended
+`"mapname" is "demo1"`.
+
+**The 0-unit legs with the 177 and -126 degree residuals did not come back.**
+That was the fault the previous pass traced (legs of `covered 0`, the aim
+reported as `keys` with residuals of 177 and -126.83 degrees, the engine's own
+position unchanged throughout). This pass's firing record is **11 legs, 11 of
+them with the turn landed on the soldier**, every one of them turned with the
+*mouse*, and residuals of 0.07, 0.29, -0.25, 0.12, 0.12, 0.24, 0.02, -0.14,
+0.06, 0 and 0.14 degrees. Ten of the eleven covered ground (209, 42, 4, 219,
+312, 193, 209, 176, 212, 149 and 203 units); the one 4-unit leg was aimed and
+fired like the rest. 158 units covered per second with the trigger down. The lag
+was not what was holding that fault in place -- it was the `face()` calibration
+the previous pass fixed -- but the readings that used to make it look like a
+stall are gone, and the legs are now cheap enough that a stall would be visible
+as a stall rather than as a slow leg.
 
 ### What finishing `demo1` means
 

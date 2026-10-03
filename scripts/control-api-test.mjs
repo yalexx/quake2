@@ -414,18 +414,39 @@ try {
     // plainly showed a number. This is read-only: a capture sends no input.
     await step("a clipped capture is the size that was asked for", async () => {
       const { QuakeControl } = await import("../control/bridge.mjs");
-      const { hudShot, decodePng } = await import("../control/hud.mjs");
+      const { hudShot, readHealth, decodePng } = await import("../control/hud.mjs");
       const bridge = new QuakeControl({ cdpUrl: process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801", timeoutMs: 20000 });
       try {
         const clipped = decodePng(await bridge.screenshot({ clip: { x: 0, y: 0, width: 400, height: 40, scale: 1 } }));
         assert.equal(clipped.width, 400, "the clip's width was not honoured: " + clipped.width + "x" + clipped.height);
         assert.equal(clipped.height, 40, "the clip's height was not honoured: " + clipped.width + "x" + clipped.height);
         // The reader's own framing: the status bar lives in the canvas's bottom
-        // `band` rows, and the capture is that band plus the eight rows the
-        // engine may draw it a little higher in.
-        const strip = decodePng((await hudShot(bridge)).png);
-        assert.equal(strip.height, 48, "the status-bar strip came back " + strip.width + "x" + strip.height + ", not 48 rows");
-        return "a 400x40 clip came back 400x40; the status-bar strip " + strip.width + "x" + strip.height;
+        // `band` rows, and the strip a caller reads it from has to carry them.
+        // What is pinned is not the number of rows but the reading -- a strip
+        // the reader can find no number in is the fault this came from, and it
+        // is the fault that came back empty on every firing leg of a `finish`
+        // run while the picture plainly showed a number. The two ways of taking
+        // the strip frame it differently on purpose: the in-page read hands
+        // back the canvas's band exactly, and the screenshot path the band plus
+        // the eight rows of viewport the engine may draw the bar a little
+        // higher in. Both must read.
+        const strip = await hudShot(bridge);
+        const picture = decodePng(strip.png);
+        const band = strip.readOptions.band;
+        assert.ok(picture.height >= band,
+          "the status-bar strip came back " + picture.width + "x" + picture.height + ", shorter than the " + band + "-row band it was read with");
+        const reading = readHealth(strip.png, strip.readOptions);
+        // A dead player has no status bar to read (see control/hud.mjs), so an
+        // empty reading is allowed for exactly that reason and no other. Both
+        // ways of taking the strip were checked against each other in that
+        // state: the picture path and the in-page path both come back with no
+        // number, which is the behaviour and not a fault.
+        const where = reading.numbers.length ? null : await bridge.position();
+        assert.ok(reading.numbers.length > 0 || (where && where.dead === true),
+          "no number could be read out of the status-bar strip (" + strip.source + ", " + picture.width + "x" + picture.height +
+          ") and the player is not dead: " + JSON.stringify(where && where.dead));
+        return "a 400x40 clip came back 400x40; the status-bar strip " + picture.width + "x" + picture.height +
+          " (" + strip.source + ") read " + (reading.numbers.map((number) => number.value).join(",") || "no number -- the player is dead");
       } finally {
         await bridge.close();
       }
