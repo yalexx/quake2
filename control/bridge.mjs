@@ -1863,8 +1863,12 @@ export class QuakeControl {
   async useHold(down = true, options = {}) {
     if (options.console === true) {
       const answer = await this.command([down ? "+use" : "-use"]);
-      if (!answer.ran) {
-        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      // `ran` alone is not enough: a dump came back, but if the engine never
+      // echoed the command back it never ran it either -- the console drops a
+      // keystroke now and then -- and the key was not held however much the
+      // transcript holds. See `command()`.
+      if (!answer.ran || !answer.echoFound) {
+        return { held: false, method: "console", reason: answer.reason || "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
       }
       return { held: true, method: "console", key: down ? "+use" : "-use", output: answer.output, console: this.consoleMetrics() };
     }
@@ -2072,8 +2076,12 @@ export class QuakeControl {
   async attackHold(down = true, options = {}) {
     if (options.console === true) {
       const answer = await this.command([down ? "+attack" : "-attack"]);
-      if (!answer.ran) {
-        return { held: false, method: "console", reason: "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
+      // The same rule as `useHold`: a dump is not proof the engine ran the
+      // command, only the echo is. `this.attacking` follows the answer, never
+      // the request, because a caller that believes the trigger is down when it
+      // is not is a caller that has lost the shot.
+      if (!answer.ran || !answer.echoFound) {
+        return { held: false, method: "console", reason: answer.reason || "NO_ANSWER", message: answer.message || "the engine did not answer on its console", console: this.consoleMetrics() };
       }
       this.attacking = !!down;
       return { held: true, method: "console", command: down ? "+attack" : "-attack", output: answer.output, console: this.consoleMetrics() };

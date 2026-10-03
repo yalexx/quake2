@@ -1651,11 +1651,12 @@ possible, and both were fixed this pass.
   console to ask (a stub in a test) answers nothing, so no test drives a console
   round trip it did not ask for.
 
-**The finish is not yet reliable, and this is the honest number.** Four `finish`
-runs were measured this pass. The first finished. The two after it, on the fixed
-code and with the runner's defaults (`attempts 8`, `deaths 8`), did not: their
-deepest readings were `-1648 1640 15`, **160 units short**, and `-952 1481 -2`,
-**827 units short**, and the engine answered `"mapname" is "demo1"` to both. The
+**The finish is not yet reliable, and this is the honest number.** Three `finish`
+runs were run to completion this pass. The first finished. The two after it, on
+the fixed code and with the runner's defaults (`attempts 8`, `deaths 8`), did
+not: their deepest readings were `-1648 1640 15`, **160 units short**, and
+`-952 1481 -2`, **827 units short**, and the engine answered `"mapname" is
+"demo1"` to both. The
 fight record says why. The walk reaches the exit room's floor (`z 15`, inside the
 trigger volume's `z` range) but the player is ground down on the way: health fell
 to `1` on six of run 3's firing legs, one leg was recorded `DIED ON THIS LEG` at
