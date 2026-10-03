@@ -1510,8 +1510,10 @@ two runs that carry the clock:
 a `Page.captureScreenshot` and an image decode taken inside the hold, and while
 the screenshot is being encoded and sent the page is not running the game: the
 keys stay down and the player does not walk. A leg in the open room of demo1
-covers 306 units a second; the legs in the corridor cover 20 to 90, and they are
-the legs that cost the health. `QUAKE2_READ_HUD=0` turns the read off, and it is
+covers 306 units a second; the legs that cover least -- 23, 38, 48, 73, 77 and
+92 units over the same 1.2 to 1.7 seconds, 14 to 75 units a second -- are the
+legs in the corridor, and they are the legs that cost the health.
+`QUAKE2_READ_HUD=0` turns the read off, and it is
 the default only for the diagnostic: the health series is the one thing reading
 it buys.
 
