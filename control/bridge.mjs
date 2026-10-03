@@ -1147,18 +1147,6 @@ export class QuakeControl {
     return { used: release.held !== false, holdMs: holdMs };
   }
 
-  // The engine's fire button, as a hold rather than a tap -- the same shape as
-  // useHold(), for the same reason, and one more of its own. `+attack` is the
-  // command behind every fire binding, so it works whatever the player's config
-  // says, and it is a *hold* because a fight on this box is won by firing while
-  // the player keeps walking: a soldier takes three blaster bolts, a single
-  // click is one of them, and a player who stands still to aim the second and
-  // third is the player the level kills.
-  //
-  // Held down, the engine re-fires at the weapon's own refire rate until
-  // release() is called. Nothing here leaves it held: a stuck trigger is not
-  // harmless, because fire is also the key that leaves the death camera and
-  // skips an intermission.
   // Hold a mouse button down, or let it up, without touching the console.
   //
   // `click()` is a tap; this is the two halves of it kept apart, and it exists
@@ -1191,11 +1179,29 @@ export class QuakeControl {
         type: down ? "mousePressed" : "mouseReleased",
         x: point.x, y: point.y, button: name, buttons, clickCount: down ? 1 : 0, modifiers: this.modifiers,
       });
-      this.attacking = !!down && name === "left";
+      // Whether the *left* button is held, which is what `attacking` means to
+      // a caller that uses it to decide whether the trigger needs releasing.
+      // Setting it from the argument alone got it wrong as soon as a second
+      // button was involved: a right-press after a left-press left the left
+      // button down and `attacking` false, and nothing would ever let it up.
+      this.attacking = this.heldButtons.has(1);
       return { held: !!down, button: name, buttons };
     });
   }
 
+  // The engine's fire button, as a hold rather than a tap -- the same shape as
+  // useHold(), for the same reason, and one more of its own. `+attack` is the
+  // command behind every fire binding, so it works whatever the player's config
+  // says, and it is a *hold* because a fight on this box is won by firing while
+  // the player keeps walking: a soldier takes three blaster bolts, a single
+  // click is one of them, and a player who stands still to aim the second and
+  // third is the player the level kills.
+  //
+  // Held down, the engine re-fires at the weapon's own refire rate until
+  // release() is called. Nothing here leaves it held: a stuck trigger is not
+  // harmless, because fire is also the key that leaves the death camera and
+  // skips an intermission. Prefer `mouseHold` for a fight: this one types the
+  // command into the console, and the console is a pause.
   async attackHold(down = true) {
     const answer = await this.command([down ? "+attack" : "-attack"]);
     if (!answer.ran) {

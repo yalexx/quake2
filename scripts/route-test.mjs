@@ -11,7 +11,8 @@
 import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
-import { loadDigits, readBar } from "../control/hud.mjs";
+import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
+import fs from "node:fs";
 
 let failures = 0;
 let checks = 0;
@@ -460,7 +461,11 @@ function readPainted(text, options = {}) {
   return { status, leftmost: status.numbers[0] || null };
 }
 
-for (const value of ["100", "43", "7", "0", "88", "19", "155"]) {
+// Every digit of the font gets read at least once, and "2" and "6" get a
+// number of their own: they are the ones this module's own note calls close
+// cousins of "0", so a reading that cannot tell them apart is the failure the
+// note is warning about.
+for (const value of ["100", "43", "7", "0", "88", "19", "155", "62", "296", "267890"]) {
   const read = readPainted(value);
   check("a painted " + value + " reads back as " + value, read.leftmost && read.leftmost.value === Number(value),
     read.status.numbers.map((n) => n.value));
@@ -479,6 +484,22 @@ check("an armour number is read as armour, not as health",
   armourStatus.numbers.map((n) => n.value + ":" + n.family));
 check("and a health number is read as health",
   readPainted("100").leftmost.family === "num", readPainted("100").leftmost.family);
+
+// The reader's other half is the decoder, and it had no check at all: every
+// case above hands `readBar` a luminance plane, so the PNG chunk walk, the
+// IDAT inflate and the per-row filter reconstruction -- the part production
+// actually runs on a screenshot -- were never exercised. `favicon.png` is a
+// real 64x64 8-bit RGB PNG in the repo, which is the shape CDP's
+// `Page.captureScreenshot` emits (colour type 2, no alpha, not interlaced).
+const favicon = decodePng(fs.readFileSync(new URL("../favicon.png", import.meta.url)));
+check("a real PNG decodes to the size its IHDR declares",
+  favicon.width === 64 && favicon.height === 64, [favicon.width, favicon.height]);
+check("an RGB picture with no alpha channel comes back fully opaque",
+  favicon.data.length === 64 * 64 * 4 && favicon.data[3] === 255 && favicon.data[favicon.data.length - 1] === 255,
+  favicon.data.length);
+check("and the pixels are the picture's, not one flat fill",
+  new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4])).size > 1,
+  [...new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4]))].slice(0, 4));
 
 console.log("errors are named, never empty");
 let threw = null;

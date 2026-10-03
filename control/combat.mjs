@@ -656,11 +656,21 @@ export class CombatWalker extends RouteWalker {
       const shot = await hudShot(this.game);
       const reading = readHealth(shot.png, shot.readOptions);
       let crop = null;
+      let cropReason = null;
       if (this.engage.hudCropDir) {
-        fs.mkdirSync(this.engage.hudCropDir, { recursive: true });
-        crop = path.join(this.engage.hudCropDir,
-          "leg-" + where + "-" + String(this.fights.length + 1).padStart(3, "0") + ".png");
-        fs.writeFileSync(crop, shot.png);
+        // Saving the picture is evidence-keeping, not measuring, and a
+        // write that fails must not throw away a reading that succeeded:
+        // a full disk would otherwise turn every leg into `health: null`
+        // and the run's own report would blame the status bar.
+        try {
+          fs.mkdirSync(this.engage.hudCropDir, { recursive: true });
+          crop = path.join(this.engage.hudCropDir,
+            "leg-" + where + "-" + String(this.fights.length + 1).padStart(3, "0") + ".png");
+          fs.writeFileSync(crop, shot.png);
+        } catch (error) {
+          crop = null;
+          cropReason = error.message;
+        }
       }
       return {
         health: reading.health,
@@ -669,6 +679,7 @@ export class CombatWalker extends RouteWalker {
         armour: reading.armour ? reading.armour.value : null,
         barNumbers: reading.numbers.map((number) => number.value),
         hudCrop: crop,
+        ...(cropReason ? { hudCropReason: cropReason } : {}),
       };
     } catch (error) {
       this._note("could not read the status bar", { reason: error.message });

@@ -374,7 +374,10 @@ export async function hudShot(game, options = {}) {
     canvasTop: box.top,
     canvasWidth: box.width,
     canvasHeight: box.height,
-    readOptions: { rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
+    // `band` rides along because the reader bounds its search by it: without
+    // it a caller that took a taller strip would hand over rows the reader
+    // then filtered out, and the read would come back empty for no reason.
+    readOptions: { band, rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
   };
 }
 
@@ -453,7 +456,14 @@ export function readBar(lum, width, height, options = {}) {
     for (const direction of [-1, 1]) {
       for (;;) {
         const edge = direction < 0 ? run[0] : run[run.length - 1];
-        if (run.length >= 4) break;
+        // A bound, not a digit count. It used to be 4, which is one more than
+        // any number on this status bar needs -- and that is exactly why it
+        // was wrong: a run that hit the bound was reported as though it were
+        // the whole number, so a longer one came back as its own first four
+        // digits with the rest read as a second number. Measured: six digits
+        // read as "2678" and "0". Eight still bounds a row of glyph-shaped
+        // noise, and no longer cuts a number in half.
+        if (run.length >= 8) break;
         let next = null;
         for (const cell of cells) {
           if (cell.used) continue;
