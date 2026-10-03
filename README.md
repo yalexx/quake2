@@ -382,7 +382,8 @@ for what that changed and what it measured.
 | `typeText(text)` | Type a whole string, one key at a time: how a console command is entered |
 | `evaluate(expression)` | Run an expression inside the game frame and get its JSON value back (an escape hatch: read `FS`, poke `Module`) |
 | `position()` | Where the player is and which way they look, read live out of the engine's own memory: no input, no pause, no page report. Also the map name, `dead`, and whether the console is up |
-| `command(text)` | Run a console command (or an array of them) and read the answer back |
+| `command(text)` | Run a console command (or an array of them) and read the answer back. `output` starts at the command's own echo; when the engine did not echo it (the console drops a keystroke now and then) `output` is empty, `echoFound` is `false` and `reason` is `"NO_ECHO"` -- never another command's lines |
+| `level()` | The level the engine itself says it is running, asked on its own console: `map` is `"mapname"`'s answer, or `null` when the engine did not answer. `position().map` is cached and can name the level a run started in, so this is the one to use to ask whether the level has changed |
 | `face(bearing)` / `walk(ms)` / `goto(point, opts)` | Closed-loop navigation on top of the probe -- see [Navigating](#navigating-position-face-walk-and-goto) |
 
 Escape is the one key Chromium will not pass through from CDP: it is the key that
@@ -448,7 +449,7 @@ The reply says so itself: `player.health`, `armour` and `ammo` are always
 `null`, `unavailable` names them, and `note` says why. A `null` field here means
 *unknown*, not *zero*, and it is never filled in with a guess. `alive` is not a
 memory field: it is derived from the live view roll and says so
-(`aliveSource: "view-roll"`).
+(`aliveSource: "view-roll-above-strafe-lean"`).
 
 **The console is now an explicit fallback, and only that.** `state({ probe:
 true })` still does what it always did -- opens the console, types the two
@@ -1507,8 +1508,13 @@ scripts/demo1-run.mjs plan`), and it opens two doors on the way in: `func_door
 Walking it is a fight rather than a stroll, and the fight is what stops it. The
 corridor west and north of the start room is covered by `monster_soldier` at
 `-672 336 -16` and `-856 240 -16` and by `monster_soldier_light` at
-`-856 584 -24`; the exit room by three more. `finish` has never finished: every
-run has ended with the engine still answering `"mapname" is "demo1"`.
+`-856 584 -24`; the exit room by three more. **It has finished.** On one of the
+four `finish` runs measured this pass the engine answered `"mapname" is
+"demo2"`, and what that run exposed -- two defects that between them made the
+proof unsound -- is in [the pass that finished
+it](#the-pass-that-finished-it). The other three runs ended with the engine
+still answering `"mapname" is "demo1"`, and the reason is measured below: it is
+the fight, not the walk.
 
 **Where the walk gets to, measured on this pass.** Ten `finish` attempts ran to
 completion (two more could not start: the game tab left the kiosk browser
@@ -1591,10 +1597,81 @@ holds, how many firing legs the run took, the health the player had left after
 each of them, and -- when it does not finish -- both the **last reading** and
 the **deepest reading** of the player's position, which are not the same number.
 
-#### What this pass could not do
+#### The pass that finished it
 
-The task is not finished, and the things it did not reach are worth saying
-plainly rather than burying.
+`node scripts/demo1-run.mjs finish` starts a fresh `demo1` with `cheats 0`, walks
+the route with `control/combat.mjs`, and asks the engine which map it is on. On
+the first run of this pass the engine's own answer at the end of it was
+
+```
+"mapname" is "demo2"
+```
+
+-- read back a second and a half after the walk gave up, and confirmed three more
+times afterwards with a bare `mapname`, each read with the engine's echo `]mapname`
+intact immediately above the answer and with `viewpos` from the same dump showing
+the player standing in `demo2` (`246 2064 -233`, on the death camera that map
+gives a single player). That is the finish: not a position the script believed it
+had reached, but the level the engine says it loaded.
+
+**What it exposed was not the walk.** The run reached `-1696 1539`, 80 units from
+the exit's aim point, the engine loaded `demo2`, and the walk -- still reading its
+own trail -- went on planning `demo2`'s coordinates on `demo1`'s grid for another
+attempt and a half before giving up on `START_OFF_GRID`. Two defects made that
+possible, and both were fixed this pass.
+
+* **The proof could have been a false positive, and one of its commands silently
+  did nothing.** `command()` cut the condump at the command's own echo, and when
+  the echo was *not* there it fell back to the last `tail` lines of the **whole
+  console scrollback** -- which is not this command's answer at all, but whatever
+  the engine happened to print last. The console does drop keystrokes: on the
+  first run of this pass `cheats 0` arrived as `cheas 0` and the engine answered
+  `Unknown command "cheas 0"`. So the fallback and the drop together could report
+  a `mapname` answer that a *different* command produced -- and a `mapname` whose
+  own `t` was dropped would have been answered with the level name from a minute
+  ago. `#askEngine` now retypes any command whose echo is missing (measured: the
+  drop is intermittent, 0 in 14 typed commands afterwards), and an answer with no
+  echo comes back as `output: []` with `reason: "NO_ECHO"` instead of somebody
+  else's lines. Nothing in the repo pinned the old fallback -- `echoFound` was
+  written and never read -- so this is a pure narrowing.
+* **The walk could not tell that the level had ended.** `position().map` is not a
+  live reading: the map name has no address in the image, so the bridge caches
+  the last `mapname` the engine answered and gives it priority over everything
+  else. `freshDemo1()` runs a `mapname` at the start of every run, so for the
+  whole walk `position().map` returned `"demo1"` -- verified on the live engine
+  by handing a bridge a stale `{name: "demo1", source: "mapname"}` hint while the
+  engine was really on `demo2`: `position()` answered `demo1` and `mapSource
+  "mapname"`, and the same call with the hint cleared answered `demo2` and
+  `mapSource "console-log"`. The walker's `LEVEL_CHANGED` check had been in
+  `control/walker.mjs` all along and could never fire. There is now
+  `bridge.level()`, which asks the engine on its own console and returns what it
+  said, and the walker calls it at the one moment the cheap reading cannot be
+  trusted -- when the planner finds no route at all -- returning `LEVEL_CHANGED`
+  instead of `START_OFF_GRID` when the engine names another level. A game with no
+  console to ask (a stub in a test) answers nothing, so no test drives a console
+  round trip it did not ask for.
+
+**The finish is not yet reliable, and this is the honest number.** Three `finish`
+runs were run to completion this pass. The first finished. The two after it, on
+the fixed code and with the runner's defaults (`attempts 8`, `deaths 8`), did
+not: their deepest readings were `-1648 1640 15`, **160 units short**, and
+`-952 1481 -2`, **827 units short**, and the engine answered `"mapname" is
+"demo1"` to both. The
+fight record says why. The walk reaches the exit room's floor (`z 15`, inside the
+trigger volume's `z` range) but the player is ground down on the way: health fell
+to `1` on six of run 3's firing legs, one leg was recorded `DIED ON THIS LEG` at
+`health 3`, and run 3 lived through **5 level restarts**. A death does not spend
+an attempt -- it puts the player back on the level-start autosave at the spawn --
+so a run is `attempts` independent trips down the same corridor rather than
+`attempts` lives, and each trip carries only the health the spawn gives it. The
+lever that exists today is the one the runner already exposes:
+`QUAKE2_ATTEMPTS` / `QUAKE2_DEATHS`, the number of trips.
+
+#### What the pass before this one could not do
+
+The section above is this pass; the list below is the one before it, kept
+because its reasoning still stands. It did not finish `demo1`, and the things it
+did not reach are worth saying plainly rather than burying.
 
 * **`demo1` was not finished.** `"mapname" is "demo1"` on all ten runs that
   completed. Nothing here reached the exit trigger, and the deepest is 1,331
@@ -1617,9 +1694,14 @@ plainly rather than burying.
   last `map` command the bridge issued, or from a `mapname` answer the engine
   gave, and `mapSource` says which. All three cost nothing, and all three mean
   the name arrives a little late on a cold start. It is
-  not in the hot path's way -- the walk does not need it -- but a caller that
-  wants the name the instant a level starts should use `command("map demo1")`,
-  which is what makes it immediate.
+  not in the hot path's way -- the walk does not need it to *walk* -- but a
+  caller that wants the name the instant a level starts should use
+  `command("map demo1")`, which is what makes it immediate. The pass above found
+  the other half of this: because a `mapname` answer is cached and given
+  priority over the log, `position().map` can go on naming the level a run
+  started in, and the walk *does* need the name for one thing -- to know that the
+  level has ended. `level()` is the reading that asks the engine every time; see
+  [the pass that finished it](#the-pass-that-finished-it).
 * **`use` cannot be driven as real input on this build.** The engine has a
   `+use` command, and the bridge can find it, but the config in `/userdata`
   binds no key to it -- Quake 2 opens doors by walking into them -- so a real

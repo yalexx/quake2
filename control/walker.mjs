@@ -303,6 +303,22 @@ export class RouteWalker {
     return this.map.path(from, to, this.options);
   }
 
+  // The level the engine itself says it is running, asked on its own console --
+  // not the `map` that `position()` carries, which is the last `mapname` the
+  // engine answered and goes on naming the level the run started in however
+  // long ago that was. A game with no console to ask -- a walker driven by a
+  // stub in a test -- answers nothing rather than guessing, so this can never
+  // invent a level change.
+  async #levelFromEngine() {
+    if (!this.game || typeof this.game.level !== "function") return null;
+    try {
+      const read = await this.game.level();
+      return read && read.map ? read.map : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Can a player walk in a straight line between two points? Sampled at the
   // body's height, because that is what has to be clear -- a route point is a
   // floor and the player stands *on* it, so the line is tested 8 to 52 units up
@@ -612,6 +628,25 @@ export class RouteWalker {
       }
       if (!plan.points.length) {
         this.#note("no route from here", { reason: plan.reason, closest: plan.closest, blockers: plan.blockers });
+        // "No route" is also what a level that has changed under the walk looks
+        // like, and the cheap reading cannot tell the two apart. The plan is
+        // drawn on the level this walk set out in; once the engine has loaded
+        // the next one the player stands in the new level's coordinates and
+        // every grid point misses -- while `position().map` keeps naming the
+        // old level, because it is the `mapname` answer from the start of the
+        // run and nothing refreshes it. Measured on `demo1`: the engine loaded
+        // `demo2` with the player 80 units from the exit, and the walk spent
+        // the rest of its budget planning `demo2`'s coordinates on `demo1`'s
+        // grid, ending on `START_OFF_GRID` -- a lost route, not a lost level.
+        // This is the one place the engine's own word is worth a console round
+        // trip: it is the moment the walk has lost the level, and the answer
+        // decides between "there is no way out of here" and "there is nothing
+        // left to do here".
+        const live = await this.#levelFromEngine();
+        if (this.levelName && live && live !== this.levelName) {
+          this.#note("the engine moved to another level; stopping", { from: this.levelName, to: live });
+          return { reached: false, reason: "LEVEL_CHANGED", map: live, level: this.levelName, attempts: attempt, position, trail, log: this.log };
+        }
         // The level's own floor plan does not connect these two points. That is
         // the answer to "is there a route", but it is not an answer to "how far
         // does a player get" -- a grid says a wall is a wall, and the only thing
