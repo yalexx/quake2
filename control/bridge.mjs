@@ -243,6 +243,52 @@ function lastLine(lines, pattern) {
   return -1;
 }
 
+// How far the view has to roll before the player is dead rather than leaning.
+//
+// The view roll is the only thing that says whether the player is alive -- this
+// engine prints no health, and every movement key does nothing while the death
+// camera holds the view -- so where the threshold sits decides whether a walk
+// can trust its own reading of the player.
+//
+// The build leans the view when the player strafes. That is Yamagi Quake II's
+// `cl_rollangle`, which stock Quake 2 does not have, and it is why "the death
+// camera is the one thing that rolls the view" is wrong on this box. Measured
+// on a live player on `demo1`, one reading per CDP round trip: standing still 0,
+// walking forward at most 0.72, and strafing up to 2.00 over 47 samples of pure
+// strafe -- none of them above 2.0, in either direction. The death camera is a
+// separate population: measured by walking a player into demo1's soldiers with
+// nothing fired, the roll reads 40 and holds there for the whole death, with the
+// position frozen and a turn of the mouse moving the yaw 0 degrees.
+//
+// This used to be 1, the first non-zero value, on the belief that Quake 2 has no
+// lean. One is inside the lean, so the walker was reading its own strafe as a
+// corpse: measured, 24 of the 171 readings taken while walking a player into
+// demo1's corridor were called deaths by a roll the player was strafing through.
+// A false death is not cosmetic -- the walker restarts the level for one, which
+// restores the engine's autosave and puts the player back at the spawn, so every
+// strafe cost a run its ground. `movementKeys()` strafes on every firing leg.
+//
+// 20 is ten times the largest lean measured and half the death camera's own 40,
+// which is as far into the gap between two measured populations as a single
+// number can sit.
+export const ROLL_IS_DEATH = 20;
+
+// `dead`, decided from the roll this bridge has in its hand rather than from
+// the served page's own verdict.
+//
+// The page decides it too -- `engine-state.js` reports `dead`, and an older
+// copy of that file decides it at 1 -- and the control layer is the part that
+// promises the walk a reading it can act on. A bridge that passed the page's
+// word straight through would hand a run's ground to a number it cannot
+// justify, and would change behaviour with whatever the app server happens to
+// be serving. So it decides for itself, from the field the reading does give,
+// and falls back to the page's answer only when there is no roll to judge.
+export function deadFromRoll(read) {
+  const roll = read && read.angles ? Number(read.angles.roll) : NaN;
+  if (Number.isFinite(roll)) return Math.abs(roll) > ROLL_IS_DEATH;
+  return !!(read && read.dead);
+}
+
 // The engine's own words, parsed: it prints its map name in three different
 // places, its player position only for `viewpos`, and its level lifecycle as
 // banner lines. Everything here comes from a transcript, so nothing is
@@ -263,15 +309,13 @@ function readEngineState(transcript) {
     running: started >= 0 && started > stopped,
     position: viewpos ? { x: Number(viewpos[1]), y: Number(viewpos[2]), z: Number(viewpos[3]) } : null,
     angles,
-    // A living player's view never rolls: Quake 2 has no lean, and the view
-    // angles are the ones the client smooths from the input, which keep roll at
-    // zero. The death camera is the one thing that rolls them, so a non-zero
-    // roll is how a caller learns the player is dead without a screenshot --
-    // and this engine has no console command that prints health (see "Reading
-    // the game's state"). It matters because every movement key does nothing at
-    // all while the player is dead, which otherwise reads as a follower that has
-    // walked into a wall.
-    dead: !!angles && Math.abs(angles.roll) > 1,
+    // The death camera is how a caller learns the player is dead without a
+    // screenshot -- this engine has no console command that prints health (see
+    // "Reading the game's state") -- and it matters because every movement key
+    // does nothing at all while the player is dead, which otherwise reads as a
+    // follower that has walked into a wall. See ROLL_IS_DEATH for why the
+    // threshold is where it is rather than at the first non-zero value.
+    dead: !!angles && Math.abs(angles.roll) > ROLL_IS_DEATH,
     lines,
   };
 }
@@ -1059,6 +1103,7 @@ export class QuakeControl {
 
   #positionFromDirect(direct) {
     const read = direct.read;
+    const dead = deadFromRoll(read);
     return {
       probed: false,
       source: "wasm-memory",
@@ -1075,9 +1120,9 @@ export class QuakeControl {
       consoleOpen: read.consoleOpen,
       keyDest: read.keyDest,
       keyDestName: read.keyDestName,
-      dead: read.dead,
-      alive: read.alive,
-      aliveSource: read.aliveSource,
+      dead,
+      alive: !dead,
+      aliveSource: "view-roll-above-strafe-lean",
       health: read.health,
       armour: read.armour,
       ammo: read.ammo,
@@ -1308,6 +1353,19 @@ export class QuakeControl {
         await this.#sendKey(game, key, false);
       });
       return { method: "keys", amount: Math.sign(wanted) * ms * rate, ms: Math.round(ms), key };
+    }
+    // A method the caller asked for *by name* is put back on probation rather
+    // than refused. Retiring a method is how the automatic order stops spending
+    // rounds on one that has stopped working; it is not a claim that the method
+    // can never work again, and it takes only three misses to earn -- which the
+    // death camera produces on its own, because the view does not turn while it
+    // is up and a player who walks into demo1's soldiers dies several times a
+    // run. Refusing a named method is worse than one wasted round: a caller that
+    // asked for the mouse and is answered "none" has no way to turn at all, and
+    // `face()` returns NO_TURN without sending anything.
+    if (mode === "mouse" && this.turnCalibration.mouseWorks === false) {
+      this.turnCalibration.mouseWorks = null;
+      this.turnCalibration.misses = { keys: 0, mouse: 0 };
     }
     if (mode === "keys" || this.turnCalibration.mouseWorks === false) {
       // Both methods are believed dead. A retired method is never tried again,
@@ -2053,7 +2111,19 @@ export class QuakeControl {
         // capture is taken on the same socket.
         const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
         const params = { format: "png" };
-        if (rect) params.clip = rect;
+        // Same rule as the host-page branch below: the caller's clip is in the
+        // game frame's pixels and the capture is of the page that draws it.
+        if (rect) {
+          params.clip = options.clip
+            ? {
+              x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+              y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+              width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+              height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+              scale: options.clip.scale || 1,
+            }
+            : rect;
+        } else if (options.clip) params.clip = options.clip;
         const { data } = await game.session.send("Page.captureScreenshot", params);
         return Buffer.from(data, "base64");
       }
@@ -2071,7 +2141,24 @@ export class QuakeControl {
         });
         const rect = JSON.parse(measured.result ? measured.result.value : "null");
         if (!rect) throw new GameNotRunningError("the game's frame is no longer in the top-level page");
-        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip: rect });
+        // A caller's clip is in the *game frame's* own viewport pixels, and this
+        // capture is of the page that draws the frame -- so the clip has to ride
+        // on the frame's box here. Dropping it is not a small thing: it returns
+        // the whole desktop instead of the strip that was asked for, and the
+        // reader of that strip then reads whatever the desktop happens to be
+        // showing. That is exactly how `hudShot()`'s status-bar read came back
+        // empty on every firing leg of a `finish` run while the picture it kept
+        // plainly showed a health number.
+        const clip = options.clip
+          ? {
+            x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+            y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+            width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+            height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+            scale: options.clip.scale || 1,
+          }
+          : rect;
+        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip });
         return Buffer.from(data, "base64");
       } finally {
         session.close();

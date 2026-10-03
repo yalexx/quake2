@@ -176,6 +176,30 @@ export const ENGAGE_DEFAULTS = {
   // from, and a report whose numbers cannot be checked is a nicer story than
   // the one that happened.
   hudCropDir: null,
+  // Which way a firing leg turns onto its soldier. "mouse" is the default and
+  // it is a measurement, not a preference: on this build the relative-motion
+  // deltas *do* reach the player's own angles, and `face(40, turn: "mouse")`
+  // converges to 0.04 degrees in two rounds and 242 ms against the arrow keys'
+  // 415 ms and 6-degree tolerance. It matters because the turn is taken with
+  // the trigger down (see `#fight`): a 6-degree miss at 300 units is a bolt
+  // that passes a 32-unit-wide soldier by the width of its own body.
+  // `face()` calibrates the two methods itself and puts the keys back if the
+  // mouse ever stops turning the player, so `"auto"` -- keys first, mouse
+  // second -- is still available to a caller that would rather have it.
+  aimTurn: "mouse",
+  // How close the turn onto a soldier has to land, in degrees, and how many
+  // turns it may take. Tighter than the bridge's own default of 6 because the
+  // mouse can hold a hundredth of a degree and a soldier is only 32 units
+  // across: at 300 units, 6 degrees is 31 units, which is the whole of the
+  // soldier.
+  faceTolerance: 2,
+  faceRounds: 4,
+  // How much extra walking a firing leg may do while the status bar is being
+  // read, in milliseconds. The read takes about a second and the player is
+  // firing the whole time; walking it out is what keeps the leg from being a
+  // second of standing still, and the cap is what keeps the reading from
+  // dragging the leg the length of the plan.
+  readWalkMs: 600,
 };
 
 // Local compass arithmetic, matching the engine's: 0 is +X, 90 is +Y, and the
@@ -561,8 +585,8 @@ export class CombatWalker extends RouteWalker {
     return this.#fight(target, options);
   }
 
-  // One firing leg: look at the soldier, hold the trigger down, walk the route,
-  // let the trigger up.
+  // One firing leg: hold the trigger down, look at the soldier, walk the route,
+  // read the player's own health off the status bar, let the trigger up.
   //
   // The walk is the part that matters, and it is the route -- not the soldier.
   // Walking at what is being shot at is what a first attempt does and what the
@@ -573,23 +597,55 @@ export class CombatWalker extends RouteWalker {
   // while the whole walk in costs nothing). So the leg faces the soldier and
   // walks the way the walker was already going, with the strafe key that keeps
   // the two apart.
+  //
+  // What the leg used to do with its *other* seconds is what this version
+  // fixes, and it was measured on the running game rather than guessed. One
+  // firing leg on this box: the turn onto the soldier 415 ms, the walk 538 ms,
+  // `hudShot` 732 ms and `readHealth` 294 ms, and the trigger was down for the
+  // 538 ms in the middle of that and up for the rest. So a 2.2 s leg was 1.4 s
+  // of the player standing still in the open with the trigger *up*, being shot
+  // at by the level's own soldiers. That is the health reading the fight
+  // instrument reports (23 to 72 lost per firing leg, more than one soldier's
+  // blaster can do in half a second) turned into a mechanism -- and it is the
+  // harness's doing, not the level's.
+  //
+  // So the trigger goes down first and comes up last, and the two halves that
+  // used to run with it up now run with it down:
+  //
+  //   * the turn. Aiming goes through the mouse, which this build does apply to
+  //     the player's own angles -- measured, `face(40, turn: "mouse")` converges
+  //     to 0.04 degrees in two rounds and 242 ms, against the arrow keys' 415 ms
+  //     and 6-degree tolerance. Every bolt of that turn is a bolt on the way to
+  //     a soldier that is already shooting back. `face()` keeps its own
+  //     calibration and falls back to the keys by itself if the mouse ever stops
+  //     turning the player.
+  //   * the status-bar read. `hudShot()`'s restyle does not touch a held key --
+  //     the engine goes on applying them -- so the leg goes on walking and firing
+  //     while the reading is taken. It is allowed to drag the leg out by
+  //     `readWalkMs` rather than the leg standing still for the whole of its
+  //     second, and it comes up with the keys rather than after them.
+  //
+  // Neither costs anything to spend: this build's starting weapon is the
+  // blaster, which uses no ammo, so the extra bolts are free and the only
+  // question is whether they land.
   async #fight(target, options) {
     const before = await this.game.position();
     // No position to aim from is not a reason to skip the leg: falling through
     // to the ordinary step reports the miss honestly instead of throwing.
     if (!before || !before.position) return super._leg({ ...target, enemy: undefined }, options);
+    // Nor is a player who is already dead a soldier to shoot at. Every movement
+    // and turn does nothing while the death camera holds the view, so the leg
+    // would spend its aim on a corpse -- and, because a turn that cannot be
+    // taken is exactly how a turning method earns its way to being retired,
+    // spend the mouse on one too. The ordinary leg reports the death for the
+    // price of a `goto()` that says DEAD, and the walker restarts the level.
+    if (before.dead) return super._leg({ ...target, enemy: undefined }, options);
     const aim = { x: target.x, y: target.y, z: before.position.z };
     const facing = bearingTo(before.position, aim);
-    const aimed = await this.game.face(facing, {
-      from: before,
-      tolerance: numberOr(options.faceTolerance, 6),
-      rounds: numberOr(options.faceRounds, 4),
-    });
     // Where to walk: at the route point the leg would have aimed at had there
     // been no soldier. A leg that has lost its route point walks where it looks,
     // which is the best a leg can do with nothing to go on.
     const walkBearing = target.route ? bearingTo(before.position, target.route) : facing;
-    const keys = movementKeys(facing, walkBearing);
     const stepMs = numberOr(options.engageStepMs, this.engage.engageStepMs);
     // The press is asked for and reported on: a trigger the engine never took
     // is a leg that walked and aimed and did not shoot, and saying otherwise
@@ -604,15 +660,85 @@ export class CombatWalker extends RouteWalker {
     const press = typeof this.game.mouseHold === "function"
       ? await this.game.mouseHold("left", true)
       : await this.game.attackHold(true);
-    let walked = null;
+    // The keys are held by hand rather than through walkKeys(), because the
+    // status-bar read has to happen *between* the press and the release. Every
+    // release is attempted even if one throws: a key left down is a player
+    // walking into a wall for the rest of the run.
+    let down = [];
+    const releaseKeys = async () => {
+      const list = down;
+      down = [];
+      for (const key of [...list].reverse()) {
+        try { await this.game.key(key, false); } catch { /* one key the engine refuses must not leave the others held */ }
+      }
+    };
+    let aimed = null;
+    let keys = movementKeys(facing, walkBearing);
+    let heldMs = 0;
+    let health = null;
     try {
-      walked = await this.game.walkKeys(keys, stepMs, options);
+      const aimOptions = {
+        from: before,
+        tolerance: numberOr(options.faceTolerance, this.engage.faceTolerance),
+        rounds: numberOr(options.faceRounds, this.engage.faceRounds),
+      };
+      aimed = await this.game.face(facing, { ...aimOptions, turn: options.aimTurn || this.engage.aimTurn });
+      // A turn still has to be taken. The mouse is this leg's first choice and
+      // not its only one: if it did not land the aim, one more try is made the
+      // bridge's own way, which is the order that puts a retired method back on
+      // probation. A leg that walks off with the aim wherever it happened to be
+      // is a leg that fires at the wall it is walking past.
+      //
+      // The retry measures again rather than re-running the first attempt's
+      // arithmetic. `face()` skips its opening probe when it is handed `from`,
+      // and `before` is where the view was *before* the first attempt turned
+      // it -- so handing it back aims the second attempt at the error the first
+      // one has already spent: a 29-degree miss whose first attempt recovered
+      // 25 of it turns another 29 and ends 25 degrees out the other side. It is
+      // the shape of the 10-to-30-degree residuals, and the one of 109, in a
+      // measured `finish` run's leg record.
+      if (aimed && !aimed.facing) {
+        const { from: _spent, ...fresh } = aimOptions;
+        const again = await this.game.face(facing, { ...fresh, rounds: 2, turn: "auto" });
+        // The latest word wins even when it is a miss. The retry has turned the
+        // player, so the first attempt's `yaw` is no longer where the view is,
+        // and `viewYaw` below is what the walk's keys are computed from -- a leg
+        // that walked on the first attempt's yaw would walk off-course.
+        if (again) aimed = again;
+      }
+      // The walk is walked on the view the aim actually left behind, not on the
+      // bearing it was asked for -- movementKeys() is what turns the difference
+      // between that view and the way the route goes into forward-and-strafe.
+      const viewYaw = aimed && aimed.yaw !== undefined ? aimed.yaw : facing;
+      keys = movementKeys(viewYaw, walkBearing);
+      if (typeof this.game.key === "function") {
+        for (const key of keys) { await this.game.key(key, true); down.push(key); }
+        const started = Date.now();
+        await new Promise((resolve) => setTimeout(resolve, stepMs));
+        // The status bar is read inside the hold: the player is still walking
+        // and still firing while it is photographed and decoded.
+        const reading = this.engage.readHud === true ? this.#readHud(options) : null;
+        if (reading) await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(this.engage.readWalkMs, 600))));
+        await releaseKeys();
+        // Measured at the release, so `holdMs` is the time the keys were held
+        // rather than that plus however long the status bar took to decode --
+        // the decode outlives the hold, because the keys come up once the read
+        // has had its `readWalkMs` and the reading is awaited after them.
+        heldMs = Date.now() - started;
+        if (reading) health = await reading;
+      } else {
+        // A game object with no key() -- the walker's test stubs -- keeps the
+        // old path: walk, release, then read.
+        heldMs = (await this.game.walkKeys(keys, stepMs, options)).heldMs;
+        health = await this.#readHud(options);
+      }
     } finally {
+      await releaseKeys();
       // The trigger comes up even if the walk threw: fire is also the key that
       // leaves the death camera, and a stuck trigger would respawn the player
       // onto the engine's autosave instead of the level's own spawn.
-      if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", false);
-      else await this.game.attackHold(false);
+      if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", false).catch(() => {});
+      else await this.game.attackHold(false).catch(() => {});
     }
     const after = await this.game.position();
     const at = (after && after.position) || before.position;
@@ -625,20 +751,24 @@ export class CombatWalker extends RouteWalker {
       enemyDistance: Math.round(target.enemy.distance),
       fired: !!press.held,
       aimed: !!(aimed && aimed.facing),
-      aimError: aimed && aimed.error !== undefined ? Math.round(aimed.error) : null,
+      // Two decimals rather than none: the mouse path lands the aim inside a
+      // hundredth of a degree and the arrow-key path inside six, and a report
+      // that rounds both to "0deg" cannot tell the fix from the fault.
+      aimError: aimed && aimed.error !== undefined ? Number(aimed.error.toFixed(2)) : null,
+      aimMethod: aimed ? aimed.method : null,
       keys,
       offCourseDegrees: Math.round(shortestTurn(walkBearing - facing)),
       from: before.position,
       at,
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
-      holdMs: walked ? walked.heldMs : 0,
+      holdMs: heldMs,
       dead: !!(after && after.dead),
     };
     // The one reading the engine will not give: how much of the player is left
-    // after this leg. Taken here, with the trigger up, because that is the
-    // only moment the status bar is showing the player's own state rather than
-    // a death camera -- and because a leg is the unit the fight is fought in.
-    const health = await this.#readHud(options);
+    // after this leg. Taken with the trigger down (see above), because a leg is
+    // the unit the fight is fought in and the status bar shows the player's own
+    // state for all of it -- a death during the leg is the one case that reads
+    // as nothing, and a leg with no health reading says so rather than guessing.
     if (health) Object.assign(record, health);
     this.fights.push(record);
     return { ...(after || { position: before.position }), fired: !!press.held, position: at };

@@ -404,6 +404,32 @@ try {
       assert.equal(head.buffer.length, 0, "HEAD answered with a body");
       return width + "x" + height + ", " + response.buffer.length + " bytes, HEAD agreed";
     });
+
+    // A caller's clip has to survive the trip, and on this box it did not. The
+    // game is framed as an out-of-process iframe, so the picture is taken from
+    // the desktop page that draws the frame -- and a clip in the *game frame's*
+    // pixels has to ride on the frame's own box there. Measured: the strip
+    // `hudShot()` asks for came back 1625x1158 instead of 1625x48, and every
+    // health reading in a `finish` run came back empty while the picture it kept
+    // plainly showed a number. This is read-only: a capture sends no input.
+    await step("a clipped capture is the size that was asked for", async () => {
+      const { QuakeControl } = await import("../control/bridge.mjs");
+      const { hudShot, decodePng } = await import("../control/hud.mjs");
+      const bridge = new QuakeControl({ cdpUrl: process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801", timeoutMs: 20000 });
+      try {
+        const clipped = decodePng(await bridge.screenshot({ clip: { x: 0, y: 0, width: 400, height: 40, scale: 1 } }));
+        assert.equal(clipped.width, 400, "the clip's width was not honoured: " + clipped.width + "x" + clipped.height);
+        assert.equal(clipped.height, 40, "the clip's height was not honoured: " + clipped.width + "x" + clipped.height);
+        // The reader's own framing: the status bar lives in the canvas's bottom
+        // `band` rows, and the capture is that band plus the eight rows the
+        // engine may draw it a little higher in.
+        const strip = decodePng((await hudShot(bridge)).png);
+        assert.equal(strip.height, 48, "the status-bar strip came back " + strip.width + "x" + strip.height + ", not 48 rows");
+        return "a 400x40 clip came back 400x40; the status-bar strip " + strip.width + "x" + strip.height;
+      } finally {
+        await bridge.close();
+      }
+    });
   }
 
   // -- The error paths, on a CDP endpoint that is not there ----------------
