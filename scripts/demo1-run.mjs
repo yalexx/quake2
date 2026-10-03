@@ -237,9 +237,23 @@ async function finish() {
       // own route point between them (see CombatWalker). 1 is the behaviour
       // every run before this one was measured with.
       ...(process.env.QUAKE2_STEP_ROUNDS ? { stepRounds: Number(process.env.QUAKE2_STEP_ROUNDS) } : {}),
+      // How far to one side of the plan a leg may look for ground fewer
+      // soldiers can shoot (see CombatWalker #coverLane). 0 is the behaviour
+      // every run before this one was measured with.
+      ...(process.env.QUAKE2_COVER_LANE ? { coverLane: Number(process.env.QUAKE2_COVER_LANE) } : {}),
+      // How far off the way forward a soldier may stand and still be answered,
+      // whatever its distance (see CombatWalker _legTarget). Unset is the
+      // targeting every run before this one was measured with.
+      ...(process.env.QUAKE2_FORWARD_ARC ? { forwardArc: Number(process.env.QUAKE2_FORWARD_ARC) } : {}),
+      // The range inside which a soldier is not traded with at all (see
+      // CombatWalker _legTarget). Unset is the targeting every run before this
+      // one was measured with.
+      ...(process.env.QUAKE2_AVOID_RANGE ? { avoidRange: Number(process.env.QUAKE2_AVOID_RANGE) } : {}),
     },
   });
-  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange });
+  // The three levers this line adds are reported with the rest, so a finished
+  // run says which targeting and which lane search it was actually fought with.
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
   // The errands: the level's own weapon and the shells that are near the spawn.
