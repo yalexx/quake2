@@ -168,9 +168,21 @@ async function finish() {
       // own route point between them (see CombatWalker). 1 is the behaviour
       // every run before this one was measured with.
       ...(process.env.QUAKE2_STEP_ROUNDS ? { stepRounds: Number(process.env.QUAKE2_STEP_ROUNDS) } : {}),
+      // How far to one side of the plan a leg may look for ground fewer
+      // soldiers can shoot (see CombatWalker #coverLane). 0 is the behaviour
+      // every run before this one was measured with.
+      ...(process.env.QUAKE2_COVER_LANE ? { coverLane: Number(process.env.QUAKE2_COVER_LANE) } : {}),
+      // How far off the way forward a soldier may stand and still be answered,
+      // whatever its distance (see CombatWalker _legTarget). Unset is the
+      // targeting every run before this one was measured with.
+      ...(process.env.QUAKE2_FORWARD_ARC ? { forwardArc: Number(process.env.QUAKE2_FORWARD_ARC) } : {}),
+      // The range inside which a soldier is not traded with at all (see
+      // CombatWalker _legTarget). Unset is the targeting every run before this
+      // one was measured with.
+      ...(process.env.QUAKE2_AVOID_RANGE ? { avoidRange: Number(process.env.QUAKE2_AVOID_RANGE) } : {}),
     },
   });
-  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange });
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
   // QUAKE2_ARM=1 makes the walk call at the level's own super shotgun on the
   // way. The planner's route leaves it 336 units to one side, so this is the
   // "detour" the level's own design invites: the gun and three boxes of shells
