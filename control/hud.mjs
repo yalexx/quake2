@@ -754,20 +754,56 @@ export function readBar(lum, width, height, options = {}) {
   return { numbers: accepted, width, height, scale: options.scale || 1 };
 }
 
+// Where the bar's own layout puts the health number's right edge.
+//
+// The old rule was "the leftmost number on the bar", and it is wrong: the bar's
+// *art* reads as numbers too, and when the real digits could not be read the
+// art to their left won. Measured on 24 live strips off this box's kiosk: the
+// reader returned **1** (score 0.654, at x=227) for a strip whose bar the
+// vision pass reads as **100**, and it returned **1** (score 0.687, at the ammo
+// field's x=788) for a strip with no readable health number at all.
+//
+// What separates them is where the number *ends*. Q2 draws health right-aligned
+// in a fixed field, so the number ends on the same column whatever its width.
+// Every health number that was there to read on those strips -- 100, 72, 62,
+// 47, 43, 9, 6, 5 -- ended on column **573** of the strip's 1366, while the art
+// phantoms ended on 557, 667, 678, 717, 804 and the ammo number on its own
+// field. The strip is the status bar drawn across the canvas, so the field is a
+// *fraction* of the strip and a resize scales it; 573/1366 = 0.4194.
+//
+// A caller reading a bar of its own making can pass `healthFieldRight: null` to
+// drop the constraint, or another fraction to move it.
+export const HEALTH_FIELD_RIGHT = 573 / 1366;
+
 // The player's health, read off the status bar.
 //
-// Health is the leftmost number on the bar (the level's armour is drawn to its
-// right, and an empty armour pool draws nothing at all), and on this level it
-// is a value between 1 and 100 that a fight moves downwards. `readStatus`
-// returns every number it can read, so a caller that wants to check this
-// assumption has the evidence.
+// Health is the number the bar draws in its health field -- which is a thing
+// the strip can be asked, rather than assumed. `readStatus` returns every
+// number it can read, so a caller that wants to check this has the evidence.
 export function readHealth(pngBuffer, options = {}) {
   const status = readStatus(pngBuffer, options);
   const usable = status.numbers.filter((candidate) => candidate.value > 0 && candidate.value <= 999);
   // Health is drawn with the `num` pictures; a reading the other family fits
   // better is the armour number and is left for a caller that wants it.
   const health = usable.filter((candidate) => candidate.family === "num");
-  const candidate = (health.length ? health : usable)[0] || null;
+  const pool = health.length ? health : usable;
+
+  // The number that *ends* where the health field ends, and no other. A number
+  // ending anywhere else is the bar's art or the ammo count, and handing either
+  // back as the player's health is the fault this exists to stop. When the
+  // field is known and nothing ends on it, the honest answer is no reading at
+  // all -- `health: null`, which the fight report already writes as `?` and
+  // which the fight can be told to treat as "hurt" -- rather than a number read
+  // out of the scenery.
+  const fraction = options.healthFieldRight === undefined ? HEALTH_FIELD_RIGHT : options.healthFieldRight;
+  const cellWidth = GLYPH_WIDTH * (status.scale || 1);
+  const fieldEdge = fraction === null ? null : Math.round(status.width * fraction);
+  const tolerance = options.healthFieldTolerance === undefined ? 2 : options.healthFieldTolerance;
+  const endsAtField = (candidate) => Math.abs(candidate.x + String(candidate.value).length * cellWidth - fieldEdge) <= tolerance;
+  const aligned = fieldEdge === null ? pool : pool.filter(endsAtField);
+  // More than one reading can end on the field -- overlapping runs are grown
+  // from different anchors -- so the surest one wins, not the leftmost.
+  const candidate = aligned.slice().sort((a, b) => b.score - a.score)[0] || null;
   // How sure the *number* has to be to be handed back as the player's health.
   //
   // A number the reader is only just sure of is a number it may have invented.
@@ -789,6 +825,9 @@ export function readHealth(pngBuffer, options = {}) {
     ...status,
     health: number ? number.value : null,
     healthReading: number || null,
+    // Which column the reading had to end on to be believed, so a caller can
+    // see the constraint the reading survived rather than take it on trust.
+    healthFieldEdge: fieldEdge,
     armour: usable.filter((candidate) => candidate.family !== "num")[0] || null,
   };
 }
