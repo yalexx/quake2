@@ -193,7 +193,16 @@ async function callTool(name, args) {
         throw new ControlError("ms must be a number from 0 to 5000 (or send down:true/false to hold and release)", "BAD_REQUEST");
       }
       const fired = await game.fire(ms);
-      return { content: [{ type: "text", text: (fired.fired ? "Fired for " + ms + " ms." : "The engine did not answer on its console, so nothing was fired.") }] };
+      // The two failures are not the same one: a press the engine never took is
+      // a shot never fired, and a release it never took is a trigger that may
+      // still be down. Saying "nothing was fired" about the second would be a
+      // lie the caller cannot see through.
+      const text = !fired.fired
+        ? "The engine did not answer on its console, so the trigger was never pressed."
+        : (fired.released
+          ? "Fired for " + ms + " ms."
+          : "Fired for " + ms + " ms, but the engine did not take the release: the trigger may still be down. Send down:false to release it.");
+      return { content: [{ type: "text", text }] };
     }
     case "quake2_status": {
       return { content: [{ type: "text", text: JSON.stringify(await game.status(), null, 2) }] };

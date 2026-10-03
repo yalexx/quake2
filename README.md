@@ -666,9 +666,11 @@ placed, which `route.mjs` reads out of the BSP's entity lump:
   filter. A Quake 2 bolt leaves the muzzle along the view and flies straight, so
   a shot fired with the view level crosses the world at the player's eye height,
   46 units above the floor they stand on. A soldier standing on that same floor
-  is 56 units tall with its origin 24 above its feet, so its body spans eye-24 to
-  eye+32: the eye is *inside* it, and a level shot hits the chest with no pitch
-  at all. A soldier on the floor above, or one behind the corridor's own wall, is
+  is 56 units tall with its origin 24 above its feet -- its box runs from 24
+  below that origin to 32 above it, which on the player's own floor is from 46
+  below the eye to 10 above it. The eye is *inside* that span, so a level shot
+  hits the chest with no pitch at all. A soldier on the floor above, or one
+  behind the corridor's own wall, is
   not reachable, and both are ruled out from the level's data alone -- which
   matters, because this engine has no way to print pitch, and the pitch controls
   it does have are useless for aiming (holding the key bound to `+lookup` even
@@ -709,11 +711,12 @@ than taste:
   aims each leg at the farthest route point it can see. That is a straight line
   between two points the planner cleared, and the line itself is only checked for
   clear *air* -- not for a walkable floor. On `demo1` it is enough to walk the
-  player off the plan and into the dead-end pocket at `-427 111`: three
-  consecutive `finish` runs ended with the walker's own note naming that position
-  and the `func_wall`s it was standing against, 1,660 to 2,057 units short of the
-  exit, with a valid 38-point route from that very spot to the exit sitting unread
-  on disk. `CombatWalker` aims every leg at a route point a few steps ahead on
+  player off the plan and into the dead-end pocket at `-427 111`: three `finish`
+  runs ended with the walker's own note naming that position and the `func_wall`s
+  it was standing against, while the planner was holding a route the whole time
+  -- `route.mjs` plans 35 points and 4,067 units to the exit from that pocket, and
+  29 points and 3,511 units from `-703 278`, where the run that got furthest of
+  all had stopped 1,660 units short. `CombatWalker` aims every leg at a route point a few steps ahead on
   the plan instead (`walkAhead`, `walkReach`), and checks the line to it with
   `clearWalk()` -- the four body heights `walker.mjs` samples, strided at 10
   units rather than 16, because the brush that walls that pocket off is 16 units
@@ -753,10 +756,13 @@ scripts/demo1-run.mjs plan`), and it opens two doors on the way in: `func_door
 Walking it is a fight rather than a stroll. The corridor west and north of the
 start room is covered by `monster_soldier` at `-672 336 -16` and `-856 240 -16`,
 and the exit room by three more monsters; a walker that does not shoot dies
-there, and `finish` stops 1,968 to 2,057 units short of the trigger.
+there, and `finish` used to stop 1,968 to 2,049 units short of the trigger. The
+fighting walker of [The fight](#the-fight-controlcombatmjs) does better and still
+does not finish: its best run to date got 1,601 units short, and every run has
+ended with the engine still answering `"mapname" is "demo1"`.
 
-**What the level's monsters do to a player, measured.** Three live experiments
-on demo1 in the corridor, all with 100 health and no armour, all read off the
+**What the level's monsters do to a player, measured.** Two live experiments
+on demo1 in the corridor, both with 100 health and no armour, both read off the
 HUD in a screenshot (`position()` cannot report health -- see
 [Reading the game's state](#reading-the-games-state)):
 

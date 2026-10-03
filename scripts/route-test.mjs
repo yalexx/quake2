@@ -254,8 +254,14 @@ check("and the list is ordered by what the fight costs",
   onTheWay.every((t, i) => i === 0 || t.score >= onTheWay[i - 1].score), onTheWay.map((t) => Math.round(t.score)));
 check("every target is inside the arc and inside the range",
   onTheWay.every((t) => t.off <= 80 && t.distance <= 1100), onTheWay.map((t) => Math.round(t.distance)));
+// Both halves are asserted together on purpose. `every()` on the list behind is
+// vacuously true when the list is empty, which is exactly what a broken arc
+// filter would NOT produce -- so on its own it is a check that cannot fail. The
+// non-empty list from the opposite bearing is what makes it a test.
 const behindUs = threats(map, corridorEye, { bearing: 315, enemies });
-check("a soldier behind the way forward is not one", behindUs.every((t) => t.off > 80), behindUs.map((t) => Math.round(t.off)));
+check("a soldier behind the way forward is not one",
+  behindUs.length === 0 && onTheWay.length > 0,
+  { behind: behindUs.map((t) => Math.round(t.off)), ahead: onTheWay.map((t) => Math.round(t.off)) });
 const skipped = threats(map, corridorEye, { bearing: 135, enemies, skip: () => true });
 check("a soldier the caller has given up on is skipped", skipped.length === 0, skipped.length);
 const outOfRange = threats(map, corridorEye, { bearing: 135, enemies, engageRange: 40 });
@@ -267,9 +273,12 @@ check("and one further away than the range is not a target at all", outOfRange.l
 const bareMap = { isSolid: () => false, waypoints: () => [] };
 const bare = new CombatWalker({}, bareMap, {});
 const plainPoints = [{ x: 5, y: 6, z: 7 }, { x: 55, y: 6, z: 7 }];
-check("with no enemies the leg target is the route point it was given",
-  bare._legTarget({ x: 0, y: 0, z: 0 }, plainPoints).x === plainPoints[1].x,
-  bare._legTarget({ x: 0, y: 0, z: 0 }, plainPoints));
+// A walker with no monsters in the level does not walk *identically* to the
+// plain one -- every leg of this one follows the plan a few points at a time --
+// but what it aims at has to still be a point of the plan, and nothing else.
+const noEnemies = bare._legTarget({ x: 0, y: 0, z: 0 }, plainPoints);
+check("with no enemies the leg target is a point of the plan",
+  plainPoints.some((p) => p.x === noEnemies.x && p.y === noEnemies.y && p.z === noEnemies.z), noEnemies);
 
 const fightPoints = map.path(map.playerStart().position, map.exitPoint().aim, { maxStepUp: 45, maxDrop: 300, maxJump: 160, cell: 24 }).points;
 const fighter = new CombatWalker({}, map, {});

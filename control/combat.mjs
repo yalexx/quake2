@@ -31,18 +31,24 @@
 // the view and flies straight, so a shot fired with the view level crosses the
 // world at the player's eye height -- 46 units above the floor they stand on.
 // A soldier standing on that same floor is 56 units tall with its origin 24
-// above its feet, so its body spans eye-24 to eye+32: the eye is *inside* it,
-// and a level shot hits the chest without any pitch at all. That is not a
-// coincidence, it is how the level was built, and it is why this module filters
-// to soldiers the level shot can reach instead of guessing an angle. The ones it
+// above its feet -- its box runs from 24 below that origin to 32 above it, which
+// on the player's own floor is from 46 below the eye to 10 above it. The eye is
+// *inside* that span, so a level shot hits the chest without any pitch at all.
+// That is not a coincidence, it is how the level was built, and it is why this
+// module filters to soldiers the level shot can reach instead of guessing an
+// angle. The ones it
 // cannot reach -- a soldier on the floor above, a sniper on a ledge -- are
 // behind the floor's own geometry from down here, which the line check below
 // finds anyway.
 //
-// It gives up honestly, like the walker. A level with no enemies in it is a
-// level this walker crosses exactly as the plain one does, and that is a test,
-// not a special case: `threats()` on a map with no `monster_*` entities returns
-// an empty list and `_legTarget` hands back the route point it was given.
+// It gives up honestly, like the walker. A level with no monsters in it fires
+// nothing -- `threats()` on a map with no `monster_*` entities returns an empty
+// list -- but it is not walked *identically* to the plain walker, and that is
+// deliberate: every leg, firing or not, aims at a route point a few steps ahead
+// on the plan rather than at the farthest one in sight (see walkAhead), because
+// the farthest one is a chord across the plan and demo1 punishes it. What the
+// absence of enemies changes is whether a leg shoots on the way, not where it
+// goes.
 
 import { RouteWalker } from "./walker.mjs";
 
@@ -107,15 +113,20 @@ export const ENGAGE_DEFAULTS = {
   // is going to be finished, and few enough that a fight that is not leaves the
   // walk somewhere to go.
   closeEngagements: 2,
-  // How far along the plan a *fighting* leg walks towards, and how far away
-  // that point may be. The base walker aims at the farthest route point it can
-  // see, which is right for a walk and wrong for a fight: a player looking at a
-  // soldier and walking at a point a thousand units beyond it walks *through*
-  // the soldier to get there, and Quake 2's monsters are solid. Measured: a
-  // walk that reached the corridor stopped there, 1,660 units short, 65 units
-  // from a `monster_soldier` and 12 units from the route -- stuck against a body
-  // it had been firing past. Walking at the route a few points ahead keeps the
-  // leg on the path the planner actually cleared.
+  // How far along the plan a leg walks towards, and how far away that point may
+  // be. The base walker aims at the farthest route point it can see, which is a
+  // straight line between two points the planner cleared -- and clearing a line
+  // of *air* is not the same as clearing a *floor*, which is what `clearWalk()`
+  // covers below.
+  //
+  // Measured, on the run that argued for this: a walk that had reached demo1's
+  // corridor stopped there 1,660 units short of the exit, with a `monster_soldier`
+  // 67 units away and a valid 29-point route to the exit available from where it
+  // stood. Distance alone does not say what it was stopped by -- a soldier's own
+  // box and the player's do not touch at 67 units -- and the reading that fits
+  // the geometry is the chord: the leg aimed at a point beyond the soldier and
+  // the floor under that line does not go there. Aiming at the route a few
+  // points ahead keeps the leg on the path the planner actually cleared.
   walkAhead: 4,
   walkReach: 240,
   // How far the player has to move away from an engagement before the count
@@ -438,7 +449,10 @@ export class CombatWalker extends RouteWalker {
     const walkBearing = target.route ? bearingTo(before.position, target.route) : facing;
     const keys = movementKeys(facing, walkBearing);
     const stepMs = numberOr(options.engageStepMs, this.engage.engageStepMs);
-    await this.game.attackHold(true);
+    // The press is asked for and reported on: a trigger the engine never took
+    // is a leg that walked and aimed and did not shoot, and saying otherwise
+    // would make the fight summary a nicer story than the one that happened.
+    const press = await this.game.attackHold(true);
     let walked = null;
     try {
       walked = await this.game.walkKeys(keys, stepMs, options);
@@ -452,6 +466,7 @@ export class CombatWalker extends RouteWalker {
     const at = (after && after.position) || before.position;
     this.fights.push({
       classname: target.enemy.classname,
+      fired: !!press.held,
       aimed: !!(aimed && aimed.facing),
       aimError: aimed && aimed.error !== undefined ? Math.round(aimed.error) : null,
       keys,
@@ -461,7 +476,7 @@ export class CombatWalker extends RouteWalker {
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
       holdMs: walked ? walked.heldMs : 0,
     });
-    return { ...(after || { position: before.position }), fired: true, position: at };
+    return { ...(after || { position: before.position }), fired: !!press.held, position: at };
   }
 
   // The same walk the base class runs, plus a summary of the fight so far --

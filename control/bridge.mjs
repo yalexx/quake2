@@ -1131,11 +1131,22 @@ export class QuakeControl {
   // Fire for a while and let go. The pair is wrapped so that a caller cannot
   // leave the trigger down, and the time actually spent firing is the time the
   // caller asked for -- the console round trips around it are the bridge's.
+  //
+  // `fired` and `released` are reported separately on purpose. They are two
+  // different failures and only one of them is harmless: a press the engine did
+  // not answer means nothing was fired, while a *release* it did not answer
+  // means the player may still be firing -- and the caller has to know that,
+  // because the next `-attack` is the only thing that will stop it. Reporting
+  // the first from the second would say "nothing was fired" about a trigger that
+  // is down.
   async fire(ms = 300) {
-    await this.attackHold(true);
+    const press = await this.attackHold(true);
+    if (!press.held) {
+      return { fired: false, released: true, reason: press.reason, message: press.message, holdMs: 0 };
+    }
     await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(ms, 300))));
     const release = await this.attackHold(false);
-    return { fired: release.held !== false, holdMs: ms };
+    return { fired: true, released: release.held !== false, holdMs: ms };
   }
 
   // Jump. One tap of the space bar, which is what every Quake 2 config binds
@@ -1227,9 +1238,11 @@ export class QuakeControl {
   // strafe key together. That is the whole trick of shooting on the move, and it
   // is the reason this exists rather than a wider walk().
   //
-  // Every key goes down before any comes up, and they all come up even if the
-  // hold throws: a key left down is a player walking into a wall for the rest of
-  // the run.
+  // Every key goes down before any comes up, and every release is attempted even
+  // if the hold throws -- a key left down is a player walking into a wall for
+  // the rest of the run. Each release is its own attempt, too: one key the
+  // engine refuses must not leave the others held as well, which is what a
+  // single loop over the list would do.
   async walkKeys(keys, ms = 300, options = {}) {
     const list = (Array.isArray(keys) ? keys : [keys]).map(String).filter((key) => key !== "");
     if (!list.length) throw new ControlError("walkKeys(keys) needs at least one key", "BAD_REQUEST");
@@ -1241,7 +1254,15 @@ export class QuakeControl {
         for (const key of list) await this.#sendKey(game, key, true);
         await new Promise((resolve) => setTimeout(resolve, duration));
       } finally {
-        for (const key of [...list].reverse()) await this.#sendKey(game, key, false);
+        for (const key of [...list].reverse()) {
+          try {
+            await this.#sendKey(game, key, false);
+          } catch {
+            // Nothing better is available: a release that cannot be delivered
+            // means the socket is gone, and the remaining keys are still worth
+            // releasing on the chance that it is not.
+          }
+        }
       }
       return Date.now() - started;
     });
