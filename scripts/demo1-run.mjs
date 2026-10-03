@@ -193,6 +193,13 @@ async function finish() {
   const result = await walker.follow(exit.aim, { attempts, deaths, tolerance: 96 });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
+  // The one reason that is not a failure. `reached` is false because the walk
+  // never stood in the exit volume and watched itself arrive -- the engine had
+  // already loaded the next level by the time anything was read again -- so the
+  // reason is what tells "the level ended" apart from "the walk gave up".
+  if (result.reason === "LEVEL_CHANGED") {
+    report("the engine changed level under the walk", (result.level || "?") + " -> " + (result.map || "?"));
+  }
   // Two different readings, and a run that ends on a death has them in two
   // different places. `position` is the last thing the engine said, and the
   // last thing it says before a restart is where the corpse was; `deepest` is
