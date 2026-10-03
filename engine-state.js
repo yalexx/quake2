@@ -69,10 +69,28 @@
   var KEYDEST_CONSOLE = 1;
   var KEYDEST_NAMES = { 0: "game", 1: "console", 3: "menu" };
 
-  // The view rolls only when the engine hands the view to the death camera
-  // (Quake 2 has no lean), so a non-zero roll is how a reader learns the player
-  // is dead without a screenshot. Measured at 39 degrees on the death camera.
-  var ROLL_IS_DEATH = 1;
+  // The view rolls for two different reasons on this build, and a reader that
+  // cannot tell them apart is worse than one that reads nothing.
+  //
+  //   * Yamagi Quake II leans the view when the player strafes -- its own
+  //     `cl_rollangle`, which stock Quake 2 does not have. Measured on a live
+  //     player on demo1, one roll reading per CDP round trip: standing still 0,
+  //     walking forward at most 0.72, and strafing up to 2.00 over 47 samples
+  //     of pure strafe -- none of them above 2.0.
+  //   * The death camera rolls the view to 40 and holds it. Measured by walking
+  //     a player into demo1's soldiers with nothing fired: roll 40 exactly,
+  //     held over the whole death, with the position frozen and a turn of the
+  //     mouse moving the yaw 0 degrees.
+  //
+  // So the threshold belongs between the two populations, and this used to be
+  // 1 -- the first non-zero value, on the belief that Quake 2 has no lean. It
+  // does have one, and 1 sits inside the lean: measured, 24 of the 171 readings
+  // taken while walking a player into demo1's corridor were called deaths by a
+  // roll the player was strafing through. A false death is not cosmetic. The
+  // walker restarts the level for one, which restores the engine's autosave and
+  // puts the player back at the spawn -- so every strafe cost a run its ground,
+  // and the fight walker's own `movementKeys()` strafes on every firing leg.
+  var ROLL_IS_DEATH = 20;
 
   // A reading further from the origin than this is not a map this engine has;
   // it means the memory moved under us, and it is reported as untrustworthy
@@ -160,9 +178,10 @@
       dead: dead,
       // Reported as null on purpose: this pass did not recover these fields,
       // and a made-up zero would be worse than an honest gap. `alive` is
-      // derived from the view roll, which was measured, and says so.
+      // derived from the view roll, separately from the lean the same build
+      // puts on a strafing player, and says so.
       alive: !dead,
-      aliveSource: "view-roll",
+      aliveSource: "view-roll-above-strafe-lean",
       health: null,
       armour: null,
       ammo: null,

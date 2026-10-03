@@ -429,7 +429,7 @@ What that gives, and what it does not:
 | Player position and angles | **yes, live** | the engine's own memory, from the floats it renders from |
 | Whether the console is up, whether the game is paused | **yes, live** | `cls.key_dest`, sampled from inside the engine's frame loop |
 | Whether a level is up, and its map | yes | the console log, or the last `map` command the bridge issued |
-| Whether the player is dead | yes | the live view roll -- Quake 2 has no lean, so a non-zero roll is the death camera |
+| Whether the player is dead | yes | the live view roll, above the lean the same build puts on a strafing player. See [Which roll is a death](#which-roll-is-a-death) |
 | Save slots on the engine's file system | yes | `baseq2/save/` |
 | Health, armour, ammo | **still not** | no console command prints them, and this pass did not recover those fields from the image either -- see [What this pass could not do](#what-this-pass-could-not-do) |
 
@@ -437,7 +437,46 @@ The reply says so itself: `player.health`, `armour` and `ammo` are always
 `null`, `unavailable` names them, and `note` says why. A `null` field here means
 *unknown*, not *zero*, and it is never filled in with a guess. `alive` is not a
 memory field: it is derived from the live view roll and says so
-(`aliveSource: "view-roll"`).
+(`aliveSource: "view-roll-above-strafe-lean"`).
+
+#### Which roll is a death
+
+The view roll is the only thing that says whether the player is alive -- this
+engine prints no health, and every movement key does nothing while the death
+camera holds the view -- so where the threshold sits decides whether a walk can
+trust its own reading of the player. Two populations share that one field:
+
+| What | Roll | How it was measured |
+|---|---|---|
+| Standing still | 0 | one reading per CDP round trip, live player, `demo1` |
+| Walking forward | at most 0.72 | same |
+| Strafe lean | up to 2.00, either way | 47 samples of pure strafe, none above 2.0 |
+| Death camera | **40, held** | walking a player into demo1's soldiers with nothing fired: roll 40 for the whole death, position frozen, mouse turn moving the yaw 0 degrees |
+
+The lean is Yamagi Quake II's own `cl_rollangle`, which stock Quake 2 does not
+have. An earlier pass wrote that "Quake 2 has no lean, so a non-zero roll is the
+death camera" and drew the line at **1** -- inside the lean. Measured, 24 of the
+171 readings taken while walking a player into demo1's corridor were called
+deaths by a roll the player was strafing through. A false death is not cosmetic:
+the walker restarts the level for one, which restores the engine's autosave and
+puts the player back at the spawn, and the fight walker's own `movementKeys()`
+strafes on *every* firing leg. It is the single fault that most limited the
+runs.
+
+The line is now at **20** -- ten times the largest lean measured, half the death
+camera's own 40 -- and both readers of the field draw it there:
+`engine-state.js` in the page, and `deadFromRoll()` in `control/bridge.mjs`,
+which decides for itself rather than passing the page's verdict through. That
+second copy is not redundancy for its own sake: the app server on this box
+serves the *deployed* app, not the checkout an agent is working in, so a run can
+be driving a page whose reader still says 1. The control layer is the part that
+promises the walk a reading it can act on, so it does not hand that promise to a
+file it cannot change. `scripts/engine-state-test.mjs` checks the two agree on
+every roll either population can produce.
+
+Measured after the change, on the live game: 45 readings taken while strafing
+left, right and forward-and-strafe, **0 of them read as dead** (12 of 47 did
+before).
 
 **The console is now an explicit fallback, and only that.** `state({ probe:
 true })` still does what it always did -- opens the console, types the two
@@ -527,6 +566,19 @@ Three measured facts make it work, and each of them was wrong at first.
   picture is of the same game, framed differently for one screenshot. The
   capture is clipped to the forty rows that can hold the status bar, which is
   four kilobytes instead of six hundred.
+* **A clip is in the game frame's pixels, and the capture is not always of the
+  game frame.** On this box the desktop frames the app as an out-of-process
+  iframe, so the picture is taken from the page that *draws* the frame, and a
+  clip has to ride on the frame's own box there. It did not: `screenshot()`
+  dropped the caller's clip on that branch and captured the whole desktop.
+  Measured, on a live game: the strip `hudShot()` asks for came back **1625x1158
+  instead of 1625x48**, so every read was made over the desktop, not the status
+  bar. The visible symptom was a `finish` run whose per-leg record said "0
+  firing legs with a health reading" while the picture it had just kept plainly
+  showed a number. `scripts/control-api-test.mjs` now checks a 400x40 clip comes
+  back 400x40 and that the status-bar strip is 48 rows, whenever a game is open.
+  Measured after the fix, on the live game: health reads **100** off the strip
+  both standing still and with the trigger held while walking.
 * **The digits are the level's own pictures.** `pics/num_*.pcx` are what the
   engine blits for health and ammo and `pics/anum_*.pcx` for armour. They are
   8-bit paletted, index 255 is transparent, and the picture's *background* is
@@ -570,13 +622,16 @@ bridge closes the loop on top of the same console probe `state()` uses:
 | `strafe(ms, "left")` | Step sideways without turning: how a follower backs out of a corner |
 | `respawn()` | Put a dead player back in the level. The default is the engine's own fire-to-respawn, which is real input and opens no console -- but it restores the autosave, so the result says `how: "fire"` and names that trap. `{ how: "map" }` starts the level again instead, which needs a command and therefore the console |
 
-`position()` reports **`dead`**. A living player's view never rolls -- Quake 2 has
-no lean -- so a non-zero roll is the death camera, and it is the only way to
-learn the player has died, because this engine has no console command that
-prints health (see [Reading the game's state](#reading-the-games-state)). It
-matters more than it sounds: every movement key does nothing at all while the
-player is dead, so a navigation loop that does not check it reads a death as a
-wall. `respawn()` is the way back in, and it is not a cheat -- no noclip, no god,
+`position()` reports **`dead`**. The view roll is the only thing that says so --
+this engine has no console command that prints health (see
+[Reading the game's state](#reading-the-games-state)) -- and the same build also
+leans the view when the player strafes, so the threshold has to sit between the
+lean and the death camera rather than at the first non-zero value. See
+[Which roll is a death](#which-roll-is-a-death). It matters more than it sounds:
+every movement key does nothing at all while the player is dead, so a navigation
+loop that does not check it reads a death as a wall -- and, read the other way, a
+*false* death costs the walk its ground, because `respawn()` restores the
+engine's autosave. `respawn()` is the way back in, and it is not a cheat -- no noclip, no god,
 no teleport; it starts the level again and the player lands on the level's own
 spawn.
 
@@ -618,12 +673,25 @@ Three things are worth knowing before trusting a number from it.
 
 **How it turns.** `face()` uses the arrow keys first and the mouse second, and
 says which one worked. The engine turns a held `+left`/`+right` at `cl_yawspeed`
--- a fixed rate that does not depend on the player's sensitivity cvar -- and on
-this box's build the arrow keys turn the player while the relative-motion deltas
-do not, even though the page receives them. (The mouse step in
-`scripts/quake-control-test.sh` proves the *events* arrive; `scripts/goto-test.mjs`
-proves what the engine then does with them.) `face()` measures the real rate on
-its first turn and uses the measurement afterwards.
+-- a fixed rate that does not depend on the player's sensitivity cvar, measured
+on this box at 145 degrees per second -- and the relative-motion deltas turn the
+player too. An earlier pass recorded the opposite, that the mouse deltas "do not"
+reach the player's own angles; that is wrong, and it is wrong in a way worth
+naming, because the obvious way to measure it measures the death camera instead.
+A dead player turns to nothing at all -- no key and no mouse count reaches the
+player's angles while the death camera holds the view -- so a mouse test run
+against a corpse reads exactly like a mouse that does not work. Measured on a
+live player on `demo1`: `mouseMove(-400, 0)` moved the yaw by 44 degrees, and
+`face(40, { turn: "mouse" })` converges to 0.04 degrees in two rounds and 242 ms
+against the arrow keys' 415 ms and default 6-degree tolerance. `face()` measures
+the real rate on its first turn and uses the measurement afterwards, which is
+why the two paths can be swapped by a caller: `{ turn: "mouse" }`, `{ turn:
+"keys" }` or the default `"auto"`. A method the caller names explicitly is put
+back on probation rather than refused when it is believed dead, because refusing
+it would leave a caller that asked for the mouse with no way to turn at all.
+
+(The mouse step in `scripts/quake-control-test.sh` proves the *events* arrive;
+`scripts/goto-test.mjs` proves what the engine then does with them.)
 
 **A method is retired after three turns in a row that came back as nothing, not
 after one.** A zero reading is not rare and it is not evidence: the engine
@@ -777,6 +845,15 @@ and, when a leg fails, works out why and does the one thing that fixes it:
   same spawn. demo1 kills -- six and seven of the eight attempts in two measured
   `finish` runs went on restarts, which is most of the walk's budget spent on
   ground it had already covered.
+* a **missed respawn is pressed for again** rather than ending the walk. One
+  press of fire is enough in a clean experiment -- measured live: a click, 2.5 s,
+  roll -1.50 to 0.00, alive -- and evidently not always enough under fire, and a
+  `finish` run ended on a single `NOT_RESPAWNED` at attempt 3 of 8 with the
+  player 1,802 units short and four attempts unspent. The retry is free: it is
+  the same death, and the restart budget is charged once. A player who is *still*
+  dead after it is another death rather than the end of the walk, and the restart
+  budget is what ends a walk that cannot hold on to a player. `ALIVE` and
+  `LEVEL_CHANGED` are answers rather than failures and do not retry.
 
 **What counts as progress**, and it takes all three readings. A leg is progress
 when it *moved the player* **and** either arrived at the point it aimed at,
@@ -952,6 +1029,57 @@ than taste:
 aim error, the keys it held and the ground it covered -- so a run says what the
 fight did rather than only where the player got to.
 
+#### One press of the trigger, for the whole leg
+
+A firing leg is one decision, and it used to be taken with the trigger up for
+most of it. One leg timed on the running game, before this pass:
+
+| Part of the leg | Wall clock | Trigger |
+|---|---|---|
+| the turn onto the soldier (`face()`, arrow keys) | 415 ms | **up** |
+| the walk (`walkKeys`, 500 ms) | 538 ms | down |
+| the two `position()` reads around it | 246 ms | **up** |
+| `hudShot()` + `readHealth()` for the health series | 1,026 ms | **up** |
+
+So 2.2 s of a leg was 1.4 s of the player standing still in the open with
+nothing fired back, being shot at by the level's own soldiers. That is the
+health series the fight instrument reports -- 23 to 72 health lost on a firing
+leg, more than one soldier's blaster can do in half a second -- turned into a
+mechanism, and it was the harness's doing rather than the level's. Two changes,
+both measured:
+
+* **The turn is taken with the mouse**, which this build does apply to the
+  player's own angles (see [How it turns](#navigating-position-face-walk-and-goto)).
+  `face(40, { turn: "mouse" })` converges to **0.04 degrees in two rounds and
+  242 ms**, against the arrow keys' 415 ms and 6-degree tolerance -- and every
+  bolt of that turn is a bolt on the way to a soldier that is already shooting
+  back. The engage defaults put the tolerance at 2 degrees for the same reason:
+  at 300 units a 6-degree miss passes a 32-unit-wide soldier by the width of its
+  own body.
+* **The status-bar read is taken inside the hold.** `hudShot()`'s restyle does
+  not touch a held key -- the engine goes on applying them -- so the leg goes on
+  walking and firing while the reading is taken, and the reading costs the fight
+  no time standing still at all. The keys come up once the reading has had
+  `readWalkMs` (600 ms) of the walk, so the reading may drag the leg out a little
+  rather than the leg standing still for the whole of its second.
+
+The trigger goes down before either and comes up after both. Nothing is spent on
+it: this build's starting weapon is the blaster, which uses no ammo, so the only
+question is whether the bolts land. `scripts/route-test.mjs` pins the whole
+shape against a stub -- trigger down first, the mouse turn and the status-bar
+capture between the press and the release, the walk's keys up before the trigger.
+
+Two smaller things came out of the same measurement:
+
+* **A firing leg does not start on a corpse.** A dead player's keys and turns do
+  nothing at all, so the leg would spend its aim on nothing -- and, because a
+  turn that cannot be taken is exactly how a turning method earns its way to
+  being retired, spend the mouse on it too. A dead player takes the ordinary leg
+  instead, which reports the death for the price of a `goto()` that says DEAD.
+* **The aim is retried once if it does not land**, the bridge's own way
+  (`turn: "auto"`), because a leg that walks off with the aim wherever it
+  happened to be is a leg that fires at the wall it is walking past.
+
 #### The fight is measured, leg by leg
 
 A body count tells you nothing about a fight that ends in a corpse, and until
@@ -1042,21 +1170,61 @@ corridor west and north of the start room is covered by `monster_soldier` at
 `-856 584 -24`; the exit room by three more. `finish` has never finished: every
 run has ended with the engine still answering `"mapname" is "demo1"`.
 
-**Where the walk gets to, measured on this pass.** Ten `finish` attempts ran to
-completion (two more could not start: the game tab left the kiosk browser
-between them, so the bridge could not find it -- see *What this pass could not
-do*, below). The deepest is `-960 492`, **1,331 units short** of the exit, on 18
-firing legs with 11 of them carrying a health reading. The ten reached 1,331,
-1,604, 1,611, 1,633, 1,685, 1,697, 1,699, 1,907, 1,983 and 1,989 units short.
+**Where the walk gets to, measured on this pass.** The pass before this one ran
+ten `finish` attempts to completion. The deepest was `-960 492`, **1,331 units
+short** of the exit, on 18 firing legs with 11 of them carrying a health reading;
+the ten reached 1,331, 1,604, 1,611, 1,633, 1,685, 1,697, 1,699, 1,907, 1,983
+and 1,989 units short.
 
-That is *worse* than the inherited number on this level -- an earlier pass
-recorded 976 units short, over seven runs spanning 976 to 1,828 -- and the
-honest reading is that the spread is what dominates: ten runs land between 1,331
-and 1,989, a spread of 658 units, and two of them never left the pocket at all
-(`0` firing legs, 9 restarts). What the runs do show is a mechanism, and it is
-the fight, not the traversing: the pocket runs die without firing a shot, and
-the corridor runs die with the aim landing inside 0 to 6 degrees on nearly every
-leg.
+**This pass did not beat that.** The best `finish` run of this pass reached
+`-982 461 -1`, **1,343 units short**, and the engine's own answer at the end of
+it was `"mapname" is "demo1"` -- not finished. Three complete runs were measured
+this pass: 1,802 units short (ended `DEAD`, on a single missed respawn), 1,650
+(`ATTEMPTS`), and 1,343 (`ATTEMPTS`). Two further runs were cut off by the
+kiosk browser being taken over by hand mid-run, and are not counted.
+
+What moved is not the distance but the mechanism, and it moved a long way:
+
+| Measured per `finish` run | Before this pass | After |
+|---|---|---|
+| firing legs | 2, 2, 0 | **25** |
+| firing legs with a health reading | 0 | **21** |
+| level restarts the walk lived through | 1 | 5 |
+| the aim landing inside 2 degrees | 0 of 18 | **12 of 25** |
+| legs the player "died" on that were a strafe | 24 of 171 readings | **0 of 45** |
+
+The aim row is the one number here that a later fix has moved underneath. A
+review pass found that a *failed* aim's retry was handed the view from before
+the first attempt turned the player, so it re-aimed at an error the first
+attempt had already spent -- the 10-to-30-degree residuals in those same leg
+records, and one of 109. That is fixed and pinned by
+`scripts/route-test.mjs`; the 12-of-25 above was measured before the fix, and a
+live run to re-measure it could not be made because the kiosk's game was being
+played by hand for the rest of the session. The other three rows are unaffected
+-- none of them goes through the retry.
+
+The run that reached 1,343 covered 152, 332, 184, 312, 339, 263 and 236 units on
+its firing legs -- ground the player used to spend standing still -- and its own
+health series shows the fight being fought and sometimes won: 100, 9, 19, 5
+(died), 6, 52, **104**, 80, 56, 27, 1 (died), 82, 8, 1, 64, 40. Health going *up*
+to 104 is a pickup the walk happened to cross, and the falls are the cost.
+
+**The one blocker that ends every run is the death penalty, not the walking.**
+When the player is killed, `respawn()` presses fire and the engine restores its
+autosave -- which on this box is the level's own start. Measured on the 1,343
+run, from its own attempt starts: attempt 4 began at `-858 411`, **1,458 units**
+into the route, and every attempt after a death began at `128 -320 46`, the
+spawn: 4 of the 8 attempts were spent walking ground the walk had already paid
+for. The player reaches the corridor 1,400 to 1,900 units in, is killed by the
+level's own soldiers, and the walk starts again from the spawn. The fight is
+what kills -- the per-leg health series above, 25 firing legs, health down to 1
+on two of them -- and the restart is what makes the kill final.
+
+So the route is not the problem and the harness is no longer the problem: an
+attempt reaches the corridor reliably now, where before this pass half the runs
+never left the start area (`0` firing legs, 9 restarts). What stands between
+this build and `"mapname" is "demo2"` is that a level that kills the player
+undoes the whole walk, and `finish` is allowed eight attempts, not eight lives.
 
 **The last reading and the deepest one are different readings.** This was a real
 fault and it is fixed: the walker's `position` is the last thing the engine
@@ -1098,11 +1266,6 @@ on demo1 in the corridor, both with 100 health and no armour, both read off the
 HUD in a screenshot (`position()` cannot report health -- see
 [Reading the HUD](#reading-the-hud-controlhudmjs)):
 
-**What the level's monsters do to a player, measured.** Two live experiments
-on demo1 in the corridor, both with 100 health and no armour, both read off the
-HUD in a screenshot (`position()` cannot report health -- see
-[Reading the game's state](#reading-the-games-state)):
-
 | What the player did | Result |
 |---|---|
 | Walked in without firing, then stood still for six seconds | **Dead.** The death camera rolls and the view is level no longer |
@@ -1128,12 +1291,28 @@ the **deepest reading** of the player's position, which are not the same number.
 The task is not finished, and the things it did not reach are worth saying
 plainly rather than burying.
 
-* **`demo1` was not finished.** `"mapname" is "demo1"` on all ten runs that
-  completed. Nothing here reached the exit trigger, and the deepest is 1,331
-  units short of the inherited best (976), on a spread that runs to 1,989. That
-  is the state the earlier navigation pass stopped in and this pass did not
-  re-run it: what changed here is *how* the harness reads and drives the game,
-  not how far it walked.
+* **`demo1` was not finished.** `"mapname" is "demo1"` on every run that
+  completed, this pass's three included; the deepest of them is `-982 461 -1`,
+  **1,343 units short**. Nothing here reached the exit trigger. The blocker is
+  named and measured above and it is not the walk: a death undoes the whole
+  attempt, because the engine's fire-to-respawn restores the level-start
+  autosave, so eight attempts are eight trips down the same corridor rather than
+  eight lives. The obvious next move -- and the one this pass did not make,
+  because it writes to the owner's save store -- is to stop throwing the walk
+  away: quicksave on progress and load it instead of taking the autosave, or
+  find the engine's `in_use`/health fields so the fight can be fought to a
+  finish rather than to a schedule.
+* **The fight's health series is not yet trustworthy leg by leg.** The series
+  exists and is now populated (21 of 25 firing legs had a reading, against 0
+  before the capture fix above), but the reader still mis-reads some live
+  strips: of the four crops kept from a cut-off run, one read `100` correctly,
+  two read a fragment of it (`0`, `7`) and one read a plausible but unverifiable
+  `56`. `readHealth()` takes the leftmost cell in the row band without a score
+  threshold, so a weak correlation to the left of the real number can win. The
+  reading is good enough to show a trend and not yet good enough to quote leg by
+  leg. The archive-painted checks in `scripts/route-test.mjs` all pass, so the
+  reader is right about the font; what it is not yet right about is a lit,
+  moving, 1,366-pixel-wide status bar.
 * **Health, armour and ammo are still unread, from anywhere.** The fix that
   took position and angles out of the console has not been extended to them.
   They live in the game DLL's own edict and client structs rather than in the
@@ -1399,6 +1578,7 @@ node scripts/control-api-test.mjs # every control route: exit 0 pass, 1 fail
 node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
 node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fail
 node scripts/route-test.mjs       # the route planner, off the archive: exit 0 pass, 1 fail
+node scripts/engine-state-test.mjs # what the reader makes of the memory: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
 
@@ -1443,7 +1623,47 @@ pictures -- on a background that is not flat, because the one the HUD really
 sits on is a lit wall -- and reads every number back, including a health number
 on a dark background and the same number on a lit one, and it checks that an
 armour number (the archive's other family of digits) is read as armour and not
-as health. 96 checks in all.
+as health.
+
+This pass added a third group, and it is the one about the harness rather than
+the level: **a firing leg holds the trigger for the whole of it.** Against a
+stub that records the order of every call, it pins that the press comes before
+the turn and before any movement key, that the turn is the mouse's, that the
+status bar is photographed between the keys going down and coming up, and that
+the trigger is the last thing released -- the shape of the fix above, with no
+browser. And **a missed respawn does not end the walk**: one stub whose respawn
+fails once and then succeeds must be asked again and must not come back `DEAD`,
+and one whose player never comes back must end on the restart budget with three
+presses spent on each restart it was allowed.
+
+And **a failed aim is retried against the view the player actually has**: a stub
+whose first turn misses is checked to be asked again *without* the `from` it was
+first handed -- `face()` skips its opening probe when it is given a view, and
+that view is from before the first attempt turned the player, so handing it back
+re-aims the second attempt at the error the first one has already spent. The
+stub's retry ends 175 degrees from where the first attempt stopped, and the test
+reads the leg's own keys back out to prove they were computed from the retry's
+view and not the spent one. 120 checks in all.
+
+**`scripts/engine-state-test.mjs`** needs no browser and no game either: it
+loads `engine-state.js` into a Node `vm` sandbox with a synthetic WASM linear
+memory standing in for the engine's, writes known floats at the offsets the
+script publishes, and checks what it makes of them. 35 checks, in four groups:
+
+- the offsets it reads are the ones it publishes, and a reading comes back as
+  the floats that were written -- with `health`, `armour` and `ammo` still
+  `null`, because a made-up zero there is worse than an honest gap;
+- a memory too small to hold the offsets, and no engine at all, are reported as
+  reasons rather than as values, and neither claims the player is alive or dead;
+- `cls.key_dest` 0/1/3 are the game, the console and the engine's own menu;
+- **which roll is a death.** Every roll the two measured populations can produce
+  -- the whole strafe-lean band up to 2.0 either way, and the death camera's own
+  40 -- plus the boundary, checked against *both* readers of the field: the page
+  script's `dead` and `control/bridge.mjs`'s `deadFromRoll()`. The two have to
+  agree, because the bridge decides for itself and a run can be driving a page
+  that still draws the line at 1. It also pins the threshold into the gap the
+  measurements leave: at least five times the largest lean, at most half the
+  death camera.
 
 **`scripts/control-api-test.mjs`** starts its own `control/server.mjs` -- one on
 a free port the OS picks (`CONTROL_PORT=0`), and a second one pointed at a CDP
