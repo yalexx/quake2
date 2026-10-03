@@ -1878,6 +1878,44 @@ reading disagreed (`leg-a2l5-002.png`, **100** on the bar against a reading of
 **4**; `leg-a2l7-004.png`, **25** against **80**) are the reason a per-leg
 health number is quoted here with its crop and never steered on.
 
+**The leftmost-wins rule was the fault, and the fix is measured off 38 live
+strips.** `readHealth` took the leftmost number it could read, on the reasoning
+that health is the first number on the bar. It is not: the bar's own *art* reads
+as numbers too, and when the real digits were weak or absent the art to their
+left won. Captured live off the running game with `hudShot()` -- the same pixels
+the fight is handed -- and put to the vision pass as ground truth, strip
+`crops/strip-002.png` shows the bar reading **100** beside the red cross, and the
+old rule returned **1** (score 0.654, at x=227). In the second set the old rule
+returned **1** for a bar whose only readable glyph was the *armour* number at
+x=1265, and **1** again on a strip whose health number it could not read at all.
+
+What tells them apart is where the number **ends**. Q2 draws health right-aligned
+in a fixed field, so the number ends on the same column whatever its width. On
+every strip where a health number was there to read -- **100, 78, 72, 71, 62, 47,
+43, 13, 9, 6, 5** -- it ended on column **573** of the strip's 1366 (100 at x=525,
+the two-digit values at 541, the one-digit ones at 557). The bar-art phantoms
+ended on 557, 667, 678, 698, 717, 804 and 1281. `readHealth` now takes the number
+that ends where the health field ends -- the surest of them when more than one
+does -- and when nothing does, it returns `health: null`: a miss, which the fight
+report already writes as `?`, instead of a number read out of the scenery. The
+field is `573/1366` of the strip rather than a pixel count, so a resize scales it
+with the bar; `healthFieldRight` moves it and `healthFieldRight: null` drops it.
+
+Re-read through both rules on the identical 38 pictures: **36 readings unchanged,
+2 changed, and both of those were wrong before** -- one bar-art phantom and one
+armour number, now misses. `scripts/route-test.mjs` is at all 132 checks. The
+before/after table, the strips and the reader are in the run's evidence
+(`health-reader-before-after.txt`, `crops/`, `crops2/`).
+
+The same field rule is what makes `fireWhile: "adapt"` mean anything: that mode
+chooses between `advance`, `retreat` and `hold` on the *health the status bar
+cost*, so while the reader was returning bar art and armour numbers it was
+choosing on noise. What is still not claimed is that the digit is right: the
+field rule decides *which number* is the health number, not what each glyph
+says -- a `102` (impossible for health, which the level caps at 100) was still
+read out of a real field placement, and that is a glyph-level fault this pass did
+not touch.
+
 **Nothing else was changed, and the review branch held nothing to fold in.**
 `clawbox/run-gvr292q5` (tip `0c9744f`) was inspected commit by commit: its one
 substantive change is gating `useHold()` and `attackHold()` on
