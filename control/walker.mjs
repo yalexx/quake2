@@ -69,6 +69,35 @@ const WALK_DEFAULTS = {
   maxLegDistance: 1200,
 };
 
+// The closest the engine was ever *measured* to be to the goal, over every
+// reading this walk took.
+//
+// This exists because `position` on a run that ended on a death or on the
+// attempt budget is the *last* thing the engine said, and the last thing it
+// says before a level restart is where the corpse was. A run that reached
+// -951 1023 and then died back at the pocket reports `position: -462 19 -19`
+// unless the two readings are kept apart, and "how far did the walk get" is
+// answered by this one, not by the other. (Measured: the deepest `finish` run
+// on demo1 is exactly that pair -- furthest -951 1023, last read -462 19 -19 --
+// and a report that prints only the second understates the walk by 500 units.)
+//
+// It is computed from the trail rather than tracked as a running variable so
+// that every return site agrees with the record the caller can already see.
+export function deepestReading(trail) {
+  let best = null;
+  for (const point of trail || []) {
+    if (!point || typeof point.distance !== "number") continue;
+    if (!best || point.distance < best.distance) best = point;
+  }
+  if (!best) return null;
+  return {
+    x: best.x, y: best.y, z: best.z,
+    distance: best.distance,
+    attempt: best.attempt,
+    leg: best.leg === undefined ? null : best.leg,
+  };
+}
+
 export class RouteWalker {
   constructor(game, map, options = {}) {
     this.game = game;
@@ -333,7 +362,7 @@ export class RouteWalker {
         deaths++;
         if (deaths > deathsAllowed) {
           this.#note("the level has restarted the player too many times", { deaths, allowed: deathsAllowed });
-          return { reached: false, reason: "DEATHS", attempts: attempt, deaths, position: current.position, trail, log: this.log, plan: lastPlan, blockers: (lastPlan && lastPlan.blockers) || [] };
+          return { reached: false, reason: "DEATHS", attempts: attempt, deaths, position: current.position, deepest: deepestReading(trail), trail, log: this.log, plan: lastPlan, blockers: (lastPlan && lastPlan.blockers) || [] };
         }
         // The restart does not spend an attempt: the plan was not the thing
         // that failed, and the next one is the same plan from the same spawn.
@@ -345,7 +374,7 @@ export class RouteWalker {
         }
         const restarted = await this.game.position();
         if (!restarted || !restarted.position || restarted.dead) {
-          return { reached: false, reason: "DEAD", attempts: attempt, position: restarted && restarted.position, trail, log: this.log };
+          return { reached: false, reason: "DEAD", attempts: attempt, position: restarted && restarted.position, deepest: deepestReading(trail), trail, log: this.log };
         }
         current = restarted;
       }
@@ -415,7 +444,10 @@ export class RouteWalker {
         // through whatever is in the way, which is how a walk ends up in a
         // pocket the route went round.
         const target = this._legTarget(position, plan.points);
-        const leg = await this._leg(target, legOptions);
+        // The attempt and leg numbers ride along with the leg so that anything
+        // the leg records -- a combat walker's health reading, say -- can say
+        // where in the run it was taken.
+        const leg = await this._leg(target, { ...legOptions, attempt, leg: legs + 1 });
         const at = (leg && leg.position) || (await this.game.position()).position;
         if (!at) { this.#note("leg produced no position", leg); break; }
         legs++;
@@ -542,8 +574,12 @@ export class RouteWalker {
       reached: false,
       reason: "ATTEMPTS",
       attempts,
+      // The last thing the engine said, which after a death is where the
+      // corpse was -- kept next to `deepest`, which is the furthest the walk
+      // actually got, so a caller cannot print one and mean the other.
       position,
       distance: position ? Math.hypot(position.x - goal.x, position.y - goal.y) : null,
+      deepest: deepestReading(trail),
       plan: lastPlan,
       blockers: (lastPlan && lastPlan.blockers) || [],
       trail,

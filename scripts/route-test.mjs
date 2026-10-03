@@ -9,8 +9,9 @@
 // a failure says what changed rather than only that something did.
 
 import { loadMap, listMaps, RouteError } from "../control/route.mjs";
-import { RouteWalker } from "../control/walker.mjs";
+import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
+import { loadDigits, readBar } from "../control/hud.mjs";
 
 let failures = 0;
 let checks = 0;
@@ -260,10 +261,24 @@ check("every target is inside the arc and inside the range",
 // vacuously true when the list is empty, which is exactly what a broken arc
 // filter would NOT produce -- so on its own it is a check that cannot fail. The
 // non-empty list from the opposite bearing is what makes it a test.
+// Behind the way forward is a reason to leave a soldier alone only while
+// leaving it alone is cheap. Out of answering range it is not a target; close
+// enough to be shooting the player, it has to be -- measured on a `finish` run,
+// the soldiers that killed the player at the deepest point it reached stood 116
+// and 82 degrees off the way forward at 58 and 151 units, and the walker
+// would not turn for either.
 const behindUs = threats(map, corridorEye, { bearing: 315, enemies });
-check("a soldier behind the way forward is not one",
-  behindUs.length === 0 && onTheWay.length > 0,
-  { behind: behindUs.map((t) => Math.round(t.off)), ahead: onTheWay.map((t) => Math.round(t.off)) });
+const behindFar = threats(map, corridorEye, { bearing: 315, enemies, answerRange: 0 });
+check("a soldier behind the way forward and out of answering range is not one",
+  behindFar.length === 0 && onTheWay.length > 0,
+  { behind: behindFar.map((t) => Math.round(t.off)), ahead: onTheWay.map((t) => Math.round(t.off)) });
+check("but one behind and close enough to shoot back at is a target",
+  behindUs.length > 0 && behindUs.every((t) => t.off > 80 && t.distance <= 200),
+  behindUs.map((t) => t.classname + "@" + Math.round(t.distance) + " off" + Math.round(t.off)));
+check("and the arc still holds for everything further off",
+  threats(map, corridorEye, { bearing: 315, enemies, answerRange: 0 }).length === 0 &&
+  onTheWay.every((t) => t.off <= 80 && t.distance <= 1100),
+  onTheWay.map((t) => Math.round(t.off)));
 const skipped = threats(map, corridorEye, { bearing: 135, enemies, skip: () => true });
 check("a soldier the caller has given up on is skipped", skipped.length === 0, skipped.length);
 const outOfRange = threats(map, corridorEye, { bearing: 135, enemies, engageRange: 40 });
@@ -365,6 +380,105 @@ const restartResult = await restarter.follow(map.exitPoint().aim, { attempts: 2,
 check("more restarts than attempts are lived through", dyingStub.respawns === 3, { respawns: dyingStub.respawns, attempts: 2 });
 check("and the walk stops on its own restart budget, not on its attempts",
   restartResult.reason === "DEATHS", restartResult.reason);
+
+// The furthest reading is a different reading from the last one, and on a run
+// that ends in a death they are hundreds of units apart. The walker's `position`
+// is the last thing the engine said -- before a restart, where the corpse was --
+// so the two are kept in separate fields and this pins that down.
+console.log("the furthest reading is kept apart from the last one");
+const trailWithACorpse = [
+  { x: 128, y: -319, z: 46, attempt: 1, distance: 2664 },
+  { x: -951, y: 1023, z: -13, attempt: 7, leg: 3, distance: 976 },
+  { x: -462, y: 19, z: -19, attempt: 8, distance: 2032 },
+];
+const deepest = deepestReading(trailWithACorpse);
+check("deepest is the closest reading, not the last",
+  deepest && near(deepest.x, -951) && near(deepest.y, 1023) && near(deepest.distance, 976), deepest);
+check("and it says which attempt and leg took it there",
+  deepest && deepest.attempt === 7 && deepest.leg === 3, deepest);
+check("a trail with nothing in it has no deepest reading", deepestReading([]) === null, deepestReading([]));
+
+// The status bar. `position()` cannot report health -- the engine prints none
+// -- so the fight is measured off the HUD, and this is the reader checked
+// against the archive it reads from: a bar painted out of the level's own
+// digit pictures, read back. No browser is involved.
+console.log("the status bar's numbers are readable");
+const digitGlyphs = loadDigits();
+check("each digit picture is the 16x24 the engine blits", digitGlyphs.num.every((g) => g.width === 16 && g.height === 24),
+  digitGlyphs.num.map((g) => g.width + "x" + g.height));
+check("and every digit of the two families has ink in it",
+  [...digitGlyphs.num, ...digitGlyphs.anum].every((g) => g.mask.some((v) => v === 1)),
+  [...digitGlyphs.num, ...digitGlyphs.anum].map((g) => g.mask.reduce((a, b) => a + b, 0)));
+
+// Paint a status bar: the digits at 16-pixel advance on a background that is
+// not flat, because the one the HUD really sits on is a lit wall.
+function paintBar(text, options = {}) {
+  const width = options.width || 220;
+  const height = options.height || 40;
+  const base = options.background === undefined ? 70 : options.background;
+  const ink = options.ink === undefined ? 200 : options.ink;
+  // The ink's colour is what tells a health number from an armour one (the
+  // engine's `num_*` pictures are grey and its `anum_*` pictures are red); the
+  // screen carries that difference through, so the painted bar does too.
+  const rgb = options.family === "anum" ? [200, 120, 60] : [200, 200, 170];
+  const lum = new Float32Array(width * height);
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const value = options.noise === false ? base : base + ((x * 7 + y * 13) % 25) - 12;
+      lum[y * width + x] = value;
+      const at = (y * width + x) * 4;
+      rgba[at] = value;
+      rgba[at + 1] = value;
+      rgba[at + 2] = value;
+      rgba[at + 3] = 255;
+    }
+  }
+  let ox = 20;
+  for (const character of text) {
+    const glyph = digitGlyphs[options.family || "num"][Number(character)];
+    for (let y = 0; y < glyph.height; y++) {
+      for (let x = 0; x < glyph.width; x++) {
+        if (!glyph.mask[y * glyph.width + x]) continue;
+        const px = ox + x;
+        const py = 8 + y;
+        if (px >= width || py >= height) continue;
+        lum[py * width + px] = ink;
+        const at = (py * width + px) * 4;
+        rgba[at] = rgb[0];
+        rgba[at + 1] = rgb[1];
+        rgba[at + 2] = rgb[2];
+      }
+    }
+    ox += 16;
+  }
+  return { lum, rgba, width, height };
+}
+function readPainted(text, options = {}) {
+  const bar = paintBar(text, options);
+  const status = readBar(bar.lum, bar.width, bar.height, { searchBottom: bar.height - 1, rgba: bar.rgba });
+  return { status, leftmost: status.numbers[0] || null };
+}
+
+for (const value of ["100", "43", "7", "0", "88", "19", "155"]) {
+  const read = readPainted(value);
+  check("a painted " + value + " reads back as " + value, read.leftmost && read.leftmost.value === Number(value),
+    read.status.numbers.map((n) => n.value));
+}
+// Not a threshold: the same number on a dark wall and on a lit one.
+const dark = readPainted("63", { background: 60, ink: 150 });
+const lit = readPainted("63", { background: 150, ink: 235 });
+check("a number on a dark background reads the same as one on a lit background",
+  dark.leftmost && lit.leftmost && dark.leftmost.value === 63 && lit.leftmost.value === 63,
+  { dark: dark.status.numbers.map((n) => n.value), lit: lit.status.numbers.map((n) => n.value) });
+// Armour is blitted from the other family, and the reading says which it is.
+const armourBar = paintBar("35", { family: "anum" });
+const armourStatus = readBar(armourBar.lum, armourBar.width, armourBar.height, { searchBottom: armourBar.height - 1, rgba: armourBar.rgba });
+check("an armour number is read as armour, not as health",
+  armourStatus.numbers[0] && armourStatus.numbers[0].value === 35 && armourStatus.numbers[0].family === "anum",
+  armourStatus.numbers.map((n) => n.value + ":" + n.family));
+check("and a health number is read as health",
+  readPainted("100").leftmost.family === "num", readPainted("100").leftmost.family);
 
 console.log("errors are named, never empty");
 let threw = null;
