@@ -1433,6 +1433,162 @@ result: NOT finished -- the engine is still on demo1
 The raw reports are the run's evidence, not this file. `"mapname" is "demo2"`
 appears in none of them.
 
+### The pass after that: the turn that could not be taken, and the walk's own rate
+
+This pass forked from `clawbox/run-a5pmsnnv` and folded in the review pass from
+`run-esar8xa7` -- the per-life weapon switch in `control/combat.mjs` and the
+check that pins it. `node scripts/route-test.mjs` runs **131 checks, all
+passing** (125 after the merge, plus the six this pass added);
+`node scripts/engine-state-test.mjs` runs 35, all passing.
+
+**`demo1` is still not finished.** Three complete `finish` runs were measured
+this pass and every one of them ended with the engine saying so:
+
+```
+engine says the map is: demo1
+proof: ["\"mapname\" is \"demo1\""]
+result: NOT finished -- the engine is still on demo1
+```
+
+#### The aim: fixed, pinned, and measured
+
+`face()` could be left unable to turn at all. Two rules were added to
+`control/bridge.mjs`:
+
+* **A turn that could not be taken is not evidence about the method that could
+  not take it.** The death camera, the console and the menu each take the
+  keyboard off the game, and each stops *every* method at once -- so a blank
+  turn read in one of those states neither counts a miss against the method nor
+  switches methods. `turnIsBlocked()` reads the answer out of the engine's own
+  `position()` (`dead`, `inGame`, `paused`), which costs nothing and sends no
+  input. Before this, three such misses retired a method for the rest of the
+  run, and a level that kills several times a run earned that on its own.
+* **Two blank turns in a row, and the other method is tried inside the same
+  call.** `#turnBy` honours a method the caller asked for by name -- and the
+  fighting walker asks for the mouse (`aimTurn: "mouse"`) -- so a mouse that had
+  stopped turning the player used to spend every round of every call on the
+  mouse. The keys were reachable only from a *second* `face()` call, which only
+  `#fight`'s retry makes and only with `turn: "auto"`, at two rounds. A walk
+  whose first method is dead therefore ended the leg with the view wherever it
+  happened to be, which is how a firing leg comes to be recorded as `aimed no`
+  with a residual of 177 degrees and a coverage of 0 units.
+
+Six checks were added to `scripts/route-test.mjs` for both halves -- six states
+of `turnIsBlocked`, the mouse surviving four misses a death camera caused and
+still turning the player after it, and a dead mouse being abandoned after
+exactly two rounds. Measured on the runs of this pass, the turn landed on:
+
+| run | firing legs | legs the turn did not land on |
+|---|---|---|
+| 8 attempts, before the fix | 34 | 2 |
+| 8 attempts, after the fix | 40 | 3 |
+| 20 attempts, after the fix | 86 | **1** |
+
+The 8-attempt figures are too small to say anything on their own, and the three
+misses in the middle row are all on legs the player *died* on -- the aim is
+taken at the start of a leg, so a death that happens later in it cannot be
+excused by this rule and is not claimed to be. What the 20-attempt run says is
+that a walk can now be 86 firing legs long and lose its aim once.
+
+#### The walk's own rate, which is where the corridor's cost is
+
+A firing leg holds the trigger down for the whole of its step, so the leg's own
+clock is the time the player is exposed. That clock is now in the report
+(`held <ms>` on every firing leg, and a summary line), along with two things
+that were being inferred rather than read:
+
+* `ground covered per second with the trigger down` -- the leg's coverage
+  divided by the time its trigger was down, which is the number that says
+  whether the walk is walking or standing;
+* `firing legs the turn did not land on` and `firing legs the engine had taken
+  the keyboard off the game for`, counted rather than left to be spotted in the
+  per-leg list, which now carries the engine's own `inGame`, `paused` and
+  `keyDest` on every leg.
+
+The engine's config was read out of its own file system to know what the player
+*can* do: `set cl_run "1"`, so the player runs -- **300 units per second**. The
+two runs that carry the clock:
+
+| run | firing legs | ground covered | trigger-down time | units per second | deepest reading |
+|---|---|---|---|---|---|
+| 8 attempts, status bar read on | 40 | 8,612 | 53.1 s | **162** | `-804 944`, 1,142 short |
+| 20 attempts, status bar read off | 86 | 16,651 | 62.7 s | **265** | `-952 1435`, 831 short |
+
+**The status bar costs about 40% of the ground a firing leg makes.** The read is
+a `Page.captureScreenshot` and an image decode taken inside the hold, and while
+the screenshot is being encoded and sent the page is not running the game: the
+keys stay down and the player does not walk. A leg in the open room of demo1
+covers 306 units a second; the legs that cover least -- 23, 38, 48, 73, 77 and
+92 units over the same 1.2 to 1.7 seconds, 14 to 75 units a second -- are the
+legs in the corridor, and they are the legs that cost the health.
+`QUAKE2_READ_HUD=0` turns the read off, and it is
+the default only for the diagnostic: the health series is the one thing reading
+it buys.
+
+`QUAKE2_STEP_ROUNDS` is the other half of the same question. A leg's step was
+one bearing held from where the player stood when the leg began -- up to
+`walkReach` (240) units of route -- and half a second later the player is
+somewhere else on a bearing that no longer points down the corridor. At
+`QUAKE2_STEP_ROUNDS=2` the step is walked in two pieces with a `position()` read
+between them, and the seconds piece re-aims at the leg's own route point from
+where the player actually is. The keys never come up for it and the trigger
+never comes up for it.
+
+#### What is still between the walk and the exit
+
+The exit's aim point is `-1776 1544 4`, the route from the spawn to it is
+**4,693 units over 37 points**, and every report measures the walk as a
+straight-line distance to that point. That number is not how much of the level
+is left. At the deepest reading of the 20-attempt run, `-952 1435`, the player
+is 831 units from the exit *through the air* -- and on the plan they are at
+route unit **2,439**, because the route turns west and south before it turns
+back east into the exit room. Mapped onto the route:
+
+| run | deepest reading | straight-line short | route unit | of the route |
+|---|---|---|---|---|
+| this pass, 8 attempts, before the fixes | `-987 735` | 1,130 | 1,729 | 37% |
+| this pass, 8 attempts, after them | `-804 944` | 1,142 | 1,938 | 41% |
+| this pass, 20 attempts | `-952 1435` | 831 | 2,439 | **52%** |
+| the pass before this one, its best of ten | `-951 1550` | 825 | 2,554 | **54%** |
+
+**The furthest this project has ever got is 54% of the route, with 2,139 units
+still to walk.** That is the honest shape of the blocker, and it is why a run
+that reports "825 units short" has not nearly finished: the number is measured
+across the level, not along it.
+
+What ends a life is still the same thing and this pass moved it less than it
+moved the aim. A life dies somewhere between route unit 1,700 and 2,500 -- the
+west corridor and its north end, where the plan has one 552-unit straight from
+`-936 432` to `-936 984` with the level's soldiers along it -- and the engine
+restarts the level at the spawn, so the ground a life already covered is spent
+again. Twenty attempts and 86 firing legs bought **52%**, against 54% for a run
+of eight attempts the pass before: the extra attempts are not accumulating
+anything, because a death takes the level back to the beginning.
+
+#### What this pass did not reach
+
+* **`demo1` was not finished**, on any of the three runs, and the engine said
+  so each time. Nothing here reached the exit trigger.
+* **The walk still cannot out-run the corridor.** At 265 units a second of
+  trigger-down time -- the best this pass measured, and only with the status bar
+  unread -- the 4,693-unit route is about 20 seconds of walking, and the file's
+  own measurement of the corridor is that 100 health and no armour is a corpse
+  after six seconds of standing still in it. A life does not have enough health
+  to walk it, and nothing this pass found changes that. The two levers that would close
+  that gap were both measured and neither is shipped: taking the level's own
+  super shotgun, and routing over the level's health and armour. Every health
+  and armour item within reach of the route was re-checked against the plan this
+  pass, and the answer did not change -- the `item_health_large` at `-1176 1520`
+  is the only one the walk passes, the two `item_health` at `-728 845` and
+  `-728 880` are inserted into the plan for a 418-unit round trip each, and the
+  two `item_health_large` at `-2156` are 290 units off the route line and have
+  no walkable line to it at all (`map.path` answers `NO_ROUTE` from the nearest
+  plan point, `-1896 1344`). The route's own health budget is about 200 against
+  a corridor that costs about 200.
+* **`QUAKE2_STEP_ROUNDS=2` is in the code and its run had not been read when
+  this was written.** Its measurement is the one thing here that is a claim
+  without a number behind it yet, and it is not counted above.
+
 ### What finishing `demo1` means
 
 `demo1` is the first single-player level, "Outer Base" (`worldspawn` `message`),

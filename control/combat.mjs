@@ -99,6 +99,13 @@ export const ENGAGE_DEFAULTS = {
   // about 150 units of ground and, with the trigger held, several blaster bolts
   // -- three of them kill a soldier, and they are aimed the whole way in.
   engageStepMs: 500,
+  // ...walked in this many pieces, re-aimed at the leg's own route point
+  // between them. One is the behaviour every run before this one was measured
+  // with: a single bearing held for the whole step. Two costs one extra CDP
+  // round trip per leg and lets a leg that is entering a corridor turn with it.
+  // See the measurement in #fight -- 162 units per second of trigger-down time
+  // against a 300 unit per second run.
+  stepRounds: 2,
   // How many walk rounds an ordinary (non-firing) leg may take. The base
   // walker's leg runs goto() until it arrives, which on open ground is many
   // hundred units of walking with no decision made in between -- and that is
@@ -1168,7 +1175,32 @@ export class CombatWalker extends RouteWalker {
       if (typeof this.game.key === "function") {
         await holdKeys(keys);
         const started = Date.now();
-        await new Promise((resolve) => setTimeout(resolve, stepMs));
+        // The step is walked in `stepRounds` pieces, re-aimed at the leg's own
+        // route point between them -- and the trigger never comes up for it.
+        //
+        // A leg that holds one bearing for the whole step is a leg that walks
+        // into the corner the corridor turns: the route point it is heading for
+        // is up to `walkReach` units away, it was chosen from where the player
+        // stood when the leg began, and half a second later the player is
+        // somewhere else on a bearing that no longer points down the corridor.
+        // Measured on a live `finish` run: **162 units of ground per second of
+        // trigger-down time**, against the player's own 300 units per second of
+        // running. A leg in the open room covers 306; the legs in the corridor
+        // cover 20 to 90, and they are the legs that cost the health. The one
+        // reading the re-aim needs -- where the player is -- is the one the leg
+        // already takes to judge the aim, and it is taken with the keys still
+        // down, so the correction costs a CDP round trip and no ground.
+        const rounds = Math.max(1, Math.min(4, Math.floor(numberOr(this.engage.stepRounds, 1))));
+        for (let round = 0; round < rounds; round++) {
+          await new Promise((resolve) => setTimeout(resolve, Math.round(stepMs / rounds)));
+          if (round >= rounds - 1 || !target.route || mode === "hold") continue;
+          const here = await this.game.position();
+          if (!here || !here.position) continue;
+          const ahead = bearingTo(here.position, target.route);
+          const yaw = here.angles && Number.isFinite(Number(here.angles.yaw)) ? Number(here.angles.yaw) : viewYaw;
+          keys = movementKeys(yaw, mode === "retreat" ? ahead + 180 : ahead);
+          await holdKeys(keys);
+        }
         // The status bar is read inside the hold: the player is still walking
         // and still firing while it is photographed and decoded.
         const reading = this.engage.readHud === true ? this.#readHud(options) : null;
@@ -1222,6 +1254,17 @@ export class CombatWalker extends RouteWalker {
       // was intended.
       pickupOnRoute: target.route && target.route.pickup ? target.route.pickup.classname : null,
       dead: !!(after && after.dead),
+      // The engine's own account of who had the keyboard while this leg was
+      // fought. It is read from the same `position()` the aim and the walk are
+      // judged by, so it costs nothing, and it is the one reading that separates
+      // "the walker could not turn" from "the walker was not allowed to turn":
+      // a leg that covered nothing and aimed at nothing because the console or
+      // the menu had the keys is a different fault from one where the bridge
+      // sent a turn into a game that was listening. `paused` is the engine's
+      // own, and it is true for exactly the states that swallow input.
+      inGame: after && after.inGame !== undefined ? after.inGame : null,
+      paused: after && after.paused !== undefined ? after.paused : null,
+      keyDest: after && after.keyDestName !== undefined ? after.keyDestName : null,
     };
     // The one reading the engine will not give: how much of the player is left
     // after this leg. Taken with the trigger down (see above), because a leg is

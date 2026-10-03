@@ -12,6 +12,7 @@ import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
+import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -471,13 +472,19 @@ check("no movement key is left down by a press that threw", throwingHeld.size ==
 console.log("a failed aim is retried against the view the player actually has");
 const retryCalls = [];
 const retryStub = {
-  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+  // The stub's player carries the yaw the turns left behind, because that is
+  // what the engine does and the walk's keys are computed from it. A stub that
+  // reported yaw 0 whatever `face()` returned would answer the question below
+  // with a view the player never had.
+  yaw: 0,
+  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: this.yaw, roll: 0 }, map: "demo1", dead: false }; },
   async mouseHold(button, down) { return { held: !!down, button, buttons: down ? 1 : 0 }; },
   async face(bearing, options) {
     retryCalls.push({ turn: (options && options.turn) || "auto", hasFrom: !!(options && options.from) });
     // The first attempt gets most of a 29-degree miss back and still fails; the
     // retry ends somewhere else entirely.
-    if (retryCalls.length === 1) return { facing: false, target: bearing, yaw: 25, error: 29.7, rounds: 4, reason: "NOT_CONVERGED", method: "mouse" };
+    if (retryCalls.length === 1) { this.yaw = 25; return { facing: false, target: bearing, yaw: 25, error: 29.7, rounds: 4, reason: "NOT_CONVERGED", method: "mouse" }; }
+    this.yaw = 200;
     return { facing: false, target: bearing, yaw: 200, error: 12.5, rounds: 2, reason: "NOT_CONVERGED", method: "keys" };
   },
   async key(key, down) { return { key, down }; },
@@ -754,6 +761,68 @@ check("an RGB picture with no alpha channel comes back fully opaque",
 check("and the pixels are the picture's, not one flat fill",
   new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4])).size > 1,
   [...new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4]))].slice(0, 4));
+
+// A turn that could not be taken is not evidence about the method that could
+// not take it. This is the fault the named blocker of the round before this one
+// was: the death camera holds the view, so a miss while the player is dead says
+// nothing about the mouse or the keys -- but three of them retired a method for
+// the rest of the run, and both methods could be retired one death apart, after
+// which `face()` answered NO_TURN without sending anything at all and the walk
+// could only push forward at whatever bearing it happened to have. The stub
+// below is a player who is dead and cannot be turned; the mouse is the method
+// the fighting walker asks for by name (see combat.mjs `aimTurn`).
+console.log("a turn that could not be taken does not retire the method that could not take it");
+check("the engine's own states that take the keyboard off the game are the ones that block a turn",
+  turnIsBlocked({ dead: true }) && turnIsBlocked({ inGame: false }) && turnIsBlocked({ paused: true }) &&
+  !turnIsBlocked({ dead: false, inGame: true, paused: false }) && !turnIsBlocked(null),
+  [turnIsBlocked({ dead: true }), turnIsBlocked({ inGame: false }), turnIsBlocked({ paused: true }), turnIsBlocked({ inGame: true })]);
+
+class DeadPlayer extends QuakeControl {
+  constructor(state) {
+    super({ cdpUrl: "http://127.0.0.1:1", timeoutMs: 1000 });
+    this.state = state;
+    this.moves = 0;
+  }
+  async position() { return this.state; }
+  async mouseMove(dx) {
+    this.moves++;
+    // The death camera holds the view: the turn is applied and changes nothing.
+    if (!this.state.dead) {
+      this.state = { ...this.state, angles: { ...this.state.angles, yaw: this.state.angles.yaw - dx * 0.05 } };
+    }
+    return { dx };
+  }
+}
+const corpse = new DeadPlayer({ probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 40 }, dead: true, inGame: true, paused: false, keyDestName: "game" });
+const corpseAim = await corpse.face(90, { tolerance: 2, rounds: 4, turn: "mouse" });
+check("a dead player's turns are still sent", corpse.moves === 4, corpse.moves);
+check("and the aim is reported as not taken rather than as taken badly",
+  corpseAim.facing === false && corpseAim.reason === "NOT_CONVERGED" && corpseAim.method === "mouse", corpseAim.reason);
+check("the mouse is not retired by four misses the death camera caused",
+  corpse.turnCalibration.mouseWorks === null || corpse.turnCalibration.mouseWorks === undefined ||
+  corpse.turnCalibration.mouseWorks === true, corpse.turnCalibration.mouseWorks);
+// ...and the proof that "not retired" means something: the same bridge, with the
+// player alive again and a mouse that turns, still turns them.
+corpse.state = { probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 0 }, dead: false, inGame: true, paused: false, keyDestName: "game" };
+const revivedAim = await corpse.face(90, { tolerance: 2, rounds: 6, turn: "mouse" });
+check("the same bridge turns a live player after living through a death",
+  revivedAim.facing === true && Math.abs(revivedAim.error) <= 2, { facing: revivedAim.facing, error: revivedAim.error, rounds: revivedAim.rounds });
+
+// The other half: when the player *is* in a state to be turned and the method
+// the caller asked for achieves nothing twice in a row, `face()` tries the
+// other one inside the same call. The mouse here is applied and changes the
+// yaw by nothing, which is what a live player whose mouse has stopped turning
+// them looks like. The keys cannot be sent without a game -- this stub has none
+// -- so what the check reads is that the mouse was abandoned after exactly two
+// blank turns and the call went to the keys instead of spending all six rounds
+// on the same dead turn.
+console.log("a method that cannot turn a live player is abandoned inside the call, not between calls");
+const stubborn = new DeadPlayer({ probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 0 }, dead: false, inGame: true, paused: false, keyDestName: "game" });
+stubborn.mouseMove = async function (dx) { this.moves++; return { dx }; };
+let stubbornThrew = null;
+try { await stubborn.face(90, { tolerance: 2, rounds: 6, turn: "mouse" }); } catch (error) { stubbornThrew = error; }
+check("the dead mouse gets two rounds before the keys are tried",
+  stubborn.moves === 2 && stubbornThrew !== null, { mouseTurnsSent: stubborn.moves, then: stubbornThrew && stubbornThrew.name });
 
 console.log("errors are named, never empty");
 let threw = null;

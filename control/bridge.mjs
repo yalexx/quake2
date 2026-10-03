@@ -271,6 +271,21 @@ function lastLine(lines, pattern) {
 // number can sit.
 export const ROLL_IS_DEATH = 20;
 
+// Whether the engine was in a state where *no* turn could have been taken.
+//
+// A turn that comes back as nothing is evidence about the method only if the
+// method was allowed to work. Three states take the keyboard off the game and
+// stop every method at once: the death camera (the view is held by the corpse),
+// the console, and the menu. On demo1 that is routine rather than exceptional --
+// the level kills, several times a run -- so a bridge that learned from those
+// readings would retire the mouse and the keys on the level's own deaths and be
+// left unable to turn at all. `position()` reads all three out of the engine's
+// own memory, so asking costs nothing and the answer is the engine's.
+export function turnIsBlocked(state) {
+  if (!state) return false;
+  return state.dead === true || state.inGame === false || state.paused === true;
+}
+
 // `dead`, decided from the roll this bridge has in its hand rather than from
 // the served page's own verdict.
 //
@@ -1286,12 +1301,32 @@ export class QuakeControl {
     let yaw = start.angles.yaw;
     const history = [];
     let method = null;
+    // The other way of turning, tried *inside this call* when the preferred one
+    // comes back as nothing twice in a row.
+    //
+    // This is what stops a walk being unable to turn at all. Retiring a method
+    // is a decision made between calls, one miss at a time, and a caller that
+    // asked for the mouse by name -- which the fighting walker does, see
+    // control/combat.mjs `aimTurn` -- is answered by `#turnBy` with the mouse
+    // again no matter how many times it has missed. So a mouse that has stopped
+    // turning the player used to spend every round of every call on the mouse
+    // and hand the caller a residual as large as the turn it never took; the
+    // keys were only ever tried by a *second* call, and only when the caller
+    // thought to make one. Measured on demo1: firing legs recorded `aimed no`
+    // with residuals of 15.95, 75.31 and 177 degrees and the method named as
+    // `keys`, on legs that covered 0 units and ended in a death -- the walk
+    // could not turn and therefore could not walk. Two blank turns is enough to
+    // conclude "not with this method, not this time" without letting a single
+    // miss, which is what a player who is dead or mid-hit produces, switch away
+    // from a method that works.
+    let fallback = null;
+    let blank = 0;
     for (let round = 0; round < rounds; round++) {
       const error = shortestTurn(target - yaw);
       if (Math.abs(error) <= tolerance) {
         return { facing: true, target, yaw, error, rounds: round, method, history };
       }
-      const attempted = await this.#turnBy(error, options);
+      const attempted = await this.#turnBy(error, fallback ? { ...options, turn: fallback } : options);
       if (attempted.method === "none") {
         return { facing: false, target, yaw, error, reason: "NO_TURN", message: attempted.message, rounds: round, method, history };
       }
@@ -1304,8 +1339,28 @@ export class QuakeControl {
       const achieved = shortestTurn(after.angles.yaw - yaw);
       history.push({ method: attempted.method, wanted: error, nominal: attempted.amount, achieved, angle: after.angles });
       method = attempted.method;
-      this.#learnTurn(attempted, achieved);
+      const blocked = turnIsBlocked(after);
+      this.#learnTurn(attempted, achieved, after);
       yaw = after.angles.yaw;
+      // A turn big enough to be seen that achieved nothing is a blank turn. Two
+      // in a row and the method is the suspect, not the aim, so the next round
+      // tries the other one -- still inside this call, so the caller gets a
+      // view that has been given both methods rather than one.
+      //
+      // A blank turn taken while the engine had the keyboard off the game is
+      // not one of those: the death camera, the console and the menu all stop
+      // every method at once, so switching away from the one the caller asked
+      // for would be switching on no evidence -- and the other method costs a
+      // CDP session to send a key that cannot land.
+      const blankTurn = !blocked &&
+        Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4 && Math.abs(attempted.amount) >= FACE_TOLERANCE_DEGREES;
+      blank = blankTurn ? blank + 1 : 0;
+      if (blank >= 2) {
+        fallback = attempted.method === "keys" ? "mouse" : "keys";
+        blank = 0;
+      } else if (blank === 0) {
+        fallback = null;
+      }
     }
     // The last turn is not followed by another trip round the loop, so what it
     // achieved has to be judged here. A turn that landed inside the tolerance is
@@ -1392,7 +1447,7 @@ export class QuakeControl {
   // Fold an observed turn back into the calibration, and retire a method that
   // demonstrably did nothing -- so the next round tries the other one instead of
   // repeating a turn that cannot work.
-  #learnTurn(attempted, achieved) {
+  #learnTurn(attempted, achieved, state) {
     // A hold of a few milliseconds can fall between two frames and come back as
     // no turn at all, and face() asks for a turn as small as the tolerance when
     // the aim is already nearly right. A zero reading from a turn that small is
@@ -1402,6 +1457,15 @@ export class QuakeControl {
     // one. Learning is safe from either size -- the ratio windows below throw
     // away a measurement that is not physically possible.
     if (Math.abs(achieved) < FACE_TOLERANCE_DEGREES / 4 && Math.abs(attempted.amount) >= FACE_TOLERANCE_DEGREES) {
+      // ...and only when the engine was in a state where a turn could have been
+      // taken. A reading taken while the death camera holds the view, or while
+      // the console or the menu has the keyboard, is a reading about the player
+      // and not about the method: `state` is the same `position()` the caller
+      // gets, read after the turn, and it says which of the two it was. Three
+      // misses is what retires a method for the rest of the run, and a level
+      // that kills -- demo1 does, several times a run -- would otherwise earn
+      // that retirement on its own, with no fault in the bridge at all.
+      if (turnIsBlocked(state)) return;
       // One miss is not evidence that the method is dead. A turn that comes
       // back as nothing is the *expected* reading whenever the player is not in
       // a state to be turned -- and one of those states is routine on this
