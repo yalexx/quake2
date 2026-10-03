@@ -363,9 +363,12 @@ check("and it says so rather than reporting an arrival", standerResult.log.some(
 // leg's wall clock -- measured on the live game, the turn 415 ms, the walk
 // 538 ms, `hudShot` 732 ms and `readHealth` 294 ms, so 1.4 s of every 2.2 s leg
 // was the player standing still in the open being shot at with nothing fired
-// back. This pins the shape of the fix, with no browser: the trigger goes down
-// first, the turn and the status-bar read are taken inside that press, and the
-// trigger comes up last.
+// back. (Those are the numbers that shaped this and they are left as measured;
+// the per-call cost under them was cut at the source afterwards -- one CDP
+// connection for the whole run, and the status bar read in the page -- which
+// took `hudShot` from 391 ms to 80 ms on this box.) This pins the shape of the
+// fix, with no browser: the trigger goes down first, the turn and the
+// status-bar read are taken inside that press, and the trigger comes up last.
 console.log("a firing leg holds the trigger for the whole of it");
 const legCalls = [];
 const fightStub = {

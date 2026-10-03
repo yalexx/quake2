@@ -1010,6 +1010,16 @@ export class CombatWalker extends RouteWalker {
   // blaster can do in half a second) turned into a mechanism -- and it is the
   // harness's doing, not the level's.
   //
+  // Those are the numbers that shaped this and they are kept as they were
+  // measured. The per-call cost underneath them has since been cut at the
+  // source -- one CDP connection for the whole run instead of one per call, and
+  // the status bar read out of the canvas in the page instead of photographed
+  // through the compositor. Measured on this box after that change: `hudShot`
+  // 80 ms (was 391), `position()` 1.1 ms (was 31), a key pair 3.6 ms (was 53),
+  // `fire(120)` 140 ms (was 203, so the overhead over the 120 ms hold is 20 ms
+  // rather than 83). The shape below is what makes the *leg* short; that change
+  // is what made each call in it cheap.
+  //
   // So the trigger goes down first and comes up last, and the two halves that
   // used to run with it up now run with it down:
   //
