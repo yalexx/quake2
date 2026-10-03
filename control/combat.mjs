@@ -229,6 +229,10 @@ export const ENGAGE_DEFAULTS = {
   // that cost nothing. So the rule is the one a player uses -- do not stand
   // inside a soldier's face, back out of it with the trigger still down.
   kiteRange: 150,
+  // How far along the retreat to look for ground before giving the retreat up
+  // (see #canStep). A leg is 500 ms and the player runs 300 units a second, so
+  // this is a little under the ground a leg would cross.
+  retreatProbe: 120,
   // How many firing legs each way of firing is given before "adapt" starts
   // choosing the cheaper one. Two is the smallest number that can show a
   // difference; more would spend the level's health learning instead of
@@ -830,6 +834,26 @@ export class CombatWalker extends RouteWalker {
   // shoot me here" -- the same `levelShotReaches` test the fight uses to decide
   // what is worth turning for, asked of the ground instead of the monsters.
   // Monsters past `engageRange` are not counted: they cannot reach.
+  // Is there ground to walk on this many units along `bearing` from where the
+  // player stands? The same two tests every walk in this file is held to -- a
+  // floor `floorNear` finds that `standable` accepts, reached by a line
+  // `clearWalk` accepts with the player's shoulders and then with the centre
+  // line. `position` is the engine's eye. See the retreat in #fight.
+  #canStep(position, bearing) {
+    const feet = { x: position.x, y: position.y, z: position.z - EYE_ABOVE_FEET };
+    const span = numberOr(this.engage.retreatProbe, 120);
+    const radians = (Number(bearing) * Math.PI) / 180;
+    const x = feet.x + Math.cos(radians) * span;
+    const y = feet.y + Math.sin(radians) * span;
+    const z = floorNear(this.map, x, y, feet.z, this.engage);
+    if (z === null || !this.map.standable(x, y, z)) return false;
+    const at = { x, y, z };
+    return (
+      clearWalk(this.map, feet, at, { ...this.engage, radius: this.engage.bodyRadius }) ||
+      clearWalk(this.map, feet, at, { ...this.engage, radius: 0 })
+    );
+  }
+
   #seers(at) {
     const eye = { x: at.x, y: at.y, z: at.z + EYE_ABOVE_FEET };
     let count = 0;
@@ -1165,9 +1189,19 @@ export class CombatWalker extends RouteWalker {
     // knows (see `kiteRange`). It resolves to one of the two directions, so the
     // `null` stand-still case below is untouched by it.
     const wanted = this.#fireMode();
-    const mode = wanted === "kite"
+    let mode = wanted === "kite"
       ? (target.enemy && target.enemy.distance < numberOr(this.engage.kiteRange, 150) ? "retreat" : "advance")
       : wanted;
+    // A retreat a body cannot walk is not a retreat, it is a second spent
+    // standing in the open with the trigger down, which is the posture this
+    // level kills. Measured on the 40-attempt kite run: the legs it died on are
+    // retreat legs that covered 0, 2 and 21 units (`monster_soldier_light d149`
+    // covered 0; `monster_soldier_light d50` covered 2; `monster_soldier d142`
+    // covered 21) against the 200-odd an advancing leg covers -- the kite walked
+    // itself into the arena's own geometry and stopped there. So the direction
+    // is only walked if there is ground to walk it on, and otherwise the leg
+    // keeps going the way it was going.
+    if (mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
     const walk = mode === "hold" ? null : (mode === "retreat" ? walkBearing + 180 : walkBearing);
     // The keys the leg is walking on. Computed from the view the player has at
     // the start of the leg and re-computed after the turn, because Quake 2 walks
