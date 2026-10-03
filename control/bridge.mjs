@@ -516,8 +516,13 @@ class CdpSession {
   }
 
   // Rejects every call still in flight when the socket dies, so no caller waits
-  // for a reply that will never come.
+  // for a reply that will never come. It is also where the session learns it is
+  // finished: a socket that closed between two calls has no call in flight to
+  // fail, and without this the next send would go into a dead socket and wait
+  // for an answer that cannot come (measured: `WebSocket.send` on a closed
+  // socket is silently discarded in Node, so the promise never settles).
   fail(error) {
+    this.closed = true;
     const pending = [...this.pending.values()];
     this.pending.clear();
     for (const entry of pending) entry.reject(error);
@@ -526,13 +531,29 @@ class CdpSession {
   send(method, params = {}) {
     const id = ++this.nextId;
     return new Promise((resolve, reject) => {
+      if (!this.isOpen) {
+        reject(new ControlError("the CDP socket is closed", "DISCONNECTED"));
+        return;
+      }
       this.pending.set(id, { resolve, reject, method });
-      this.socket.send(JSON.stringify({ id, method, params }));
+      try {
+        this.socket.send(JSON.stringify({ id, method, params }));
+      } catch (error) {
+        this.pending.delete(id);
+        reject(new ControlError("the CDP socket failed: " + error.message, "DISCONNECTED"));
+      }
     });
   }
 
   onEvent(listener) {
     this.listeners.add(listener);
+  }
+
+  // Whether this socket is still usable. A reused session has to be able to
+  // answer that about itself: a socket that died while nobody was looking is
+  // the one failure a long-lived connection adds (see #connectionGone).
+  get isOpen() {
+    return !this.closed && this.socket.readyState === 1; // WebSocket.OPEN
   }
 
   close() {
@@ -552,6 +573,16 @@ const PROBE_SETTLE_MS = 150;
 // The gap between characters when a string is typed into the console. Back to
 // back, the engine drops them (see #typeInto).
 const TYPE_KEY_GAP_MS = 15;
+// How long a connection will wait for a frame's execution context to be
+// announced after Runtime.enable. The announcement normally arrives inside the
+// same round trip -- the wait is there for the moment it does not, and the
+// bound is what stops a page that never announces one from costing a second
+// per call. It used to be a 50 x 20 ms poll, which is exactly that second.
+const CONTEXT_WAIT_MS = 500;
+// The in-page name the pointer-lock watcher reports through. The page pushes
+// every change of pointer lock to the bridge over this binding, so
+// focusCanvas() never has to ask (see #watchFocus).
+const FOCUS_BINDING = "__quake2BridgeFocus";
 // Face() stops when the bearing is this close, in degrees.
 const FACE_TOLERANCE_DEGREES = 4;
 // How many turns in a row may come back as nothing before a method is retired.
@@ -604,6 +635,65 @@ function describePoint(target) {
   return point;
 }
 
+// The execution contexts one connection has been told about, and the callers
+// parked on one that has not been announced yet.
+//
+// A frame's contexts are announced when Runtime.enable answers, and again after
+// a navigation; both arrive as events. Waiting for one is therefore an event
+// with a deadline rather than a poll -- the announcement wakes the waiter in
+// the same tick it arrives, and CONTEXT_WAIT_MS is only there for a frame that
+// never announces one.
+function makeContextCollector() {
+  const byFrame = new Map();
+  const parked = new Map();
+  const announce = (context) => {
+    if (!context || !context.id || !context.auxData) return;
+    // `isDefault === false` is an isolated world (an extension's, or a
+    // devtools one); the page's own Module and FS live in the default one.
+    if (context.auxData.isDefault === false) return;
+    const frameId = context.auxData.frameId;
+    if (!frameId) return;
+    byFrame.set(frameId, context.id);
+    const waiting = parked.get(frameId);
+    if (waiting) {
+      parked.delete(frameId);
+      for (const wake of waiting) wake(context.id);
+    }
+  };
+  return {
+    onEvent(message) {
+      if (message.method === "Runtime.executionContextCreated") announce(message.params.context);
+    },
+    get(frameId) {
+      return byFrame.get(frameId);
+    },
+    clear() {
+      byFrame.clear();
+    },
+    wait(frameId, timeoutMs) {
+      const known = byFrame.get(frameId);
+      if (known !== undefined) return Promise.resolve(known);
+      return new Promise((resolve) => {
+        const waiting = parked.get(frameId) || [];
+        let timer = null;
+        const wake = (value) => {
+          clearTimeout(timer);
+          const list = parked.get(frameId);
+          if (list) {
+            const at = list.indexOf(wake);
+            if (at >= 0) list.splice(at, 1);
+            if (!list.length) parked.delete(frameId);
+          }
+          resolve(value);
+        };
+        waiting.push(wake);
+        parked.set(frameId, waiting);
+        timer = setTimeout(() => wake(undefined), timeoutMs);
+      });
+    },
+  };
+}
+
 // ---- The bridge -----------------------------------------------------------
 
 export class QuakeControl {
@@ -628,6 +718,20 @@ export class QuakeControl {
     // the engine has already been told to hold, so a caller that dies mid-fight
     // would otherwise leave the player firing at nothing forever.
     this.attacking = false;
+    // The one CDP connection this bridge keeps open, and the open that two
+    // callers arriving together share instead of racing to make two. It is
+    // dropped -- not rebuilt -- the moment the socket or the target goes away.
+    // See #withSession and #connection.
+    this.connection = null;
+    this.sessionOpening = null;
+    // Bumped by close(). An open that was already under way when the caller
+    // asked to be let go must not leave a connection behind it (see
+    // #openConnection).
+    this.connectionEpoch = 0;
+    // How many times focusCanvas() has had to send the click that buys pointer
+    // lock back. The click is Quake's fire button, so "the bridge does not fire
+    // the weapon to move the mouse" is a number worth being able to print.
+    this.focusClicks = 0;
     // What this bridge has spent on the engine's console. `toggles` counts
     // every console key sent, `opens` only those that opened it, and
     // `roundTrips` every completed open-type-dump-close cycle. This is the
@@ -724,19 +828,94 @@ export class QuakeControl {
     }
   }
 
-  // Runs fn against the game frame. Everything public funnels through here, so
-  // the target is resolved afresh each time and the socket is always released.
+  // Runs fn against the game frame, on a connection that is kept open between
+  // calls.
+  //
+  // This used to be one connection per call: a fresh /json/list, a new
+  // WebSocket, Page.enable + Runtime.enable + Page.getFrameTree, a poll for the
+  // execution context, and a closed socket on the way out -- with a real left
+  // click in the page whenever the game was not pointer-locked. Measured on
+  // this box that was 25-30 ms of every position() read and 44-54 ms of every
+  // key or trigger pair, and a firing leg (turn, fire, status-bar read, a few
+  // position reads) spent most of 600-1000 ms in it, issuing no input at all --
+  // which is the lag a player sees as a hitch on every shot. The connection is
+  // now made once and reused; it is thrown away only when the socket dies or
+  // the target goes away, and re-resolved from /json/list then.
   async #withSession(fn) {
+    let lastError;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const live = await this.#connection();
+      try {
+        return await fn(live.game, live.target);
+      } catch (error) {
+        lastError = error;
+        // Only a connection that is *gone* is worth a second try, and only
+        // once: a page that threw, or a call the engine refused, is an answer
+        // and not a fault. The retry is safe for input as well, because a
+        // socket that failed is one the engine never saw the event on.
+        if (attempt === 0 && this.#connectionGone(live, error)) {
+          this.#dropConnection(live);
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw lastError;
+  }
+
+  // The live connection, opened on the first call and reused after that. Two
+  // callers that arrive together while there is no connection share one open
+  // rather than racing to make two.
+  async #connection() {
+    if (this.connection) {
+      // A socket that closed while nobody was looking is not a connection, and
+      // finding that out here is what keeps the next call from being sent into
+      // it (see CdpSession.send).
+      if (!this.connection.gone && this.connection.session.isOpen) return this.connection;
+      this.#dropConnection(this.connection);
+    }
+    if (this.sessionOpening) return this.sessionOpening;
+    const opening = this.#openConnection().finally(() => {
+      if (this.sessionOpening === opening) this.sessionOpening = null;
+    });
+    this.sessionOpening = opening;
+    return opening;
+  }
+
+  // Whether a call failed because the connection under it is gone, rather than
+  // because of what the call asked for.
+  #connectionGone(live, error) {
+    if (live.gone || this.connection !== live) return true;
+    if (error && (error.code === "DISCONNECTED" || error.code === "CDP_UNREACHABLE")) return true;
+    return !live.session.isOpen;
+  }
+
+  #dropConnection(live) {
+    if (!live) return;
+    live.gone = true;
+    if (this.connection === live) this.connection = null;
+    try {
+      live.session.close();
+    } catch {
+      // already gone
+    }
+  }
+
+  // Opens the one long-lived connection and settles everything that used to be
+  // re-derived on every call: the target, the game's frame, its execution
+  // contexts, and whether the canvas holds pointer lock.
+  async #openConnection() {
+    const epoch = this.connectionEpoch;
     const { target } = await this.findGame();
     const session = await CdpSession.open(target.webSocketDebuggerUrl, this.timeoutMs);
+    let live = null;
     try {
       // A frame's execution contexts are announced when Runtime is first enabled
       // on a socket -- a second enable announces nothing -- so the collector goes
-      // in before the enable and the contexts are picked out of it afterwards.
-      const contexts = [];
-      session.onEvent((message) => {
-        if (message.method === "Runtime.executionContextCreated") contexts.push(message.params.context);
-      });
+      // in before the enable, and a context announced after it is caught by the
+      // same listener.
+      const contexts = makeContextCollector();
+      session.onEvent(contexts.onEvent);
       await session.send("Page.enable");
       await session.send("Runtime.enable");
       const { frameTree } = await session.send("Page.getFrameTree");
@@ -757,13 +936,18 @@ export class QuakeControl {
       // Only a target that *is* the game is captured whole; a framed game is
       // cropped to the frame, so a screenshot never includes the shell around it.
       const isWholeTarget = frame.id === frameTree.frame.id;
-      const gameContext = await this.#contextOf(contexts, frame.id);
-      const topContext = isWholeTarget ? gameContext : await this.#contextOf(contexts, frameTree.frame.id);
+      const isMainFrame = (frameId) => frameId === frameTree.frame.id;
+      const gameContext = await this.#contextOf(contexts, frame.id, isMainFrame(frame.id));
+      const topContext = isWholeTarget ? gameContext : await this.#contextOf(contexts, frameTree.frame.id, true);
       const evaluateIn = (contextId) => (expression) => session.send("Runtime.evaluate", {
         expression,
         returnByValue: true,
         awaitPromise: true,
-        contextId,
+        // A null context is the frame's default world by another name: CDP
+        // evaluates in the target's main frame when no context is named, which
+        // is what the id would have pointed at. Said out loud here because the
+        // hot path depends on it -- see #contextOf.
+        ...(contextId === null ? {} : { contextId }),
       }).then((result) => {
         if (result.exceptionDetails) throw new ControlError("the game page threw: " + (result.exceptionDetails.exception?.description || result.exceptionDetails.text), "PAGE_ERROR");
         return result.result ? result.result.value : undefined;
@@ -772,15 +956,104 @@ export class QuakeControl {
         session,
         frame,
         isWholeTarget,
+        // What the page has said about pointer lock since the watcher went in:
+        // null until the first report arrives. A report is a push, not a poll,
+        // so focusCanvas() can trust it and send nothing at all (see #watchFocus).
+        focus: { locked: null, pushed: false },
         // The game's own world: where Module, FS and the canvas live.
         evaluate: evaluateIn(gameContext),
         // The top document: where a <iframe> holding the game can be measured.
         evaluateTop: evaluateIn(topContext),
       };
-      return await fn(game, target);
-    } finally {
+      live = { session, target, frame, contexts, isMainFrame, game, gone: false };
+      // A connection is only worth keeping while the page under it is the same
+      // page. A navigation rebuilds the contexts (they are re-resolved, not
+      // guessed) and a game frame that has moved somewhere else is a target
+      // that has gone, and is re-resolved from /json/list.
+      session.onEvent((message) => this.#onConnectionEvent(live, message));
+      await this.#watchFocus(live);
+      if (epoch !== this.connectionEpoch) {
+        // close() landed while this was being opened. The caller asked for the
+        // socket, the page watcher and the binding to go, and they go -- the
+        // catch below closes the socket, and the connection is never stored.
+        throw new ControlError("the bridge was closed while it was connecting", "DISCONNECTED");
+      }
+      this.connection = live;
+      return live;
+    } catch (error) {
+      if (live) live.gone = true;
       session.close();
+      throw error;
     }
+  }
+
+  // What a long-lived connection has to notice, now that it is not thrown away
+  // and rebuilt every call. Everything else on the wire -- console messages,
+  // frame lifecycle -- is ignored.
+  #onConnectionEvent(live, message) {
+    if (message.method === "Runtime.executionContextsCleared") {
+      // The page navigated or reloaded: the execution contexts this connection
+      // resolved are gone, and the `evaluate` the game object carries closed
+      // over their ids when it was built. Clearing the collector is not enough
+      // -- the ids already handed out stay dead, and on this build an evaluate
+      // naming a context the page no longer has is answered `Invalid
+      // parameters` (measured). #withSession only retries a call whose
+      // *connection* is gone, so a stale id would fail every call for the life
+      // of the process. The whole connection goes instead, and the next call
+      // resolves the target, the frame, the contexts and the pointer-lock
+      // watcher again from scratch -- which is what every call did before the
+      // connection was kept, and what keeps a game that reloaded under the
+      // bridge from being talked to on a stale handle.
+      this.#dropConnection(live);
+      return;
+    }
+    if (message.method === "Page.frameNavigated" || message.method === "Page.frameDetached") {
+      const frame = message.params && message.params.frame;
+      const id = frame ? frame.id : (message.params && message.params.frameId);
+      if (id && id === live.frame.id) {
+        const moved = frame && frame.url && !frame.url.includes(this.gameUrlMark);
+        const detached = message.method === "Page.frameDetached";
+        if (moved || detached) {
+          this.#dropConnection(live);
+        }
+      }
+      return;
+    }
+    if (message.method === "Inspector.targetCrashed") {
+      this.#dropConnection(live);
+    }
+  }
+
+  // Installs the page's half of focusCanvas(): a listener on the document's own
+  // pointer-lock events that pushes the state to the bridge over a binding, so
+  // the bridge never has to ask. If the browser refuses the binding (or the
+  // page has no canvas) the watcher never reports, `pushed` stays false, and
+  // focusCanvas() falls back to asking every call -- the behaviour before this.
+  async #watchFocus(live) {
+    try {
+      await live.session.send("Runtime.addBinding", { name: FOCUS_BINDING });
+    } catch {
+      return; // an older CDP: focusCanvas() keeps asking, which is correct
+    }
+    live.session.onEvent((message) => {
+      if (message.method !== "Runtime.bindingCalled") return;
+      if (!message.params || message.params.name !== FOCUS_BINDING) return;
+      live.game.focus.locked = message.params.payload === "locked";
+      live.game.focus.pushed = true;
+    });
+    await live.game.evaluate(`(function () {
+      if (window.__quake2FocusWatch) return "already";
+      window.__quake2FocusWatch = true;
+      var report = function () {
+        try { ${FOCUS_BINDING}(document.pointerLockElement ? "locked" : "unlocked"); } catch (error) {}
+      };
+      document.addEventListener("pointerlockchange", report);
+      document.addEventListener("pointerlockerror", report);
+      window.addEventListener("blur", report);
+      window.addEventListener("focus", report);
+      report();
+      return "watching";
+    })()`).catch(() => {});
   }
 
   // The origins of the frames holding the game, asked of the game frame itself
@@ -790,14 +1063,21 @@ export class QuakeControl {
   }
 
   // The default execution context of one frame: the world the page's own script
-  // runs in, where its Module and FS globals live. The announcement can arrive a
-  // moment after Runtime.enable answers, so this gives it a moment to turn up.
-  async #contextOf(contexts, frameId) {
-    for (let attempt = 0; attempt < 50; attempt++) {
-      const match = contexts.find((c) => c.auxData && c.auxData.frameId === frameId && c.auxData.isDefault !== false);
-      if (match) return match.id;
-      await new Promise((resolve) => setTimeout(resolve, 20));
-    }
+  // runs in, where its Module and FS globals live.
+  //
+  // The announcement can arrive a moment after Runtime.enable answers, so this
+  // waits for it -- and stops waiting the moment it turns up, rather than
+  // polling for a second (50 x 20 ms, which is what this cost per call before
+  // the connection was kept). A frame that never announces one is bounded by
+  // CONTEXT_WAIT_MS, and the target's own main frame -- where CDP's "no context
+  // named" *is* the default world -- does not wait at all: there is nothing a
+  // context id could add.
+  async #contextOf(contexts, frameId, isMainFrame = false) {
+    const known = contexts.get(frameId);
+    if (known !== undefined) return known;
+    const announced = await contexts.wait(frameId, CONTEXT_WAIT_MS);
+    if (announced !== undefined) return announced;
+    if (isMainFrame) return null;
     throw new ControlError("could not find the JavaScript context of the game frame " + frameId, "PAGE_ERROR");
   }
 
@@ -805,7 +1085,16 @@ export class QuakeControl {
   // key when the canvas holds focus; a plain focus() is enough for the keyboard,
   // but the mouse needs pointer lock, which browsers grant only inside a user
   // gesture -- so a real click is sent when the game is not locked yet.
-  async focusCanvas(game) {
+  //
+  // That click is also Quake's fire button, which is why it is never sent on
+  // faith: a game that holds pointer lock necessarily holds focus, the page
+  // pushes every change of the lock to the bridge, and so a locked game needs
+  // nothing sent and nothing asked. Only when the page has never reported, or
+  // reports unlocked, does this cost a round trip -- and the click is sent only
+  // in the second case, where it is what buys the lock back.
+  async focusCanvas(game, options = {}) {
+    const watch = game.focus;
+    if (watch && watch.pushed && watch.locked === true && options.force !== true) return;
     const state = await game.evaluate(`(function () {
       const canvas = document.getElementById("canvas");
       if (!canvas) return "no-canvas";
@@ -813,13 +1102,9 @@ export class QuakeControl {
       return document.pointerLockElement === canvas ? "locked" : "unlocked";
     })()`);
     if (state === "no-canvas") throw new ControlError("the game page has no canvas element", "PAGE_ERROR");
+    if (watch) watch.locked = state === "locked";
     if (state === "locked") return;
-    const rect = await game.evaluate(`(function () {
-      const canvas = document.getElementById("canvas");
-      const box = canvas.getBoundingClientRect();
-      return JSON.stringify({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
-    })()`);
-    const point = JSON.parse(rect);
+    const point = await this.#canvasPoint(game);
     // A press and release in the middle of the canvas: the page's own click
     // handler asks for pointer lock, and the engine gets a focused canvas.
     const session = game.session;
@@ -829,6 +1114,23 @@ export class QuakeControl {
       });
     }
     this.cursor = point;
+    this.focusClicks++;
+  }
+
+  // The middle of the canvas, in the page's own viewport pixels, measured once
+  // per connection. Every mouse event needs a position to be dispatched at, and
+  // a pointer-locked game reads only the movement between two of them -- so the
+  // position is a formality that must not cost a round trip per event. It is
+  // re-measured when a new connection is made, which is also when the layout
+  // could have changed under a navigation.
+  async #canvasPoint(game) {
+    if (game.point) return game.point;
+    game.point = JSON.parse(await game.evaluate(`(function () {
+      const canvas = document.getElementById("canvas");
+      const box = canvas.getBoundingClientRect();
+      return JSON.stringify({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
+    })()`));
+    return game.point;
   }
 
   // Press (down=true) or release (down=false) one key. Named keys: "w", "Space",
@@ -1635,11 +1937,7 @@ export class QuakeControl {
     const bit = { left: 1, right: 2, middle: 4 }[name];
     return this.#withSession(async (game) => {
       await this.focusCanvas(game);
-      const point = this.cursor || JSON.parse(await game.evaluate(`(function () {
-        const canvas = document.getElementById("canvas");
-        const box = canvas.getBoundingClientRect();
-        return JSON.stringify({ x: box.left + box.width / 2, y: box.top + box.height / 2 });
-      })()`));
+      const point = this.cursor || await this.#canvasPoint(game);
       this.heldButtons = this.heldButtons instanceof Set ? this.heldButtons : new Set();
       if (down) this.heldButtons.add(bit); else this.heldButtons.delete(bit);
       let buttons = 0;
@@ -2256,7 +2554,19 @@ export class QuakeControl {
         // capture is taken on the same socket.
         const rect = JSON.parse(await game.evaluateTop(frameBoxExpression(this.gameUrlMark)));
         const params = { format: "png" };
-        if (rect) params.clip = rect;
+        // Same rule as the host-page branch below: the caller's clip is in the
+        // game frame's pixels and the capture is of the page that draws it.
+        if (rect) {
+          params.clip = options.clip
+            ? {
+              x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+              y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+              width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+              height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+              scale: options.clip.scale || 1,
+            }
+            : rect;
+        } else if (options.clip) params.clip = options.clip;
         const { data } = await game.session.send("Page.captureScreenshot", params);
         return Buffer.from(data, "base64");
       }
@@ -2274,7 +2584,24 @@ export class QuakeControl {
         });
         const rect = JSON.parse(measured.result ? measured.result.value : "null");
         if (!rect) throw new GameNotRunningError("the game's frame is no longer in the top-level page");
-        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip: rect });
+        // A caller's clip is in the *game frame's* own viewport pixels, and this
+        // capture is of the page that draws the frame -- so the clip has to ride
+        // on the frame's box here. Dropping it is not a small thing: it returns
+        // the whole desktop instead of the strip that was asked for, and the
+        // reader of that strip then reads whatever the desktop happens to be
+        // showing. That is exactly how `hudShot()`'s status-bar read came back
+        // empty on every firing leg of a `finish` run while the picture it kept
+        // plainly showed a health number.
+        const clip = options.clip
+          ? {
+            x: rect.x + Math.max(0, Math.min(options.clip.x || 0, rect.width - 1)),
+            y: rect.y + Math.max(0, Math.min(options.clip.y || 0, rect.height - 1)),
+            width: Math.max(1, Math.min(options.clip.width || rect.width, rect.width - Math.max(0, options.clip.x || 0))),
+            height: Math.max(1, Math.min(options.clip.height || rect.height, rect.height - Math.max(0, options.clip.y || 0))),
+            scale: options.clip.scale || 1,
+          }
+          : rect;
+        const { data } = await session.send("Page.captureScreenshot", { format: "png", clip });
         return Buffer.from(data, "base64");
       } finally {
         session.close();
@@ -2295,9 +2622,15 @@ export class QuakeControl {
     return host;
   }
 
-  // Present for symmetry: nothing is kept open between calls.
+  // Let the game go. The connection is long-lived now, so this is where it is
+  // actually dropped: a caller that is finished with the bridge should not leave
+  // a socket, a page watcher and a binding behind it.
   async close() {
     this.cursor = null;
+    this.connectionEpoch++;
+    this.#dropConnection(this.connection);
+    this.connection = null;
+    this.sessionOpening = null;
   }
 }
 
