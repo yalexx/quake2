@@ -132,6 +132,74 @@ function supplyCalls(map, from) {
   // this level the walk that stops to collect is the walk that never arrives.
   return calls;
 }
+
+// The level's own health and armour that already stand on the plan, as calls
+// the walk has to *make* rather than places it merely walks past.
+//
+// This is the same defect the `via` list was built for, one item over. A leg
+// stops when it is inside `max(48, tolerance * 2)` of its target (see
+// control/walker.mjs), and a pickup is taken by a 32-unit box overlap -- so a
+// leg that "reached" a health box can be standing a hundred units from it with
+// nothing to show. Measured on the third run of this harness: fight leg 69 is
+// recorded `over item_health_large  health 2  bar 2+1`, and the two legs after
+// it read `bar 2` and `bar 2` again. The player walked over a large health box
+// at two health and gained nothing, and died two legs later. A `via` call is
+// judged by `touchesCall`, which is the boxes overlapping and not a radius, and
+// is aimed at with a 12-unit tolerance; a call that cannot be made is reported
+// as abandoned rather than silently walked past.
+//
+// Only what the plan already goes near is called for: `NEAR` is the same 96
+// units `CombatWalker.snapPickups` uses, so the call adds almost no walking.
+// That distinction is a measurement and not a preference -- the o46qjcc0
+// comment in `supplyCalls` records what happened when five nearest health and
+// armour boxes were swept up regardless of the route: the walk reached
+// `-379 40`, 2,053 units short, and fired no shots at all.
+function topUpCalls(map, plan) {
+  const NEAR = 96;
+  const calls = [];
+  const seen = new Set();
+  // How far an item stands off the *plan*, measured against its segments and
+  // not against its corners. That difference is the whole reason this function
+  // exists: demo1's `item_health_large` sits 64 units off the route line
+  // between two plan points, and a corner test puts it further than `NEAR` from
+  // every one of them -- so the one box worth 50 health was the one a corner
+  // test dropped. Measured: the corner version of this function returned two
+  // `item_health_small` boxes and nothing else.
+  const offRoute = (x, y) => {
+    let best = { distance: Infinity, index: 0 };
+    for (let i = 0; i < plan.points.length; i++) {
+      const a = plan.points[i];
+      const b = plan.points[Math.min(i + 1, plan.points.length - 1)];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = dx * dx + dy * dy;
+      const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length));
+      const distance = Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy));
+      if (distance < best.distance) best = { distance, index: i };
+    }
+    return best;
+  };
+  const found = [];
+  for (const item of map.waypoints("*")) {
+    if (!item.position || !/^item_(health|armor)/.test(item.classname)) continue;
+    const near = offRoute(item.position.x, item.position.y);
+    if (near.distance > NEAR) continue;
+    const key = item.classname + Math.round(item.position.x) + "," + Math.round(item.position.y);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ item, near });
+  }
+  // In the order the plan meets them, so the errand is walked forwards.
+  found.sort((a, b) => a.near.index - b.near.index);
+  for (const { item, near } of found) {
+    calls.push({
+      classname: item.classname, call: "top-up",
+      x: item.position.x, y: item.position.y, z: item.position.z,
+      routeIndex: near.index, walkDistance: Math.round(near.distance), tap: null,
+    });
+  }
+  return calls;
+}
+
 // How many times the reset is asked for before the run gives up on it.
 //
 // One send is not a start on this box, and it is not the level's fault. The
@@ -274,6 +342,10 @@ async function finish() {
   // The errands: the level's own weapon and the shells that are near the spawn.
   // See supplyCalls for why nothing else is on the list.
   const calls = process.env.QUAKE2_NO_SUPPLY ? [] : supplyCalls(map, map.playerStart().position);
+  // The top-ups come after the weapon, in the order the plan meets them: a
+  // health box on the way out is worth walking onto, and the walk's own
+  // injury record says why (see `topUpCalls`).
+  if (!process.env.QUAKE2_NO_TOPUP) calls.push(...topUpCalls(map, plan));
   if (!plan.points.length) {
     report("  where the plan stopped", plan.reached);
     report("  what the plan says is there", plan.blockers.map((b) => b.classname + " " + b.model + " " + b.why));
