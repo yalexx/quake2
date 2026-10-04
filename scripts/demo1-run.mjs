@@ -634,6 +634,18 @@ async function play() {
     // than against a memory of it.
     ...(process.env.QUAKE2_PITCH_AIM === "0" ? { pitchAim: false } : {}),
     ...(process.env.QUAKE2_MET_RANGE ? { metRange: Math.max(1, Number(process.env.QUAKE2_MET_RANGE)) } : {}),
+    // Stop and kill: how close a shootable target has to be before the walk
+    // stands still for it, and how long it may stand there. `QUAKE2_STOP_RANGE=0`
+    // is the control -- the walk never stops, which is the behaviour every run
+    // before this pass was measured with.
+    ...(process.env.QUAKE2_STOP_RANGE ? { stopRange: Math.max(0, Number(process.env.QUAKE2_STOP_RANGE)) } : {}),
+    ...(process.env.QUAKE2_ENGAGE_HOLD_MS ? { engageHoldMs: Math.max(0, Number(process.env.QUAKE2_ENGAGE_HOLD_MS)) } : {}),
+    // How far the walk will go out of its way for a monster it has met, and how
+    // long it will spend before leaving it. `QUAKE2_HUNT_RANGE=0` is the control:
+    // the walk only ever shoots at what happens to cross it, which is the
+    // behaviour every run before this one was measured with.
+    ...(process.env.QUAKE2_HUNT_RANGE ? { huntRange: Math.max(0, Number(process.env.QUAKE2_HUNT_RANGE)) } : {}),
+    ...(process.env.QUAKE2_HUNT_GIVEUP_MS ? { huntGiveUpMs: Math.max(0, Number(process.env.QUAKE2_HUNT_GIVEUP_MS)) } : {}),
     trace: process.env.QUAKE2_TRACE === "1",
   });
   loop.plan = plan;
@@ -788,6 +800,25 @@ async function play() {
   // are calibrated by the same fold-back and the pitch's number was quoted
   // without the yaw's beside it.
   report("aim, the first axis (yaw)", result.turnScale && { scaleLearned: result.turnScale.learned, samples: result.turnScale.samples });
+  // The gun in hand, and what the loop did with it. The weapon is the loop's own
+  // record of which key it pressed for the gun the level's errand fetched; the
+  // damage-per-drop numbers beside it are the game's evidence for whether that
+  // press took effect (10 a bolt for the spawn's blaster, 6 a pellet for the
+  // level's own super shotgun).
+  report("the gun the walk fetched", result.weapon || "none fetched (spawn blaster)");
+  report("ticks spent standing still to shoot (stop and kill)", result.stopAndShootTicks + " of " + result.ticks);
+  // Going out of the way for what was met and not killed. `left` is how many
+  // monsters the walk decided it could not reach.
+  if (result.hunts) report("hunts (met, alive, and walkable: the walk went to it)", result.hunts);
+  // The game's own fingerprint of which gun was really firing: the size of every
+  // drop in a monster's own health, in order. A blaster bolt is a flat 10; a
+  // super shotgun's pellets are 6 each. The loop's record of the key it pressed
+  // is a claim; this is the engine's answer to the same question.
+  if (result.dropSizes && result.dropSizes.length) {
+    const sizes = new Map();
+    for (const size of result.dropSizes) sizes.set(size, (sizes.get(size) || 0) + 1);
+    report("every drop in a monster's own health, by size (the weapon's fingerprint)", [...sizes.entries()].sort((a, b) => b[1] - a[1]).map(([size, count]) => size + "x" + count).join(", "));
+  }
   // The aim measured on the tick's own corrected reading, both axes, for every
   // tick that had a target. This is what "the aim landed" means for this loop:
   // it is the state the trigger is released from, and it is counted whether or

@@ -203,6 +203,12 @@ export function healthOf(monsters, edicts, options = {}) {
       dead: live.dead,
       source: agreed ? "game-edict" : "game-edict-origin-disagrees",
       originError: measured,
+      // Where the GAME says the monster is, carried beside the client's own
+      // reading so a caller can choose. It is the same pair `originError` is the
+      // distance between, and it is here because the two are not equally true:
+      // see the note on `#withHealth` in control/loop.mjs for the measurement
+      // that settled which of them a player should aim at.
+      edictPosition: { x: edict.x, y: edict.y, z: edict.z },
     });
   }
   return { monsters: out, unmatched, disagreed, edicts: index.size };
