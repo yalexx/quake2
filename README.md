@@ -2318,6 +2318,60 @@ The save slots say the same thing. `save1` is a demo1 save whose player stood at
 `-928 855 5`, on that corridor; `current` and `save0` are level-start autosaves
 whose client state is zeroed, and they record no position at all.
 
+#### The play pass: the errand that fetches the gun, and three runs to the door
+
+`clawbox/run-o46qjcc0` had been sitting unmerged since PR #10 took only part of
+it. This pass folded in the parts the play harness needs and ran the finish
+three times. **None of them finished the level.** The engine answered
+`"mapname" is "demo1"` on every one, and the numbers below are that engine's own
+positions, not the planner's opinion.
+
+The fold-in is a `via` list in `control/walker.mjs`: places the walk has to
+*call* at on the way to the exit. On demo1 the list is the level's own super
+shotgun (414 units' walk from the spawn) and its three shell boxes. A call is an
+object, not a grid cell, so arriving is a box overlap and not a radius --
+measured, an earlier walk closed to 33 units of the gun, was not told the call
+was made, and spent a whole attempt dithering beside a weapon it had already
+picked up. A death resets the list, because a restart hands the player the
+spawn's own blaster again. Alongside it came `control/route.mjs`'s caching (an
+uncached plan was ~250,000 `contentsAt` walks and 8.4 s of the *game's* time
+standing still) and the run-first, jump-only-if-needed search, and
+`ROLL_IS_DEATH` 20 -> 10 in both `control/bridge.mjs` and `engine-state.js`.
+
+The harness that came with the branch was **not** taken wholesale: its
+`finish()` has no `walker.follow` call at all, so `result` is undefined and the
+run would throw. It was repaired, and its `game.binding("use supershotgun")`
+lookup -- which compares the whole command exactly and finds nothing on a config
+that writes `bind 3 "use Super Shotgun"` -- was replaced with the bridge's own
+`weaponKey()`. That lookup is what the first run exposed: it reported
+`NO_BINDING` with the gun 414 units from the spawn. With `weaponKey` the second
+run's record ends `{"selected":true,"weapon":"Super Shotgun","method":"key",
+"key":"3","command":"use Super Shotgun"}`.
+
+| run | budget | deepest reading | short | engine's answer |
+|---|---|---|---|---|
+| 1, before the binding fix | 24/24 | `-1139 1659 -2` | 647 | `"mapname" is "demo1"` |
+| 2 | 24/24 | `-1503 1581 21` | **275** | `"mapname" is "demo1"` |
+| 3 | 32/32 | `-1614 1683 -24` | **213** | `"mapname" is "demo1"` |
+
+**The blocker is health, and the walk now dies at the door.** The exit trigger's
+volume is `x -1840..-1712, y 1448..1640, z -24..32`; run 2's deepest point is
+275 units from its aim point and run 3's is 213, about 100 units from the
+volume's own edge. Both attempts died on the leg that got there, at **2 health**
+(run 3's fight record 69 is `over item_health_large  health 2`, and record 71,
+the leg that reached `-1614 1683`, is `DIED ON THIS LEG`). The corridor's cost is
+the file's own old number: about 200 health against a route whose health budget
+is about 200. The super shotgun is in the player's hands -- the fight record says
+so -- and it is not enough. The errand is not free either: run 1 spent 279 of
+its 656 trail legs on it, and 17 attempts touched it at least once.
+
+The lever this pass left for the next one is speed. The file measures **265
+units per second with the status bar unread against the 187 these runs get
+with it**, and the read happens inside every firing leg with the trigger down --
+a screenshot and an image decode while the player stands in the open. The runs
+above all read the bar. Run 4, in flight when this was written, is the same walk
+with `QUAKE2_READ_HUD=0`.
+
 ### The HTTP API
 
 `node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`, or
