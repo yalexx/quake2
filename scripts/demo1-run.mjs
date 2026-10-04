@@ -23,7 +23,7 @@ import { loadMap } from "../control/route.mjs";
 import { RouteWalker } from "../control/walker.mjs";
 import { CombatWalker } from "../control/combat.mjs";
 import { PlayLoop } from "../control/loop.mjs";
-import { fastRequest, enterFastMode, leaveFastMode, FAST_FLAG, FAST_BANNER, FAST_TIMESCALE_CHOICES } from "../control/fast.mjs";
+import { fastRequest, enterFastMode, leaveFastMode, readCvars, FAST_FLAG, FAST_BANNER, FAST_TIMESCALE_CHOICES } from "../control/fast.mjs";
 
 const CDP = process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801";
 const game = new QuakeControl({ cdpUrl: CDP, timeoutMs: 20000 });
@@ -650,6 +650,13 @@ async function play() {
   report("map after reset", fresh.map);
   report("player at", fresh.position);
   report("cheats line", fresh.cheatsAnswer.filter((line) => /cheats/.test(line)));
+  // The line above is the console's ECHO of `cheats 0`; this is the engine's own
+  // answer when the cvar is asked for its value, and they are not the same
+  // reading: the echo says the command arrived, the answer says what the engine
+  // did with it. A finish proof has to carry the second one, and the run above
+  // has already printed an empty echo for it once.
+  const cheatsBefore = await readCvars(game, ["cheats", "timescale"]).catch((error) => ({ values: null, reason: error.message }));
+  report("cheats and timescale, the engine's own answer before the walk", cheatsBefore.values || cheatsBefore.reason);
   if (fresh.map !== "demo1") {
     report("result", "could not start demo1; stopping rather than playing an unknown level");
     process.exitCode = 1;
@@ -716,12 +723,14 @@ async function play() {
   // (control/edicts.mjs), not from the network entity state and not from a
   // landed turn. It is the only reading of a monster's health the harness has.
   if (result.enemies) {
-    report("enemies met (within reach of the player, from the loop's own record)", result.enemies.met);
-    report("enemies killed (the game's own edict says health <= 0)", result.enemies.killed);
+    report("enemies met in the LAST attempt (within reach of the player, from the loop's own record)", result.enemies.met);
+    report("  of those, killed (the game's own edict says health <= 0)", result.enemies.killed);
+    report("  of those killed, killed BY this attempt (alive when it first met them)", result.enemies.killedByThisAttempt);
+    if (result.enemies.alreadyDeadWhenMet) report("  already dead when the attempt first met them (an earlier attempt's kills, or a first tick reading the level being left)", result.enemies.alreadyDeadWhenMet);
     report("enemies met and still standing", result.enemies.stillStanding);
     if (result.enemies.unreadableHealth) report("enemies whose health the game's edict would not give up", result.enemies.unreadableHealth);
     report("SECOND SUCCESS CONDITION (kill everything met)", result.enemies.met === 0
-      ? "no enemy was met this run -- nothing was slipped past and nothing was proven"
+      ? "no enemy was met in this attempt -- nothing was slipped past and nothing was proven"
       : (result.enemies.stillStanding === 0
         ? "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- every enemy met was killed"
         : "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- " + result.enemies.stillStanding + " STILL STANDING"));
@@ -731,7 +740,34 @@ async function play() {
         "  hits " + enemy.hits + "  " + (enemy.killed ? "KILLED (" + enemy.killedBy + ")" : "alive"));
     }
   }
-  report("health the game says was taken off monsters", result.healthDamage + " over " + result.healthDamageEvents + " drops");
+  // Every attempt, because a death reloads the level and revives its monsters:
+  // the numbers above are the LAST attempt's, and these are the ones before it.
+  // A run that dies four times made five attempts, and only the last one is the
+  // trip that could have finished the level.
+  if (result.attempts && result.attempts.length) {
+    report("attempts (a death reloads the level, so its monsters come back alive and the count starts again)", result.attempts.length + 1);
+    for (const attempt of result.attempts) {
+      report("  attempt " + attempt.attempt + " (" + attempt.endedBy + ")",
+        "met " + attempt.met + ", killed " + attempt.killed + " (of which this attempt's: " + attempt.killedByThisAttempt + ")" +
+        ", still standing " + attempt.stillStanding +
+        ", health taken off them " + attempt.healthDamage + " over " + attempt.healthDamageEvents + " drops" +
+        ", " + Math.round(attempt.wallClockMs / 1000) + "s");
+    }
+    report("  attempt " + result.enemies.attempt + " (the last one)",
+      "met " + result.enemies.met + ", killed " + result.enemies.killed + " (of which this attempt's: " + result.enemies.killedByThisAttempt + ")" +
+      ", still standing " + result.enemies.stillStanding +
+      ", health taken off them " + result.healthDamage + " over " + result.healthDamageEvents + " drops" +
+      ", " + Math.round(result.enemies.wallClockMs / 1000) + "s");
+    // Kills this run can actually claim. A monster met already dead is not one
+    // of them -- counting those is how the same run reported three kills an
+    // attempt beside zero health taken off anything.
+    report("monsters this run killed itself (alive when its attempt first met them, dead at the end of it)",
+      result.attempts.reduce((sum, attempt) => sum + attempt.killedByThisAttempt, 0) + result.enemies.killedByThisAttempt);
+  }
+  report("health the game says was taken off monsters", result.healthDamage + " over " + result.healthDamageEvents + " drops" +
+    (result.healthDamageTotal !== undefined && result.healthDamageTotal !== result.healthDamage
+      ? " (this attempt; " + result.healthDamageTotal + " over " + result.healthDamageEventsTotal + " across the whole run)"
+      : ""));
   report("edict read (the game DLL's own array)", result.edictRead && {
     ticks: result.edictRead.ticks,
     from: result.edictRead.source,
@@ -748,13 +784,32 @@ async function play() {
     samples: result.pitch.samples,
     failures: result.pitch.failures,
   });
+  // The yaw's own learned scale, which the report never carried: the two axes
+  // are calibrated by the same fold-back and the pitch's number was quoted
+  // without the yaw's beside it.
+  report("aim, the first axis (yaw)", result.turnScale && { scaleLearned: result.turnScale.learned, samples: result.turnScale.samples });
+  // The aim measured on the tick's own corrected reading, both axes, for every
+  // tick that had a target. This is what "the aim landed" means for this loop:
+  // it is the state the trigger is released from, and it is counted whether or
+  // not the run asked for the per-tick trace.
+  if (result.gate) {
+    report("the aim gate, per tick with a target (the trigger only goes down with BOTH axes inside 1.6 degrees)", {
+      ticksWithATarget: result.gate.ticks,
+      yawInside: result.gate.yawInside,
+      pitchInside: result.gate.pitchInside,
+      bothInside: result.gate.bothInside,
+      triggerDidGoDown: result.gate.fire,
+      meanYawErrorDeg: result.gate.aimErrorMean,
+      meanPitchErrorDeg: result.gate.pitchErrorMean,
+    });
+  }
   if (result.hitRate) {
     report("hit accounting", {
       damageEventsPerTriggerPress: Math.round(result.hitRate.damageEventsPerPress * 1000) / 1000,
       damageEventsPerSecondWithTheTriggerDown: result.hitRate.damageEventsPerSecondOfTrigger === null ? null : Math.round(result.hitRate.damageEventsPerSecondOfTrigger * 1000) / 1000,
       killsPerTriggerPress: Math.round(result.hitRate.killsPerPress * 1000) / 1000,
     });
-    report("note", "a monster's own HEALTH is not in the client's entity state (the network state carries no health field, and this pass did not recover the game DLL's edict array), so nothing here says how much health was removed. What is counted is the one damage signal the state does carry: an idle monster's animation frame does not move at all -- measured, 100 samples over 20 s, one distinct frame and one distinct position for all 18 monsters -- so a frame that moves while the trigger is down is the pain animation, not idle animation. A landed turn is not counted as a hit.");
+    report("note", "the `damage events` line above is the old frame-moved proxy and it is the one sensor on this box that does NOT work: an idle monster's animation frame does not move, so a frame that moves should be a hit, but measured on this build it has never fired once and the loop reads a monster's own health out of the game DLL's edict array instead (see `enemies killed` and `health the game says was taken off monsters`). A landed turn is not counted as a hit anywhere in this report.");
   }
   report("health series (status bar)", result.healthSeries.map((entry) => entry.health).join(", ") || "none read");
   report("lowest health read", result.lowestHealth);
@@ -798,6 +853,13 @@ async function play() {
   const after = await readMapName();
   report("engine says the map is", after.name);
   report("proof", after.lines.filter((line) => /"mapname" is "/.test(line)));
+  // The other half of the proof, and the engine's own answer rather than the
+  // script's promise: a walk at a multiplied clock or with cheats on is not a
+  // finish whatever the `mapname` says. Asked here, at the end, on the same
+  // console the `mapname` above came off.
+  const cheatsAfter = await readCvars(game, ["cheats", "timescale"]).catch((error) => ({ values: null, reason: error.message }));
+  report("cheats and timescale, the engine's own answer after the walk", cheatsAfter.values || cheatsAfter.reason);
+  const playedStraight = cheatsAfter.values && cheatsAfter.values.cheats === "0" && (cheatsAfter.values.timescale === "1" || cheatsAfter.values.timescale === "0");
   // The finish line. What makes a run a finish proof is not the flag, it is what the run
   // actually was: normal speed and cheats 0. `QUAKE2_FAST=1
   // QUAKE2_FAST_TIMESCALE=1` does the render/sound cuts and touches NOTHING
@@ -806,9 +868,16 @@ async function play() {
   // reported as a finish. A run whose simulation was multiplied is not, and
   // says so.
   const cheated = fastState ? fastState.cheat === true : false;
+  // The flag the run was started with is not the proof; the engine's answer is.
+  // A run whose `cheats` read back anything but "0", or whose clock read back
+  // anything but 1, is reported as NOT a finish however its `mapname` answers --
+  // and when the read-back does not come back at all that is said rather than
+  // assumed either way.
+  if (!cheatsAfter.values) report("cheats read-back", "the engine did not answer; the finish proof below rests on the `mapname` line alone (" + (cheatsAfter.reason || "no answer") + ")");
   if (after.name === "demo2") {
     if (cheated) report("result", "FAST-MODE RESULT ONLY -- the engine loaded demo2, but this run's SIMULATION was multiplied (cheats 1, timescale " + fastState.timescale + "), so it is NOT a finish. Re-run at normal speed with cheats 0 to prove it.");
-    else report("result", "FINISHED -- the engine loaded demo2" + (FAST.on ? " (normal speed, cheats 0; the render/sound cuts were on and change nothing the engine simulates)" : ""));
+    else if (cheatsAfter.values && !playedStraight) report("result", "NOT a finish proof -- the engine loaded demo2, but its own answer after the walk was " + JSON.stringify(cheatsAfter.values) + ", not cheats 0 at timescale 1");
+    else report("result", "FINISHED -- the engine loaded demo2" + (FAST.on ? " (normal speed, cheats 0; the render/sound cuts were on and change nothing the engine simulates)" : "") + (cheatsAfter.values ? " (its own answer after the walk: cheats " + cheatsAfter.values.cheats + ", timescale " + cheatsAfter.values.timescale + ")" : ""));
   } else {
     report("result", (cheated ? "(iteration mode, simulation multiplied) " : "") + "NOT finished -- the engine is still on " + after.name);
   }
