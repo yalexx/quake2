@@ -41,6 +41,11 @@
 // and a cached socket or target id would then be a stale handle; the cost of
 // resolving again is a couple of milliseconds on loopback.
 
+// The game DLL's own edicts -- the only place a monster's health exists. The
+// walk itself is spliced into the page expression below so it happens in the
+// same evaluate (and therefore the same frame) as the player and entity reads.
+import { edictWalkSource } from "./edicts.mjs";
+
 const DEFAULT_CDP_URL = "http://127.0.0.1:18801";
 // The ClawBox serves every app under its own base path, so this marks the game
 // frame and nothing else on the box.
@@ -233,6 +238,25 @@ const liveStateExpression = () => `(function () {
   } catch (error) {
     entityReason = "ENTITY_READ_FAILED: " + error.message;
   }
+  // The game DLL's own edicts, in the SAME evaluate: one frame, one reading.
+  // They are what carries a monster's health, which the network entity state
+  // above does not have at all (see control/edicts.mjs for how the array was
+  // found and what checks hold on it). A failure here is reported as a reason
+  // and leaves the health of every monster null, rather than inventing one.
+  let edicts = null;
+  let edictReason = null;
+  let edictsFrom = null;
+  try {
+    if (typeof wasmMemory !== "undefined" && wasmMemory) {
+      const buf = wasmMemory.buffer;
+      edicts = ${edictWalkSource()};
+      edictsFrom = "game-dll-memory";
+    } else {
+      edictReason = "ENGINE_NOT_LOADED";
+    }
+  } catch (error) {
+    edictReason = "EDICT_READ_FAILED: " + error.message;
+  }
   let map = null;
   const dirs = ${JSON.stringify(GAME_DIRS)};
   for (const dir of dirs) {
@@ -249,7 +273,8 @@ const liveStateExpression = () => `(function () {
       break;
     } catch (error) { /* not this build's layout */ }
   }
-  return JSON.stringify({ read: out.read, watch: out.watch, entities: entities, entityReason: entityReason, entitiesFrom: entitiesFrom, map: map });
+  return JSON.stringify({ read: out.read, watch: out.watch, entities: entities, entityReason: entityReason, entitiesFrom: entitiesFrom,
+    edicts: edicts, edictReason: edictReason, edictsFrom: edictsFrom, map: map });
 })()`;
 
 // The engine's own key bindings, as a list of { key, command }, after the last
@@ -2770,6 +2795,15 @@ export class QuakeControl {
       // so every run of the loop recorded `page-hook` for a list this bridge
       // had walked out of the WASM memory itself.
       entitiesSource: entities ? (parsed.entitiesFrom || "unknown") : null,
+      // The game DLL's own edicts: `{ number, x, y, z, modelindex, health,
+      // maxHealth }` for every slot the game is using. This is the ONLY reading
+      // of a monster's health anywhere in the harness -- the network entity
+      // state above carries no health field at all. Read in the same evaluate
+      // as everything else, so it is the same frame.
+      edicts: Array.isArray(parsed.edicts) ? parsed.edicts : null,
+      edictCount: Array.isArray(parsed.edicts) ? parsed.edicts.length : null,
+      edictReason: parsed.edictReason || null,
+      edictsSource: Array.isArray(parsed.edicts) ? (parsed.edictsFrom || "unknown") : null,
       map: parsed.map || null,
       mapSource: parsed.map ? "console-log" : null,
       // Whether the console was left alone on this read, for a caller that
@@ -2820,6 +2854,68 @@ export class QuakeControl {
       throw new ControlError("look(degrees) needs a number of degrees", "BAD_REQUEST");
     }
     return this.#turnBy(wanted, { turn: "mouse", ...options });
+  }
+
+  // One relative PITCH change, in degrees, in Quake 2's own sense: POSITIVE
+  // looks DOWN, because `cl.refdef.viewangles[PITCH]` grows downwards and the
+  // engine adds a positive `movementY` to it (`m_pitch` is the per-count scale,
+  // the pitch's `m_yaw`).
+  //
+  // This is the mouse's other axis and nothing else in this bridge drives it.
+  // The delta goes out as `dy` on the same `mouseMove` the yaw uses; the page
+  // hands `movementY` to SDL the same way it hands `movementX`, so the engine
+  // receives it as an ordinary mouse move and there is no separate path to
+  // keep working.
+  //
+  // It is deliberately NOT closed-loop like `face()`. The aim loop in
+  // control/loop.mjs re-reads the pitch itself every tick and corrects, and a
+  // method that spent four rounds converging would buy the second axis at the
+  // cost of the first one's tick.
+  async lookPitch(degrees, options = {}) {
+    const wanted = Number(degrees);
+    if (!Number.isFinite(wanted)) {
+      throw new ControlError("lookPitch(degrees) needs a number of degrees", "BAD_REQUEST");
+    }
+    const perUnit = this.#mousePitchDegreesPerUnit() === null ? DEFAULT_DEGREES_PER_MOUSE_UNIT : this.#mousePitchDegreesPerUnit();
+    // Positive degrees (look down) is positive dy, so unlike the yaw there is
+    // no sign flip here.
+    let units = wanted / perUnit;
+    const capUnits = numberOr(options.maxMouseUnitsPerStep, 500);
+    if (Math.abs(units) > capUnits) units = Math.sign(units) * capUnits;
+    if (Math.abs(units) < 1) return { method: "none", message: "the pitch change is smaller than one mouse count" };
+    // The pitch is clamped to +/-90 by the engine, so a caller that asks for
+    // more than a quarter turn is asking for something the view cannot do; it
+    // is sent anyway (the cap above is what bounds it) and the caller's own
+    // next reading is what tells it so.
+    await this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      await this.mouseMove(0, Math.round(units));
+    });
+    return { method: "mouse", axis: "pitch", amount: Math.round(units) * perUnit, units: Math.round(units) };
+  }
+
+  // The pitch's own degrees-per-mouse-count. Measured the same way the yaw's is
+  // (see `#learnTurn`) and kept separately, because `m_pitch` and `m_yaw` are
+  // two cvars and there is no reason for the box's two axes to agree -- the
+  // yaw's documented default was already wrong by a factor of two.
+  #mousePitchDegreesPerUnit() {
+    if (this.turnCalibration.pitchDegreesPerUnit !== undefined) return this.turnCalibration.pitchDegreesPerUnit;
+    return null;
+  }
+
+  // Fold an observed pitch change back into the pitch's scale. Same windows as
+  // the yaw's fold-back and for the same reason: a ratio that is not physically
+  // possible is a measurement about something else.
+  learnPitchCalibration(requestedDegrees, achievedDegrees) {
+    const asked = Math.abs(Number(requestedDegrees));
+    const got = Math.abs(Number(achievedDegrees));
+    if (!Number.isFinite(asked) || !Number.isFinite(got)) return null;
+    if (asked < 0.5 || got < 0.25) return null;
+    const perUnit = got / asked * (this.#mousePitchDegreesPerUnit() === null ? DEFAULT_DEGREES_PER_MOUSE_UNIT : this.#mousePitchDegreesPerUnit());
+    if (!(perUnit > 0.001 && perUnit < 5)) return null;
+    const previous = this.#mousePitchDegreesPerUnit();
+    this.turnCalibration.pitchDegreesPerUnit = previous === null ? perUnit : previous * 0.4 + perUnit * 0.6;
+    return this.turnCalibration.pitchDegreesPerUnit;
   }
 
   // Hold exactly this set of keys, and only this set: keys that are held and no
