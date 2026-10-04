@@ -448,6 +448,7 @@ export class PlayLoop {
     this.errandsRun = [];
     this.trace = [];
     this.timing = { live: 0, act: 0, ticks: 0 };
+    this.goalTolerance = 96;
   }
 
   note(message, detail) {
@@ -467,6 +468,11 @@ export class PlayLoop {
     if (options.level) this.level = options.level;
     if (!this.plan) this.plan = this.#planFrom(options.from || null);
     const tolerance = finite(options.tolerance) ? options.tolerance : 96;
+    // Stored, not just used here: the decision made inside each tick asks the
+    // same question ("am I there yet?") and must ask it with the same number.
+    // It used to hardcode 96, so a caller that asked for 64 got a walk that
+    // stopped where the loop thought it should.
+    this.goalTolerance = tolerance;
     const maxTicks = Math.max(1, Math.floor(this.options.maxTicks));
     let ticks = 0;
     let reason = "MAX_TICKS";
@@ -651,7 +657,7 @@ export class PlayLoop {
       : null;
     const stuck = this.#stuckNow(player, tickStart);
     const retreatBearing = this.#retreatBearing(player, ranked, route);
-    const arrived = goal ? Math.hypot(player.x - goal.x, player.y - goal.y) <= 96 : false;
+    const arrived = goal ? Math.hypot(player.x - goal.x, player.y - goal.y) <= this.goalTolerance : false;
 
     if (dead) {
       await this.#release();
@@ -728,23 +734,27 @@ export class PlayLoop {
   // A disagreement means the offsets moved under this build and the loop must
   // say so rather than aim at whatever is at those addresses now.
   #verifyEntityRead(read, entities) {
-    // The player's own record is the anchor. Its x/y are the refdef's x/y --
-    // the view offset that separates the eye from the feet is vertical -- and
-    // the record the reader takes may be the *previous* copy, which lags the
-    // current one by a frame. A frame at run speed is tens of units, so the
-    // tolerance is 64 and not 4; what it has to catch is an offset that has
-    // moved under the build, which is thousands of units wide, not a lag.
+    // The player's OWN record is the anchor -- entity 1 in a single-player game
+    // -- and its x/y are the refdef's x/y, because the view offset that
+    // separates the eye from the feet is vertical. The record the reader takes
+    // may be the *previous* copy, which lags the current one by a server frame,
+    // so the tolerance is 64 and not 4; what it has to catch is an offset that
+    // has moved under the build, which is thousands of units wide, not a lag.
+    //
+    // This used to take the nearest entity of ANY kind, which is a check that
+    // can be satisfied by a monster: measured on the live game, entity 1 agreed
+    // to 0.06 units while the *second* nearest entity was 13.81 away. A check
+    // whose anchor can be something other than the player is a check that can
+    // pass while the player's own row holds anything at all.
     const eye = read.position;
-    let best = null;
-    for (const entity of entities) {
-      if (!entity || !entity.position) continue;
-      const error = Math.max(Math.abs(entity.position.x - eye.x), Math.abs(entity.position.y - eye.y));
-      if (best === null || error < best) best = error;
+    const anchor = entities.find((entity) => entity && entity.number === 1 && entity.position);
+    const error = anchor ? Math.max(Math.abs(anchor.position.x - eye.x), Math.abs(anchor.position.y - eye.y)) : null;
+    if (error !== null) {
+      this.entityIntegrity.worstError = this.entityIntegrity.worstError === null
+        ? Math.round(error * 100) / 100
+        : Math.max(this.entityIntegrity.worstError, Math.round(error * 100) / 100);
     }
-    this.entityIntegrity.worstError = this.entityIntegrity.worstError === null
-      ? (best === null ? null : Math.round(best * 100) / 100)
-      : (best === null ? this.entityIntegrity.worstError : Math.max(this.entityIntegrity.worstError, Math.round(best * 100) / 100));
-    return { ok: best !== null && best <= 64, error: best };
+    return { ok: error !== null && error <= 64, error, anchor: anchor ? anchor.copy : "ABSENT" };
   }
 
   // What the last turn actually achieved, folded back into the mouse's scale.
@@ -763,12 +773,27 @@ export class PlayLoop {
     this.turnSamples += 1;
   }
 
+  // What identifies a monster in the records this loop keeps.
+  //
+  // The entity number is the identity when there is one. A monster read from
+  // the level's static list has none -- `staticMonsters()` gives it only its
+  // place in that list -- and keying those on `null` puts all of them in ONE
+  // record: each overwrote the last, the run's per-monster table showed a
+  // single row, and `#track`'s "have I seen it this tick" set, which is keyed
+  // the same way, then matched nothing and would have marked every one of them
+  // killed a second into the run. The fallback has never actually been taken on
+  // this build -- the live read agrees with the engine on every tick -- which is
+  // exactly why it has to be right on the day it is.
+  #key(monster) {
+    return monster.number === null || monster.number === undefined ? "index:" + monster.index : monster.number;
+  }
+
   #rememberFrames(monsters) {
     for (const monster of monsters) {
-      const previous = this.targets.get(monster.number);
+      const previous = this.targets.get(this.#key(monster));
       const now = { at: Date.now(), frame: monster.frame, position: monster.position };
       if (!previous) {
-        this.targets.set(monster.number, {
+        this.targets.set(this.#key(monster), {
           number: monster.number,
           classname: this.#nameFor(monster),
           modelindex: monster.modelindex,
@@ -835,23 +860,33 @@ export class PlayLoop {
   // speed, which is what the lead needs; with none in flight the loop keeps the
   // documented default and reports how many it actually measured.
   #measureBolts(entities) {
-    if (!this.boltPrevious) this.boltPrevious = new Map();
     const now = Date.now();
+    const inTheAir = [];
+    for (const entity of entities) {
+      if (!entity) continue;
+      if (entity.modelindex !== this.options.boltModel) continue;
+      if (entity.solid === MONSTER_SOLID) continue; // a monster, not a bolt
+      inTheAir.push(entity);
+    }
     // How many bolts are in the air at once, which is the only direct evidence
     // that pulling the trigger did anything: a bolt is an entity of its own,
     // and the live array is where it is.
-    let inFlight = 0;
-    for (const entity of entities) {
-      if (entity && entity.modelindex === this.options.boltModel && entity.solid !== MONSTER_SOLID) inFlight += 1;
-    }
-    this.boltsInFlight = Math.max(this.boltsInFlight || 0, inFlight);
-    if (inFlight > 0) this.boltFrames = (this.boltFrames || 0) + 1;
-    this.boltSamplesCur = inFlight;
+    this.boltsInFlight = Math.max(this.boltsInFlight || 0, inTheAir.length);
+    if (inTheAir.length > 0) this.boltFrames = (this.boltFrames || 0) + 1;
+    this.boltSamplesCur = inTheAir.length;
+    // The speed is measured between THIS tick's bolts and the PREVIOUS tick's,
+    // and the previous tick's are thrown away rather than accumulated.
+    //
+    // An entity number is a slot the engine reuses, so a sample kept until that
+    // slot next holds a bolt can be seconds old and can be of a *different*
+    // bolt: the distance between the two is then a number that mixes positions
+    // and time, and its ratio is a speed the lead would go on to believe. With
+    // the map rebuilt every tick, an entry can only ever mean "this slot held a
+    // bolt one tick ago".
     let fastest = null;
-    for (const entity of entities) {
-      if (!entity || entity.modelindex !== this.options.boltModel) continue;
-      if (entity.solid === MONSTER_SOLID) continue; // a monster, not a bolt
-      const before = this.boltPrevious.get(entity.number);
+    const wasInTheAir = this.boltPrevious;
+    for (const entity of inTheAir) {
+      const before = wasInTheAir ? wasInTheAir.get(entity.number) : null;
       if (!before) continue;
       const seconds = Math.max(0.001, (now - before.at) / 1000);
       const speed = Math.hypot(
@@ -861,11 +896,7 @@ export class PlayLoop {
       ) / seconds;
       if (speed > 400 && speed < 6000 && (!fastest || speed > fastest)) fastest = speed;
     }
-    for (const entity of entities) {
-      if (entity && entity.modelindex === this.options.boltModel && entity.solid !== MONSTER_SOLID) {
-        this.boltPrevious.set(entity.number, { at: now, position: entity.position });
-      }
-    }
+    this.boltPrevious = new Map(inTheAir.map((entity) => [entity.number, { at: now, position: entity.position }]));
     if (fastest !== null) {
       this.boltSpeed = this.boltSamples === 0 ? fastest : this.boltSpeed * 0.5 + fastest * 0.5;
       this.boltSamples += 1;
@@ -873,7 +904,7 @@ export class PlayLoop {
   }
 
   #lead(player, monster) {
-    const record = monster.number === null ? null : this.targets.get(monster.number);
+    const record = monster.number === null ? null : this.targets.get(this.#key(monster));
     return leadPoint(player, monster.position, record ? record.velocity : null, {
       boltSpeed: this.boltSpeed,
       leadFactor: this.options.leadFactor,
@@ -911,7 +942,7 @@ export class PlayLoop {
 
   #isAlive(monster) {
     if (monster.source === "map-entity-lump") return true;
-    const record = this.targets.get(monster.number);
+    const record = this.targets.get(this.#key(monster));
     if (!record) return true;
     // A monster the server has stopped sending is gone. The live reader only
     // returns entities that are in this frame, so a record that has not been
@@ -1237,7 +1268,7 @@ export class PlayLoop {
       if (this.trail.length > 4000) this.trail.shift();
     }
     // Kills: a monster this loop has seen alive and is no longer seeing at all.
-    const seen = new Set(monsters.map((monster) => monster.number));
+    const seen = new Set(monsters.map((monster) => this.#key(monster)));
     for (const [number, record] of this.targets) {
       if (record.killed) continue;
       if (seen.has(number)) { record.lastSeen = Date.now(); continue; }

@@ -171,10 +171,13 @@ const liveStateExpression = () => `(function () {
   const out = hook ? hook.state() : { read: { ok: false, reason: "NO_HOOK" }, watch: null };
   let entities = null;
   let entityReason = null;
+  let entitiesFrom = null;
   try {
     if (hook && typeof hook.entities === "function") {
       entities = hook.entities();
+      entitiesFrom = "page-hook";
     } else if (typeof wasmMemory !== "undefined" && wasmMemory) {
+      entitiesFrom = "bridge-memory";
       entities = (function () {
         const buf = wasmMemory.buffer;
         const dv = new DataView(buf);
@@ -246,7 +249,7 @@ const liveStateExpression = () => `(function () {
       break;
     } catch (error) { /* not this build's layout */ }
   }
-  return JSON.stringify({ read: out.read, watch: out.watch, entities: entities, entityReason: entityReason, map: map });
+  return JSON.stringify({ read: out.read, watch: out.watch, entities: entities, entityReason: entityReason, entitiesFrom: entitiesFrom, map: map });
 })()`;
 
 // The engine's own key bindings, as a list of { key, command }, after the last
@@ -2761,7 +2764,12 @@ export class QuakeControl {
       entities,
       entityCount: entities ? entities.length : null,
       entityReason: parsed.entityReason || null,
-      entitiesSource: entities ? (parsed.entityReason ? "bridge-memory" : "page-hook") : null,
+      // Which reader produced the list, as the page reported it -- not as this
+      // method guessed it. The guess used to be "no error means the page hook
+      // did it", and the page the kiosk serves carries no `entities()` at all,
+      // so every run of the loop recorded `page-hook` for a list this bridge
+      // had walked out of the WASM memory itself.
+      entitiesSource: entities ? (parsed.entitiesFrom || "unknown") : null,
       map: parsed.map || null,
       mapSource: parsed.map ? "console-log" : null,
       // Whether the console was left alone on this read, for a caller that

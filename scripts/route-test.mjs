@@ -13,7 +13,7 @@ import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
 import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
-import { bearingTo, shortestTurn, leadPoint, readMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
+import { bearingTo, shortestTurn, leadPoint, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -941,6 +941,16 @@ check("an item and a brush model are not", live.every((m) => m.modelindex !== 46
 // the whole reason the box is part of the test.
 const withBolt = readMonsters([...entities, { number: 99, position: { x: 100, y: 100, z: 40 }, modelindex: MONSTER_MODELS[0], solid: 16 }]);
 check("the bolt that shares a monster's model index is not a monster", withBolt.length === 2, withBolt.map((m) => m.number));
+// The fallback the loop takes when the live read stops agreeing gives every
+// monster `number: null`, and the loop keys its per-monster record on the
+// number. What makes that safe is that each of these also carries its own
+// `index`, which is what the loop keys on instead -- so this is the property
+// that fix depends on, and it is checked rather than assumed.
+const statics = staticMonsters(map);
+check("the static fallback gives every monster an index of its own, so none is keyed on the same null twice",
+  statics.length > 0 && new Set(statics.map((m) => m.index)).size === statics.length &&
+  statics.every((m) => m.number === null && m.source === "map-entity-lump"),
+  { monsters: statics.length, distinctIndexes: new Set(statics.map((m) => m.index)).size });
 
 console.log("the target ranking is distance and off-course, and the close override");
 const from = { x: 0, y: 0, z: 0 };
