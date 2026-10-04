@@ -242,10 +242,36 @@ export const ENGAGE_DEFAULTS = {
   weapon: null,
   // How a firing leg moves while the trigger is down: "advance" keeps walking
   // the route (the way this walked before the option existed), "retreat" backs
-  // along the route away from the soldier being shot, "hold" stands. "adapt"
+  // along the route away from the soldier being shot, "hold" stands, "sprint"
+  // walks the route with the *view* on the route as well -- see below. "adapt"
   // tries each in turn and then follows the health the fight actually cost --
   // see #fireMode, which is the measurement this option exists for.
   fireWhile: "advance",
+  // "sprint" is the one way of firing in which the leg does not look at the
+  // soldier it is shooting at.
+  //
+  // Every other mode holds the view on the soldier and expresses the route as a
+  // *strafe* (see movementKeys), which is the trade the file's own measurements
+  // were built on: it keeps the aim on the target while the player keeps moving.
+  // On open ground that is free. In a corridor it is not, and demo1's exit
+  // corridor is where the `finish` runs die. The measured corridor legs cover 20
+  // to 90 units against the 175 an average leg covers, and the legs that took a
+  // whole life cover 30, 18, 65 and 68 while the burst lands (80 to 100 health
+  // gone inside one leg with a soldier 86 to 188 units away). A leg that has
+  // turned its view onto a soldier standing off the line of a corridor has
+  // nothing left but strafe and back to walk with, and both of those walk the
+  // player *into the wall* the corridor is made of -- which is exactly the
+  // posture the level kills in: a player who is not moving is hit by every bolt
+  // a soldier fires, and at 300 units a second the bolts are aimed where the
+  // player was.
+  //
+  // So a sprint leg looks where it is going, holds forward, and fires the
+  // blaster down its own path. The blaster costs no ammo and the soldiers it
+  // passes are in front of it often enough to be worth the free bolts; what the
+  // mode buys is the ground, and the ground is the whole defence. It is a mode
+  // and not a rewrite: `advance` still means what every run before this one was
+  // measured with, and a run that wants the sprint asks for it by name.
+  //
   // ...and "kite", which is not a direction but a rule: back along the route
   // away from a soldier that has closed inside this many units, and advance
   // otherwise. Read off the per-leg health series rather than chosen, because
@@ -304,6 +330,45 @@ export const ENGAGE_DEFAULTS = {
   // between the bearing the leg had and the bearing the nudge would give it, so
   // a point on a straight run takes a pickup beside it and a corner does not.
   pickupTurn: 45,
+  // What a *weapon* beside a step of the plan may cost to collect, as the round
+  // trip out to it and back, and how far off the line it may stand.
+  //
+  // A weapon is not a top-up: it changes what the fight costs for the rest of
+  // the life. The measured arithmetic of demo1's exit route is that the walker
+  // needs about 375 health of soldiers cleared and is given about 165, and the
+  // 210 that is missing is the whole gap -- the deepest `finish` runs end in the
+  // exit corridor at 1 health with the level's own plan unspent. A soldier takes
+  // three blaster bolts and the blaster is what the level starts the player
+  // with; the level also *offers* a super shotgun with three boxes of shells
+  // 391 units from the spawn, which is a soldier per shot instead of a soldier
+  // per exchange. That is the trade these two knobs exist to make available, and
+  // they are set from the level's own geometry rather than picked: the
+  // `weapon_supershotgun` at 200 64 stands 322 units off the route's first step
+  // (so the round trip is 644) and the `weapon_machinegun` at -1952 1304 stands
+  // 69 off a later one. 700 is above the first and below the next weapon out,
+  // the `weapon_shotgun` at 713, which is on a floor the route does not visit.
+  //
+  // **Measured, and left off.** A 24-attempt `finish` run with these at 400 and
+  // 700 put the gun and three boxes of shells into the plan (37 points to 46)
+  // and walked them -- and the player ended every life with the blaster in hand:
+  // no ammo number ever appeared on the status bar, so the walk went out to the
+  // gun without taking it, and the whole detour was 600 units of walking through
+  // two soldiers for nothing. Its deepest reading was 632 units short against
+  // 719 for the run without it, which is inside this level's run-to-run spread
+  // and is not claimed for a weapon that never arrived. 0 is the measured
+  // default; the mechanism is kept because the fault it has is the *pickup*
+  // (see `gearOvershoot`), not the idea.
+  gearRange: 0,
+  gearDetour: 0,
+  // ...and how far past the item the last step of that way out stands. See
+  // `past` in `pickupDetours`: the walk has to *cross* the item, and `goto`
+  // answers `reached` inside `max(24, tolerance/2)` -- 48 units on a `finish`
+  // run -- so a step this side of that radius can be stopped short of, on the
+  // near side of the item it came for. Measured on demo1's own plan: 64 keeps
+  // the gun and three boxes of shells in the plan, 80 keeps two, 96 keeps one,
+  // and 110 or more puts the step off the floor and the level's whole way out to
+  // a weapon is refused. 96 is the largest that still pays for the gun.
+  gearOvershoot: 96,
   // What a pickup beside a *step* of the plan may cost to collect, as the round
   // trip out to it and back to the line. This is the bound that does the work
   // `pickupTurn` cannot do for an insert (see `pickupDetours`), and it is set
@@ -567,8 +632,20 @@ export class CombatWalker extends RouteWalker {
     // passes within `pickupRange` of are ever aimed at (see snapPickups), so
     // this is a list of things the level offers rather than a list of errands.
     this.pickups = (map && map.waypoints ? map.waypoints("item") : [])
-      .filter((item) => item.position && /^item_(health|armor)/.test(item.classname))
-      .map((item) => ({ classname: item.classname, position: finitePoint(item.position) }))
+      // Health and armour are top-ups on the way past; a weapon, and the shells
+      // that make it worth having, are `gear` and are allowed a detour of their
+      // own (see `gearDetour`). The blaster is left out: it is what the level
+      // starts the player with, so a route to one is a route to where they
+      // already are.
+      .filter((item) => item.position && (/^item_(health|armor)/.test(item.classname) ||
+        (numberOr(this.engage.gearDetour, 0) > 0 &&
+          ((/^weapon_/.test(item.classname) && !/_blaster$/.test(item.classname)) ||
+            item.classname === "ammo_shells"))))
+      .map((item) => ({
+        classname: item.classname,
+        position: finitePoint(item.position),
+        gear: !/^item_(health|armor)/.test(item.classname),
+      }))
       .filter((item) => item.position);
     // The plan the pickups were snapped onto, and the snapped points. A plan is
     // a fresh array on every re-plan, so the array itself is the cache key.
@@ -706,8 +783,12 @@ export class CombatWalker extends RouteWalker {
       // above has already had its chance at it.
       if (!(t > 0.12 && t < 0.88)) continue;
       const off = Math.hypot(pickup.position.x - (from.x + vx * t), pickup.position.y - (from.y + vy * t));
-      if (off > range) continue;
-      if (off * 2 > numberOr(this.engage.pickupDetour, ENGAGE_DEFAULTS.pickupDetour)) continue;
+      // A weapon is worth more of the walk than a top-up is, and is allowed
+      // further off the line and a longer way out to it: see `gearDetour`.
+      const reach = pickup.gear ? numberOr(this.engage.gearRange, ENGAGE_DEFAULTS.gearRange) : range;
+      const cost = pickup.gear ? numberOr(this.engage.gearDetour, ENGAGE_DEFAULTS.gearDetour) : numberOr(this.engage.pickupDetour, ENGAGE_DEFAULTS.pickupDetour);
+      if (off > reach) continue;
+      if (off * 2 > cost) continue;
       found.push({ pickup, key, t, off });
     }
     found.sort((a, b) => a.t - b.t);
@@ -755,13 +836,69 @@ export class CombatWalker extends RouteWalker {
       // part of that same step would refuse the route's own ground.
       const walkable = (a, b) => clearWalk(this.map, a, b, { radius: this.engage.bodyRadius }) ||
         clearWalk(this.map, a, b, { radius: 0 });
-      if (!walkable(previous, via)) continue;
-      if (!walkable(via, detour)) continue;
-      if (!walkable(detour, to)) continue;
+      // A weapon stands further off the line than a top-up does, and a plan is
+      // walked point by point inside `walkReach` (see #walkPoint) -- so a single
+      // long step out to the gun is a step the walk *skips*, and the gun is left
+      // standing while the walk cuts the corner it was inserted to remove. The
+      // way out to it is therefore inserted as short steps of its own, and a
+      // last step stands `gearOvershoot` units *past* the item: a pickup is
+      // taken by walking over it, and a leg aimed exactly at an item stops
+      // inside its own arrival radius and never touches it.
+      const waypoints = [via];
+      if (pickup.gear) {
+        const dx = detour.x - via.x;
+        const dy = detour.y - via.y;
+        const span = Math.hypot(dx, dy);
+        const pieces = Math.max(1, Math.ceil(span / (numberOr(this.engage.walkReach, 240) * 0.8)));
+        let split = false;
+        for (let k = 1; k < pieces; k++) {
+          const t = k / pieces;
+          const x = via.x + dx * t;
+          const y = via.y + dy * t;
+          const z = floorNear(this.map, x, y, chord, this.engage);
+          if (z === null) { split = true; break; }
+          waypoints.push({ x, y, z, gear: true });
+        }
+        if (split) continue;
+      }
+      if (pickup.gear) detour.gear = true;
+      if (pickup.gear) {
+        const span = Math.hypot(detour.x - via.x, detour.y - via.y);
+        if (span > 0) {
+          // The step past the item comes *before* it in the plan, so the walk
+          // crosses the item on the way out and again on the way back. A leg
+          // aimed straight at a pickup stops inside `goto`'s own arrival radius
+          // and a pickup has to be touched, not reached: this is what makes the
+          // walk go over it rather than stop beside it.
+          //
+          // How far past is `gearOvershoot` and not a number picked here: see
+          // the measurement there. A `finish` run walks with a tolerance of 96
+          // and `goto` answers `reached` inside 48, so a step only just past the
+          // item is a step the walk can stop short of, on the near side of the
+          // item it came for -- measured on the 24-attempt gear run, the plan
+          // carried the gun and the player ended every life with the blaster in
+          // hand and no ammo number on the status bar.
+          const past = {
+            x: detour.x + ((detour.x - via.x) / span) * numberOr(this.engage.gearOvershoot, ENGAGE_DEFAULTS.gearOvershoot),
+            y: detour.y + ((detour.y - via.y) / span) * numberOr(this.engage.gearOvershoot, ENGAGE_DEFAULTS.gearOvershoot),
+            gear: true,
+          };
+          past.z = floorNear(this.map, past.x, past.y, detour.z, this.engage);
+          if (past.z !== null) waypoints.push(past);
+        }
+      }
+      waypoints.push(detour);
+      let cursor = previous;
+      let broken = false;
+      for (const step of waypoints) {
+        if (!walkable(cursor, step)) { broken = true; break; }
+        cursor = step;
+      }
+      if (broken) continue;
+      if (!walkable(cursor, to)) continue;
       claimed.add(candidate.key);
-      out.push(via);
-      previous = detour;
-      out.push(detour);
+      for (const step of waypoints) out.push(step);
+      previous = waypoints[waypoints.length - 1];
     }
     return out;
   }
@@ -984,6 +1121,23 @@ export class CombatWalker extends RouteWalker {
       const distance = Math.hypot(points[index].x - position.x, points[index].y - position.y);
       if (distance < best) { best = distance; nearest = index; }
     }
+    // The way out to a weapon is walked one point at a time.
+    //
+    // Every other point of a plan may be cut round: the search below takes the
+    // farthest point inside `walkReach` that can be walked to, which on a plan
+    // that goes out to an item and comes back takes the *return* -- the re-join
+    // is nearer than the item is, and it stands later in the plan -- and leaves
+    // the item standing. Measured on demo1's own plan with the gun inserted: the
+    // leg out of the first point aimed at the route 96 units back on the line
+    // and never went near the gun at 322. A weapon's way out is therefore
+    // exempt: its next point is walked, whatever the search would rather do.
+    for (let index = nearest + 1; index < points.length && index - nearest <= this.engage.walkAhead; index++) {
+      const step = points[index];
+      if (!step.gear) break;
+      // ...and never at one the player is already standing inside `goto`'s own
+      // arrival radius of: such a leg is spent without taking a step.
+      if (Math.hypot(step.x - position.x, step.y - position.y) > this.engage.minLegReach) return step;
+    }
     // The player's feet, because a route point is a floor and the engine reports
     // the eye (see EYE_ABOVE_FEET).
     const feet = { x: position.x, y: position.y, z: position.z - EYE_ABOVE_FEET };
@@ -1077,6 +1231,13 @@ export class CombatWalker extends RouteWalker {
     // corner, because the points it aims at are points the planner cleared.
     const near = this.#walkPoint(position, points);
     const route = near || super._legTarget(position, points);
+    // A leg that is walking over a weapon has just picked it up, and a weapon
+    // picked up is not a weapon in hand: the engine's own `use <weapon>` binding
+    // has to be pressed again for the kill to be fought with it. The press is
+    // asked for once per life (`#ensureWeapon`), so the asking is forgotten here
+    // and the next firing leg asks again -- which is what makes the switch land
+    // on the leg after the pickup rather than never.
+    if (route && route.pickup && /^weapon_/.test(route.pickup.classname)) this.weaponAsked = null;
     if (!route || !this.enemies.length) return route;
     const bearing = bearingTo(position, route);
     const found = threats(this.map, position, {
@@ -1335,7 +1496,12 @@ export class CombatWalker extends RouteWalker {
     // advance, which is not a retreat guarded, it is a retreat deleted.
     if (kiting && mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
     const walk = mode === "retreat" ? walkBearing + 180 : walkBearing;
-    let keys = mode === "hold" ? [] : movementKeys(facing, walk);
+    // Where the leg *looks*. Every way of firing but one looks at the soldier it
+    // is shooting at and walks the route as a strafe; a sprint leg looks at the
+    // route instead, so that the keys that walk it are forward rather than a
+    // sideways step into whatever the corridor is made of. See `fireWhile`.
+    const look = mode === "sprint" ? walk : facing;
+    let keys = mode === "hold" ? [] : movementKeys(look, walk);
     let heldMs = 0;
     let health = null;
     try {
@@ -1365,7 +1531,7 @@ export class CombatWalker extends RouteWalker {
           : facing;
         await holdKeys(mode === "hold" ? [] : movementKeys(preYaw, walk));
       }
-      aimed = await this.game.face(facing, { ...aimOptions, turn: options.aimTurn || this.engage.aimTurn });
+      aimed = await this.game.face(look, { ...aimOptions, turn: options.aimTurn || this.engage.aimTurn });
       // A turn still has to be taken. The mouse is this leg's first choice and
       // not its only one: if it did not land the aim, one more try is made the
       // bridge's own way, which is the order that puts a retired method back on
@@ -1382,7 +1548,7 @@ export class CombatWalker extends RouteWalker {
       // measured `finish` run's leg record.
       if (aimed && !aimed.facing) {
         const { from: _spent, ...fresh } = aimOptions;
-        const again = await this.game.face(facing, { ...fresh, rounds: 2, turn: "auto" });
+        const again = await this.game.face(look, { ...fresh, rounds: 2, turn: "auto" });
         // The latest word wins even when it is a miss. The retry has turned the
         // player, so the first attempt's `yaw` is no longer where the view is,
         // and `viewYaw` below is what the walk's keys are computed from -- a leg
@@ -1559,7 +1725,10 @@ export class CombatWalker extends RouteWalker {
       combat: {
         enemiesInLevel: this.enemies.length,
         firingLegs: this.fights.length,
-        onTarget: this.fights.filter((fight) => fight.aimed).length,
+        // Legs whose turn landed on a *soldier*. A sprint leg turns onto the way
+        // it is going and not onto a soldier at all, so counting it here would
+        // report a fight the leg never took (see `fireWhile`).
+        onTarget: this.fights.filter((fight) => fight.aimed && fight.fireMode !== "sprint").length,
         healthReadings: measured.length,
         // A restart puts the player back at 100, so this is the lowest the
         // fight ever took them, not the lowest reading of one life.
