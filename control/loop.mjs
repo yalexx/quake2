@@ -126,6 +126,18 @@ export const EF_BLASTER = 0x8;
 // that shares its model index.
 export const MONSTER_SOLID = 8290;
 
+// The weapons whose shot lands where the crosshair is. Quake 2 throws a bolt
+// for the blaster and the hyperblaster and a rocket for the launcher, and those
+// have to be led; a shotgun pellet, a bullet and a rail slug are there in the
+// frame the trigger falls, and leading one is aiming at where the target was
+// about to be rather than where it is. The loop's default `boltSpeed` of 1000
+// units per second is the blaster's, which is the gun the spawn hands over --
+// and leading a hitscan weapon by a target's own walk over a third of a second
+// is a miss of up to 30 units against a soldier 32 wide.
+export const HITSCAN_WEAPONS = new Set([
+  "weapon_shotgun", "weapon_supershotgun", "weapon_machinegun", "weapon_chaingun", "weapon_railgun",
+]);
+
 // ---------------------------------------------------------------------------
 // The levers
 // ---------------------------------------------------------------------------
@@ -141,12 +153,50 @@ export const PLAY_DEFAULTS = {
   engageRange: 1100,
   engageArc: 100,
   answerRange: 340,
-  minimumRange: 40,
+  // Inside this range a monster is walked out of rather than turned for -- and
+  // it used to be 40, which is wider than the gap a player and a soldier can
+  // stand apart when the soldier is standing on them. A monster whose own body
+  // is what the walk is pressed against was therefore not a target at all, and
+  // the recovery ladder spent a whole run stepping sideways off the one thing
+  // in the way. The loop holds the trigger at point blank now; a blaster kills a
+  // soldier in three bolts.
+  minimumRange: 16,
   // How close a monster has to come to count as "met". The owner's second
   // success condition is "kill everything you meet", so what "meet" means has
   // to be a number and not a feeling: the same range at which a soldier is
   // worth answering, which is where the level's own soldiers open fire.
   metRange: 1100,
+  // Stop and kill. A monster inside this range with a clear shot is worth
+  // standing still for -- see `#tick`'s own note for the run that argued for it
+  // (fifteen met, two killed, 48 to 79 points of damage per attempt, every bit
+  // of it fired while walking past). `engageHoldMs` is the clock that keeps
+  // "stop and kill" from becoming the retreat that never ended: past it the
+  // walk takes the lead back even if the target is still standing.
+  stopRange: 520,
+  engageHoldMs: 1400,
+  // How far out of its way the walk will go for a monster it has met, and how
+  // long it will spend going there before leaving it. The range is the met
+  // range: a monster the condition counts as met is a monster the walk is
+  // allowed to turn for. Set `QUAKE2_HUNT_RANGE=0` to turn the whole thing off
+  // and get back the walk that only shoots what crosses it.
+  huntRange: 1100,
+  huntGiveUpMs: 8000,
+  // How far off the plan a monster may stand and still be hunted. This is the
+  // guard the first version of the hunt did not have, and it cost a whole run:
+  // a hunt walks at its target down a straight line that the level's own
+  // geometry says is walkable, and a monster that wanders into a side room takes
+  // the walk with it -- out of the corridor, into a pocket the route does not
+  // enter, with the route follower unable to find its way back (measured: one
+  // run pinned at -428 678 for eleven thousand ticks, 1282 units from the exit,
+  // never finishing). `huntRange` bounds how far away the monster may be;
+  // this bounds how far off the way out the walk will leave the plan for it.
+  huntNearPlan: 250,
+  // How long the walk may go without GETTING CLOSER to its hunt before leaving
+  // it, and how much closer counts. 24 units in 2.5 seconds is coarse on
+  // purpose: this is a test for "pressed against something", not a speed
+  // measurement.
+  huntProgressMs: 2500,
+  huntProgressUnits: 24,
   // The aim has to be inside this before the trigger goes down. At 300 units a
   // 1.6-degree miss passes a 32-unit-wide soldier by well under its own body.
   aimTolerance: 1.6,
@@ -158,13 +208,14 @@ export const PLAY_DEFAULTS = {
   //
   // Both are needed. The gain has to be below one or a controller whose
   // correction arrives a tick late oscillates around the target instead of
-  // settling on it. The scale is a measured property of the box: this build's
-  // mouse turns about 0.13 degrees per count where the bridge's documented
-  // default is 0.066, so a loop that asked for the error in degrees got almost
-  // exactly twice the turn it asked for -- measured, three 20-degree requests
-  // produced 0, 39.4 and 39.4 degrees. The loop therefore measures what its
-  // last turn actually achieved and folds it back in, and the aim converges to
-  // the tolerance however far the default is from the box.
+  // settling on it. The scale is a measured property of the box, and it is the
+  // loop's own fold-back that measures it: the bridge's default used to be
+  // 0.066 counts where this build's mouse turns 0.1302, so a loop that asked
+  // for its error in degrees got almost exactly twice the turn it asked for --
+  // measured, three 20-degree requests produced 0, 39.4 and 39.4 degrees -- and
+  // the scale settled at 0.506 to cancel it. The default is now the measured
+  // 0.1302 (see control/bridge.mjs), so the scale settles at 1.0 instead, and
+  // the fold-back is what is left to correct a box that differs.
   turnGain: 0.5,
   turnScale: 1,
   // ---- the second axis: pitch -------------------------------------------
@@ -241,6 +292,29 @@ export const PLAY_DEFAULTS = {
   errandRange: 900,
   topUpHealth: 70,
   touchRadius: 56,
+  // How close the walk has to come to an errand before it counts as run, and
+  // how long it may keep trying once it is inside `touchRadius`.
+  //
+  // `pickupRadius` is deliberately smaller than the radius at which an item can
+  // be touched, and `touchRadius` deliberately larger than both. The engine
+  // picks an item up when the two boxes MEET -- 32 units of centre distance,
+  // player and item both 32 wide -- and a loop that dropped the errand the
+  // moment it was within 56 was turning for the route while it still had 24
+  // units to go. Measured on this pass's first run: the super shotgun was
+  // called at four times, the key for it was never once pressed, and every drop
+  // of monster health in 203 seconds was a blaster bolt's 10 -- the walk had
+  // never touched the gun. `errandWalkOnMs` is the clock for the case where it
+  // cannot be touched at all (an item wedged where the player cannot stand):
+  // past it the errand is called and the walk goes on rather than circling.
+  pickupRadius: 24,
+  errandWalkOnMs: 1600,
+  // How often the fetched weapon's key is pressed again while the loop believes
+  // it is holding it. A weapon that enters the pack late -- the pickup lands on
+  // the frame between two ticks -- or a switch eaten by a level transition is
+  // corrected within this, without the loop having to know which happened. The
+  // press is idempotent: a key for a gun that is not in the pack selects
+  // nothing.
+  weaponRetapMs: 2000,
   // Keep a per-tick record of what was decided and what the aim looked like.
   // Off by default -- it is a diagnostic, not part of the run -- and the run
   // that needs it is the one where the player is not doing what the loop says.
@@ -255,6 +329,24 @@ export const PLAY_DEFAULTS = {
 // combat.mjs keeps its own copy of these two lines for the same reason.
 export function bearingTo(from, to) {
   return (Math.atan2(to.y - from.y, to.x - from.x) * (180 / Math.PI) + 360) % 360;
+}
+
+// "Am I at the goal?" -- and it is a question about three dimensions, not two.
+//
+// demo1's exit trigger is a volume at `z -24..32` and the way in is a 176-unit
+// drop from a catwalk 96 units up. The player who has walked the catwalk is
+// within 91 units in x/y of the aim point while standing three times that
+// height above the trigger, so the old x/y-only test answered "yes, you are
+// there" on the one ledge the level is built to make you leave -- and both the
+// loop's own arrival decision and its run loop turned on that same answer. The
+// vertical arm is the caller's tolerance for the same reason the horizontal one
+// is: it is the caller who knows how big "here" is.
+export function atGoal(player, goal, tolerance) {
+  const from = point3(player);
+  const to = point3(goal);
+  if (!from || !to) return false;
+  const span = Number.isFinite(tolerance) ? tolerance : 96;
+  return Math.hypot(from.x - to.x, from.y - to.y) <= span && Math.abs(from.z - to.z) <= span;
 }
 
 export function shortestTurn(degrees) {
@@ -460,6 +552,14 @@ export function decide(percept, options = {}) {
     return { mode: "retreat", move: percept.retreatBearing, aim: target.bearing, pitch: atTarget, fire: true, reason: "LOW_HEALTH" };
   }
   if (target) {
+    // `standAndShoot` is the caller's stop-and-kill clock: the target is close
+    // and shootable and the walk has not yet spent its allowance on it, so the
+    // aim and the trigger stay and the walk waits. The caller never sets it for
+    // a target that is out of range or has no line, and it always expires, so a
+    // loop driving `decide()` by hand is unaffected.
+    if (percept.standAndShoot === true && percept.targetClear !== false) {
+      return { mode: "engage", move: null, aim: target.bearing, pitch: atTarget, fire: true, reason: "STOP_AND_KILL" };
+    }
     return { mode: "engage", move: percept.routeBearing, aim: target.bearing, pitch: atTarget, fire: percept.targetClear !== false, reason: "MONSTER_IN_RANGE" };
   }
   // Nothing to shoot: face the way the walk is going. Quake 2 moves a player
@@ -517,6 +617,26 @@ export class PlayLoop {
     this.healthReadAt = 0;
     this.triggerDown = false;
     this.keysHeld = [];
+    // The gun actually in hand, once the walk has fetched one, and the key
+    // presses that put it there (see the errand block in `#tick`).
+    this.weaponInHand = null;
+    this.weaponTap = null;
+    this.weaponEquips = 0;
+    // How long the walk has been standing still for the target it is shooting,
+    // and which target that is (see `stopRange`).
+    this.engageHold = null;
+    this.stopAndShootTicks = 0;
+    this.dropSizes = [];
+    // The monster the walk is going out of its way for, the ones it has given
+    // up on in this life, and the counts the report carries.
+    this.hunt = null;
+    this.givenUp = new Set();
+    this.huntsStarted = 0;
+    this.huntsGivenUp = 0;
+    this.huntNotes = [];
+    // Whether the last tick stood still to shoot. The hunt's progress clock is
+    // judged on the ticks where the walk was actually walking (see `#huntFor`).
+    this.wasStanding = false;
     // What the last turn asked for and where the view was when it asked, so the
     // next tick can fold the achieved turn back into the mouse's own scale.
     this.turnScale = finite(options.turnScale) ? options.turnScale : this.options.turnScale;
@@ -572,7 +692,7 @@ export class PlayLoop {
     // can say what this attempt alone took off the level's monsters.
     this.attemptDamageBase = { damage: 0, events: 0 };
     this.killEvents = [];
-    this.edictRead = { ticks: 0, withHealth: 0, unmatched: 0, originDisagreed: 0, source: null, reason: null };
+    this.edictRead = { ticks: 0, withHealth: 0, unmatched: 0, originDisagreed: 0, usedEdictOrigin: 0, source: null, reason: null };
     this.playerEdictNumber = null;
     this.playerEdictFromEdict = null;
     this.healthCrossCheck = { agreed: 0, disagreed: 0, worst: null };
@@ -656,8 +776,7 @@ export class PlayLoop {
         reason = outcome.reason;
         break;
       }
-      const goalDistance = Math.hypot(position.x - goalPoint.x, position.y - goalPoint.y);
-      if (goalDistance <= tolerance) {
+      if (atGoal(position, goalPoint, tolerance)) {
         reason = "ARRIVED";
         break;
       }
@@ -684,8 +803,8 @@ export class PlayLoop {
     // scale, before this tick decides the next correction. Both axes: they are
     // two mouse deltas and this box's two per-count angles are not the same
     // number.
-    this.#learnTurn(read.angles.yaw);
-    this.#learnPitch(read.angles.pitch);
+    this.#learnTurn(read.angles.yaw, read.dead === true);
+    this.#learnPitch(read.angles.pitch, read.dead === true);
 
     // ---- 1. PERCEIVE ------------------------------------------------------
     const liveEntities = Array.isArray(live.entities) ? live.entities : null;
@@ -723,14 +842,29 @@ export class PlayLoop {
     // one. `#metAndKilled` is the owner's second success condition: what the
     // walk met, and what the GAME says it killed.
     monsters = this.#withHealth(monsters, live, player);
+    // The view the trace reports is the placed list -- the game's own positions
+    // and the game's own health -- and not the client's raw reading it was
+    // built from.
+    this.lastView.monsters = monsters;
     this.#metAndKilled(monsters, player, read.dead === true);
 
-    // ---- 1b. health, from the status bar ----------------------------------
-    // The player's own health: the edict array has it now (the game DLL's own
-    // `g_edicts`, the same array the monsters come from), so it is taken from
-    // there every tick for nothing, and the status bar -- which costs a frame
-    // capture and an image decode -- is kept at its bounded rate as the
-    // independent cross-check it has always been.
+    // ---- 1b. health: the game's own edict, and the bar as a cross-check -----
+    // The player's own health comes from the edict array -- the game DLL's own
+    // `g_edicts`, the same array the monsters come from, read every tick for
+    // nothing -- and ONLY from there. The status bar is still photographed, at
+    // its bounded rate, but it is a cross-check and a series now, never the
+    // number the loop decides on.
+    //
+    // That is a correction this pass measured rather than a preference. The bar
+    // was the value whenever it could be read, so it overwrote the edict's
+    // reading once a second, and the bar is wrong: a crop kept from a run
+    // showed the bar reading 100 while the game's own edict had the player at
+    // 4. The loop decides `retreat` on `health <= lowHealth`, so a bar stuck at
+    // 100 is a loop that never retreats, and a bar stuck at 0 is a loop that
+    // retreats for the whole run -- and the previous pass's own record already
+    // carries both shapes (a run that spent 9904 of 12000 ticks retreating, and
+    // runs that never retreated at all). The edict is the game's own state; the
+    // bar is a picture of it.
     let health = this.lastView.health;
     const fromEdict = this.#playerHealth(live, player);
     if (fromEdict !== null) {
@@ -745,6 +879,8 @@ export class PlayLoop {
         this.edictHealth.push({ at: Date.now(), health: fromEdict, tick: this.lastView.tick });
         if (this.edictHealth.length > 4000) this.edictHealth.shift();
       }
+    } else {
+      this.lastView.healthSource = health === null ? "none" : "last-known";
     }
     if (tickStart - this.healthReadAt >= options.healthReadMs && !read.dead) {
       this.healthReadAt = tickStart;
@@ -753,9 +889,7 @@ export class PlayLoop {
         const shot = await hudShot(this.game);
         const reading = readHealth(shot.png, shot.readOptions);
         if (finite(reading.health)) {
-          health = reading.health;
-          this.lastView.health = health;
-          this.healthSeries.push({ at: Date.now(), health, armour: reading.armour, tick: this.lastView.tick });
+          this.healthSeries.push({ at: Date.now(), health: reading.health, armour: reading.armour, tick: this.lastView.tick });
           // The status bar is the independent reader: it is the number the
           // engine DRAWS, and it owes nothing to the offset the edict array was
           // read from. One outside the other is a fault in this pass's sensor and
@@ -767,12 +901,10 @@ export class PlayLoop {
               this.healthCrossCheck.disagreed += 1;
               this.healthCrossCheck.worst = this.healthCrossCheck.worst === null ? gap : Math.max(this.healthCrossCheck.worst, gap);
               if (this.healthCrossCheck.disagreed === 1) {
-                this.note("the status bar and the game's own edict disagree about the player's health: bar " + reading.health + ", edict " + fromEdict);
+                this.note("the status bar and the game's own edict disagree about the player's health: bar " + reading.health + ", edict " + fromEdict + " (the loop keeps the edict's number)");
               }
             }
           }
-        } else if (read.dead) {
-          health = null;
         }
       } catch (error) {
         if (this.healthSeries.length === 0) this.note("the status bar could not be read: " + error.message);
@@ -792,15 +924,95 @@ export class PlayLoop {
     // loop will fight -- a monster in the way is still engaged.
     this.errand = this.#activeErrand(player, health);
     if (this.errand) {
-      const distance = Math.hypot(this.errand.position.x - player.x, this.errand.position.y - player.y);
-      if (distance <= options.touchRadius) {
-        this.errand.taken = true;
-        this.errandsRun.push({ classname: this.errand.classname, call: this.errand.call, at: Date.now(), distanceToExit: this.deepest ? Math.round(this.deepest.distance) : null });
-        this.note("called at the level's own " + this.errand.classname, { call: this.errand.call });
+      const errand = this.errand;
+      const distance = Math.hypot(errand.position.x - player.x, errand.position.y - player.y);
+      // Is the level's own item actually IN the world? The errand list is built
+      // from the level's entity lump -- what the author placed -- and the game
+      // does not have to keep it. Measured on this pass: of demo1's sixty
+      // `weapon_`/`ammo_`/`item_` entities, every ammo box and every health box
+      // has an edict within one unit of where the lump puts it and the
+      // super shotgun has NONE -- the nearest record to (200 64 16) is a barrel
+      // seventy units away. The engine's own answer, asked over the console, is
+      // the same: `use Super Shotgun` reads *"Out of item: Super Shotgun"*.
+      // The weapon the walk has been making a 414-unit detour for, at the start
+      // of every life, is not there to be picked up.
+      const present = this.#itemPresent(live, errand.position);
+      if (present === true) errand.seenPresent = true;
+      // Inside `touchRadius` the walk keeps coming -- see `pickupRadius` above
+      // for why being near an errand is not the same as having run it.
+      if (!errand.closing && distance <= options.touchRadius) {
+        errand.closing = { since: tickStart, closest: distance };
+      }
+      const walkedOn = distance <= options.pickupRadius;
+      // "Collected" is the item's own record going away, and the player has to be
+      // where the item is for that to mean a pickup: the edict walk can miss a
+      // slot for one tick on its own (a save, a level transition, the buffer
+      // being re-taken), and a single absent reading must not be read as a gun
+      // taken into the hand. `missing` is the opposite case and is deliberately
+      // NOT gated on distance -- an item the level never spawned has to be
+      // recognised from wherever the walk happens to be standing.
+      const collected = errand.seenPresent === true && present === false && distance <= options.touchRadius;
+      const missing = errand.seenPresent !== true && present === false;
+      const gaveUp = errand.closing && tickStart - errand.closing.since >= options.errandWalkOnMs;
+      if (walkedOn || collected || missing || gaveUp) {
+        const taken = errand;
+        taken.taken = true;
+        this.errandsRun.push({
+          classname: taken.classname, call: taken.call, at: Date.now(),
+          distanceToExit: this.deepest ? Math.round(this.deepest.distance) : null,
+          distance: Math.round(distance), walkedOn,
+          collected, missing,
+          gaveUp: gaveUp === true && !walkedOn && !collected && !missing,
+        });
+        // Only a gun that is really in the hand is a gun the loop equips: a
+        // press for an item the game never had selects nothing, and recording
+        // it as "the gun the walk fetched" is the report claiming a weapon the
+        // run did not have.
+        if (taken.call === "weapon" && (walkedOn || collected) && !missing) this.#equip(taken);
+        this.note("called at the level's own " + taken.classname, {
+          call: taken.call, distance: Math.round(distance),
+          touched: missing ? "not in the world: nothing to walk to"
+            : collected ? "picked up (its own entity is gone)"
+              : walkedOn ? "walked onto it" : "could not be reached, walked on",
+        });
         this.errand = null;
       }
     }
-    const moveBearing = this.errand ? bearingTo(player, this.errand.position) : heading;
+    // A gun on the floor is not a gun in hand, and this loop had never once
+    // pressed the key that makes it one.
+    //
+    // Measured on the first run of this pass: the walk collected the level's
+    // own super shotgun four times in one run -- the errand record says so --
+    // and fought every one of the 203 seconds with the blaster the spawn hands
+    // over. The loop's own note reads *"called at the level's own
+    // weapon_supershotgun"* and nothing after it presses a key; the run's only
+    // weapon press happens in `scripts/demo1-run.mjs` BEFORE the walk, when the
+    // player does not own the gun yet, so it selects nothing. The evidence for
+    // which weapon was really in hand is the game's own damage: every drop the
+    // run recorded was a blaster bolt's worth (10, and 2 to 5 where the sample
+    // landed mid-burst), 314 points over 48 drops.
+    //
+    // The press is repeated for a moment after the pickup for the same reason
+    // the pickup is a radius: `touchRadius` is 56 units and the engine hands the
+    // gun over on the frame the player's box meets it, which is not necessarily
+    // the tick the loop noticed. A key pressed a few hundred milliseconds early
+    // selects nothing, and a key pressed repeatedly costs nothing.
+    if (this.weaponTap && tickStart >= this.weaponTap.nextAt) {
+      const key = this.weaponTap.key;
+      this.weaponTap.left = Math.max(0, this.weaponTap.left - 1);
+      // Four presses 400 ms apart cover the moment of the pickup; after that one
+      // every `weaponRetapMs` keeps the answer true for the rest of the life, at
+      // the cost of a key event the engine ignores when there is nothing to
+      // select.
+      this.weaponTap.nextAt = tickStart + (this.weaponTap.left > 0 ? 400 : options.weaponRetapMs);
+      if (key && typeof this.game.tap === "function") await this.game.tap(key).catch(() => {});
+    }
+    // The hunt, if one is owed: a monster this walk has met and not killed, that
+    // it can actually walk to. It takes the walk's bearing the same way an
+    // errand does, and for a bigger reason -- see `#huntFor`.
+    const hunt = this.#huntFor(monsters, player, tickStart);
+    const walkToward = this.errand ? this.errand.position : (hunt ? hunt.position : null);
+    const moveBearing = walkToward ? bearingTo(player, walkToward) : heading;
     const ranked = rankTargets(monsters, player, {
       engageRange: options.engageRange,
       engageArc: options.engageArc,
@@ -845,9 +1057,48 @@ export class PlayLoop {
           pitch: aimPitch(player, this.#lead(player, chosen)),
         }
       : null;
-    const stuck = this.#stuckNow(player, tickStart);
+    // ---- stop and kill ----------------------------------------------------
+    // A target inside `stopRange` with a clear shot is a target worth standing
+    // still for, for a moment.
+    //
+    // This is the second condition's own blocker, measured. On the first run of
+    // this pass the loop met 15 soldiers in every long attempt and killed 1 or
+    // 2 of them, taking 48 to 79 points of damage off them in 34 to 54 seconds
+    // -- and every one of those points was fired while WALKING PAST. The trace
+    // says so tick by tick: an engagement opens with the target 18 to 33 degrees
+    // off the way forward, the controller swings the view onto it over the next
+    // six to eight ticks, the trigger gets one burst, and by then the target has
+    // gone past the player's shoulder and out of the arc. Fifteen soldiers met,
+    // fifteen walked past, two killed by a burst apiece.
+    //
+    // The hold is a clock and not a mode, for the reason the retreat clock
+    // exists: a walk that stops is a walk that cannot finish, and an attempt is
+    // worth more than a kill. Past `engageHoldMs` on one target the walk takes
+    // the lead back, still firing. A new target gets a new clock, so clearing a
+    // corridor is a sequence of short holds rather than one long one.
+    const stopTarget = chosen && clear && chosen.distance <= options.stopRange ? chosen : null;
+    if (!stopTarget) {
+      this.engageHold = null;
+    } else if (!this.engageHold || this.engageHold.number !== stopTarget.number) {
+      this.engageHold = { number: stopTarget.number, since: tickStart, health: stopTarget.health };
+    } else if (finite(stopTarget.health) && finite(this.engageHold.health) && stopTarget.health < this.engageHold.health) {
+      // The shots are landing. A target this loop is demonstrably hurting is
+      // worth standing for until it goes down -- the clock runs from the last
+      // time its own health fell, so a fight that is being won is finished and
+      // a monster the loop cannot hit still gets its 1.4 seconds and no more.
+      // This is what makes "kill everything met" reachable rather than "spend
+      // one hold on everything met": measured, one hold per soldier at a mean
+      // 6.5 points of damage a drop is a fight that never finishes.
+      this.engageHold.since = tickStart;
+      this.engageHold.health = stopTarget.health;
+    }
+    const standAndShoot = this.engageHold !== null && tickStart - this.engageHold.since < options.engageHoldMs;
+    if (standAndShoot) this.stopAndShootTicks += 1;
+    this.wasStanding = standAndShoot;
+
+    const stuck = this.#stuckNow(player, tickStart, standAndShoot);
     const retreatBearing = this.#retreatBearing(player, ranked, route);
-    const arrived = goal ? Math.hypot(player.x - goal.x, player.y - goal.y) <= this.goalTolerance : false;
+    const arrived = goal ? atGoal(player, goal, this.goalTolerance) : false;
     // How long the loop has been backing off, and whether that has gone on long
     // enough to stop.
     //
@@ -891,6 +1142,7 @@ export class PlayLoop {
       offRoute,
       arrived,
       monsterCount: monsters.length,
+      standAndShoot,
       recover: stuck,
       retreatBearing,
       retreatSpent,
@@ -944,6 +1196,19 @@ export class PlayLoop {
       clear: clear === true,
       fire: this.triggerDown === true,
       target: target ? { n: target.number, d: Math.round(target.distance), off: Math.round(target.off) } : null,
+      // The nearest monster there is, whatever the targeting rules make of it,
+      // with the game's own health beside it. A walk that cannot move and a
+      // target list that does not contain the thing in the way is a question
+      // this line answers and the rest of the trace does not.
+      nearest: (() => {
+        let best = null;
+        for (const monster of this.lastView.monsters) {
+          if (!monster.position) continue;
+          const d = Math.hypot(monster.position.x - player.x, monster.position.y - player.y);
+          if (!best || d < best.d) best = { d, n: monster.number, hp: monster.health };
+        }
+        return best ? { n: best.n, d: Math.round(best.d), hp: best.hp } : null;
+      })(),
       monsters: this.lastView.monsters.length,
       at: [Math.round(player.x), Math.round(player.y), Math.round(player.z)],
       scale: Math.round(this.turnScale * 100) / 100,
@@ -967,7 +1232,67 @@ export class PlayLoop {
     this.edictRead.unmatched += answer.unmatched;
     this.edictRead.originDisagreed += answer.disagreed;
     this.edictRead.withHealth += answer.monsters.filter((monster) => monster.health !== null).length;
-    return answer.monsters;
+    // ---- where the monster IS ---------------------------------------------
+    // When the two arrays disagree about a monster's position, the game DLL's
+    // edict is the one to aim at, and this is the measurement that settled it.
+    //
+    // The client's entity array is the NETWORK state: it carries the last
+    // position the server sent for that entity number. A monster outside the
+    // player's view is not sent -- and its record is not cleared, so it keeps
+    // the position it had when it was last sent. The edict array is the GAME's
+    // state and is where the monster really is, which is also the only position
+    // the engine's own hit detection can use, because the shot is resolved on
+    // the server against the server's own entities.
+    //
+    // Measured on this pass, with the loop's own reader against the live game,
+    // one reading of every monster in the client array beside the same
+    // monster's edict: 15 monsters, 7 of them disagreed by more than 96 units,
+    // and the disagreement was one-sided. `monster_soldier_light #272` read
+    // (-904, 972) in the client array on four reads 700 ms apart -- frozen --
+    // while its edict read (-1146, 1307) and then (-1146, 1355): 48 units of
+    // movement in 0.7 seconds. A record that does not move while the game moves
+    // the monster is a record about where the monster was, and a loop that aims
+    // at it is firing at a place the monster has left. Two of the fifteen were
+    // more than 800 units out, which is further than the loop's own engagement
+    // range from where the monster was standing.
+    //
+    // So the edict's origin is taken, and the client's is kept beside it so a
+    // report can still say both. A monster the edict does not vouch for keeps
+    // the client's reading and its `null` health.
+    const placed = [];
+    for (const monster of answer.monsters) {
+      // A record with no edict at all is not a monster -- it is a leftover in
+      // the client's array for an entity the game has finished with. The walk
+      // above only reports a slot the game still considers in use (`number` is
+      // the slot's own index, and a slot with no model, no box and no health is
+      // dropped), so "no edict" means "the game does not have this entity".
+      //
+      // Measured: a run that stood still for fourteen minutes reported 22,906
+      // of 157,094 monster readings with no edict behind them -- and every one
+      // of them was a phantom the loop could aim at, count as MET, and fire at
+      // for as long as it liked. The same reading on a run that kept moving was
+      // 0 of 26,640. A monster the game DLL does not have is not a monster, and
+      // the owner's condition is about monsters.
+      // ...and only for a monster that came from the LIVE entity array, where
+      // the number is an entity number. A monster from the level's static list
+      // is numbered by its place in that list, so "no edict" says nothing about
+      // it -- and dropping those would empty the fallback list on the one day
+      // it exists for: the live read failing. See `entitySource` in
+      // control/edicts.mjs.
+      if (monster.source === "no-edict" && monster.entitySource !== "map-entity-lump") {
+        this.edictRead.dropped = (this.edictRead.dropped || 0) + 1;
+        continue;
+      }
+      if (monster.source !== "game-edict-origin-disagrees" || !monster.edictPosition) { placed.push(monster); continue; }
+      this.edictRead.usedEdictOrigin += 1;
+      placed.push({
+        ...monster,
+        clientPosition: monster.position,
+        position: monster.edictPosition,
+        positionSource: "game-edict",
+      });
+    }
+    return placed;
   }
 
   // The player's own health, out of the same edict array.
@@ -1064,6 +1389,17 @@ export class PlayLoop {
         record.lastDrop = record.lastHealth - health;
         this.healthDamage += record.lastDrop;
         this.healthDamageEvents += 1;
+        // Every drop's own size, kept as a series and not just a total. The
+        // size of a hit is the game's own fingerprint of the weapon that dealt
+        // it, and it is the only answer to "which gun is really in hand" that
+        // does not rest on the loop's belief about the key it pressed: measured
+        // on a whole run, every drop a blaster bolt landed was a flat 10, and a
+        // gun that fires anything else cannot produce that series. No other
+        // weapon's per-hit number is written down here, because none of them
+        // has been measured on this box -- the level's own super shotgun turned
+        // out not to be in the level at all (see the README).
+        this.dropSizes.push(record.lastDrop);
+        if (this.dropSizes.length > 4000) this.dropSizes.shift();
         if (record.samples <= 3 || record.hits <= 3) {
           this.note("the game's own health for " + record.classname + " (#" + monster.number + ") fell by " + record.lastDrop +
             ", to " + health + " of " + monster.maxHealth, { hit: record.hits, triggerDown: this.triggerDown === true });
@@ -1175,16 +1511,60 @@ export class PlayLoop {
   // Only a turn big enough to be seen is judged -- the same rule the bridge's
   // own `#learnTurn` uses, and for the same reason: a correction of a degree
   // that lands as nothing is evidence about the aim, not about the mouse.
-  #learnTurn(yaw) {
+  //
+  // `blocked` is the tick's own reading of the player: dead, or in a state
+  // where the view is not being driven by the mouse. A mouse count sent while
+  // the death camera holds the view comes back as a smaller turn than it was,
+  // and folding that in would teach the loop its mouse is slower than it is.
+  // The measurement is dropped, not the pending request -- that is cleared
+  // either way, because it belongs to the tick that sent it.
+  #learnTurn(yaw, blocked = false) {
     const pending = this.pendingTurn;
     this.pendingTurn = null;
+    if (blocked) return;
     if (!pending || Math.abs(pending.requested) < 3) return;
     const achieved = shortestTurn(yaw - pending.yaw);
     if (Math.abs(achieved) < 0.5) return;
-    const ratio = achieved / pending.requested;
-    if (!(ratio > 0.05 && ratio < 20)) return;
-    this.turnScale = Math.max(0.1, Math.min(8, this.turnScale * (0.5 + 0.5 / ratio)));
-    this.turnSamples += 1;
+    this.#foldScale("yaw", achieved / pending.requested);
+  }
+
+  // One measurement folded into one axis's mouse scale.
+  //
+  // The reading is `achieved / requested`: 1 when the last correction landed
+  // exactly as asked, 2 when the mouse turns twice as far as the loop thinks,
+  // and near 0 when the mouse event did not reach the engine at all. Two rules
+  // keep a single bad reading from taking the scale with it:
+  //
+  //   * the ratio must be inside [0.25, 4]. Outside it the reading is about
+  //     something other than the mouse -- a dropped event, the death camera,
+  //     the view clamped against +/-90, a level still loading -- and there is
+  //     no scale, however wrong, that such a reading corrects. Measured on the
+  //     pass that found this: immediately after `map demo1`, a 45-count pitch
+  //     request read back as 0 degrees (and the yaw read on the same tick as
+  //     0); the old window (`ratio > 0.05`) accepted those and multiplied the
+  //     scale by up to 8.8 in one tick.
+  //   * one measurement moves the scale by at most a factor of two, and the
+  //     step is a half-step towards the correction (`0.5 + 0.5/ratio`, clamped
+  //     to [0.5, 2]). Measured over four recorded runs of this same loop
+  //     against this same mouse, the pitch scale came back 8 (the old clamp),
+  //     0.472 and 5.535 -- the clamp and the outliers are both what the
+  //     unbounded step produced.
+  //
+  // With the bridge's own degrees-per-count measured (0.1302 on this box: see
+  // control/bridge.mjs) the correct loop scale is 1.0 on both axes, and this is
+  // what is left to correct for a box that differs. The samples are counted
+  // either way, so a run reports how often it learned and what it settled on.
+  #foldScale(axis, ratio) {
+    if (!Number.isFinite(ratio) || ratio < 0.25 || ratio > 4) return false;
+    const factor = Math.max(0.5, Math.min(2, 0.5 + 0.5 / ratio));
+    if (axis === "pitch") {
+      this.pitchScale = Math.max(0.1, Math.min(8, this.pitchScale * factor));
+      this.pitchSamples += 1;
+    } else {
+      this.turnScale = Math.max(0.1, Math.min(8, this.turnScale * factor));
+      this.turnSamples += 1;
+    }
+    return true;
   }
 
   // The same fold-back for the pitch axis, and for the same reason: `m_pitch`
@@ -1194,16 +1574,14 @@ export class PlayLoop {
   // measured exactly as yaw is: ask for a correction, read what the pitch did,
   // fold the ratio in. The error is a plain difference and not a `shortestTurn`
   // -- the pitch is clamped to +/-90 and does not wrap.
-  #learnPitch(pitch) {
+  #learnPitch(pitch, blocked = false) {
     const pending = this.pendingPitch;
     this.pendingPitch = null;
+    if (blocked) return;
     if (!pending || Math.abs(pending.requested) < 3) return;
     const achieved = pitch - pending.pitch;
     if (Math.abs(achieved) < 0.5) return;
-    const ratio = achieved / pending.requested;
-    if (!(ratio > 0.05 && ratio < 20)) return;
-    this.pitchScale = Math.max(0.1, Math.min(8, this.pitchScale * (0.5 + 0.5 / ratio)));
-    this.pitchSamples += 1;
+    this.#foldScale("pitch", achieved / pending.requested);
   }
 
   // What identifies a monster in the records this loop keeps.
@@ -1350,11 +1728,186 @@ export class PlayLoop {
     }
   }
 
+  // Is the level's own item still in the world?
+  //
+  // The answer comes from the game DLL's edicts and not from the map: an item
+  // the game has picked up is freed, `G_FreeEdict` zeroes the record, and the
+  // walk that reads the array then stops naming that slot at all -- so "an
+  // edict is standing where the map put the item" and "the item is still there"
+  // are the same question. `true` when one is, `false` when the read works and
+  // none is, and `null` when the read cannot say -- a caller that treats
+  // "cannot say" as "gone" would walk past every item on a tick where the edict
+  // array came back empty.
+  //
+  // Only records the game is not using as something else count: a monster or a
+  // barrel standing on the item's square has health, and an item does not.
+  #itemPresent(live, position, radius = 48) {
+    const edicts = Array.isArray(live && live.edicts) ? live.edicts : null;
+    if (!edicts || !edicts.length) return null;
+    for (const edict of edicts) {
+      if (!Number.isFinite(edict.x) || !Number.isFinite(edict.y) || !Number.isFinite(edict.z)) continue;
+      if (Number.isFinite(edict.health) && edict.health > 0) continue;
+      if (Math.hypot(edict.x - position.x, edict.y - position.y, edict.z - position.z) <= radius) return true;
+    }
+    return false;
+  }
+
+  // The monster the walk goes out of its way for.
+  //
+  // "Kill everything met" is not "shoot at everything met". Measured on the run
+  // that came closest to it: the loop met fifteen soldiers, ENGAGED EIGHT, and
+  // killed seven of those eight -- better than nine in ten of what it engaged
+  // -- and the other seven were never once a target. Four of them were met at
+  // more than a thousand units and never came closer; one was met at 222 units
+  // and never engaged at all. A walk that fires at whatever crosses its beam is
+  // not clearing a level, it is walking through one.
+  //
+  // So a monster this walk has met, that the game says is alive, and that the
+  // walk can REACH, is a monster the walk goes to. The test is the level's own
+  // geometry -- `clearWalk` down the straight line, the same test the route
+  // follower uses -- and not a hope: a hunt that cannot be walked is not
+  // started, because a walk that pushes at a wall is the failure this loop has
+  // already paid for twice (the 9904-tick retreat parked at the exit, and the
+  // eleven-thousand-tick engage pinned in the corridor).
+  //
+  // A hunt is a detour with a clock (`huntGiveUpMs`), and the clock runs from
+  // the last time the target's own health fell -- so a monster this loop is
+  // demonstrably hurting is finished (the same rule `standAndShoot` uses), and
+  // one it cannot reach is left and not turned back for again in this life.
+  #huntFor(monsters, player, tickStart) {
+    const range = finite(this.options.huntRange) ? this.options.huntRange : 0;
+    if (!(range > 0)) return null;
+    const feet = { x: player.x, y: player.y, z: player.z - EYE_ABOVE_FEET };
+    const points = this.plan && this.plan.points ? this.plan.points : null;
+    const offPlan = (position) => {
+      if (!points || !points.length) return 0;
+      let best = Infinity;
+      for (const point of points) {
+        const d = Math.hypot(point.x - position.x, point.y - position.y);
+        if (d < best) best = d;
+      }
+      return best;
+    };
+    let current = null;
+    if (this.hunt) {
+      const held = monsters.find((monster) => this.#key(monster) === this.hunt.key);
+      // Why the detour ended, recorded for the log, and it has to be the real
+      // reason. These two arms used to be missing: a hunt whose target was
+      // KILLED -- the outcome the hunt exists for -- left `why` null and the
+      // note fell through to "the detour was over". Measured on the run that
+      // made this worth fixing: two hunts on the same soldier, both recorded
+      // with the same `closest` of 313 units, both labelled that way, and the
+      // soldier was killed in one of them.
+      if (!held || !held.position) {
+        this.hunt.why = "it stopped being sent by the engine";
+      } else if (!this.#isAlive(held)) {
+        this.hunt.why = "killed";
+      } else {
+        if (finite(held.health) && finite(this.hunt.health) && held.health < this.hunt.health) {
+          this.hunt.since = tickStart;
+          this.hunt.health = held.health;
+        }
+        const distance = Math.hypot(held.position.x - player.x, held.position.y - player.y);
+        // Making progress towards it? A walk that is not closing the distance is
+        // a walk pressed against something, and it is the one case the straight
+        // line test cannot see (it is re-asked every tick, and it said yes when
+        // the hunt started).
+        //
+        // Making progress towards it? A walk that is not closing the distance is
+        // a walk pressed against something, and it is the one case the straight
+        // line test cannot see (it is re-asked every tick, and it said yes when
+        // the hunt started).
+        //
+        // The clock only runs while the walk is WALKING: the stop-and-kill hold
+        // deliberately stands still for up to a second and a half to shoot, and
+        // judging the hunt on those ticks gave up on every hunt a fight
+        // interrupted.
+        //
+        // Both of these are measured, and a third variant was measured too and
+        // is NOT here. Judging the clock on ground covered instead of on the gap
+        // to the monster -- the change that sounds more generous -- let every
+        // hunt run its full eight seconds, fourteen of them in one run, and the
+        // run then spent 5387 of its 7000 ticks in `advance` wandering with the
+        // exit 192 units away: it did not finish, and it killed FEWER soldiers
+        // (seven) than the two runs before it (nine each). A detour that is
+        // measured to cost the finish and buy nothing is not kept.
+        if (this.wasStanding) this.hunt.progressAt = tickStart;
+        else if (distance <= this.hunt.best - this.options.huntProgressUnits) {
+          this.hunt.best = distance;
+          this.hunt.progressAt = tickStart;
+        }
+        const stalled = tickStart - this.hunt.progressAt >= this.options.huntProgressMs;
+        this.hunt.why = distance > range ? "it left the hunt range"
+          : stalled ? "the walk stopped moving (no " + this.options.huntProgressUnits + " units in " + this.options.huntProgressMs + " ms)"
+            : tickStart - this.hunt.since >= this.options.huntGiveUpMs ? "the clock ran out" : null;
+        if (distance <= range && !stalled && tickStart - this.hunt.since < this.options.huntGiveUpMs) current = { ...held, distance };
+      }
+    }
+    if (!current && this.hunt) {
+      this.givenUp.add(this.hunt.key);
+      this.huntsGivenUp += 1;
+      this.huntNotes.push({
+        number: this.hunt.key, startedAt: this.hunt.startedAt, endedAt: tickStart,
+        because: this.hunt.why || "the detour was over",
+        closest: Math.round(this.hunt.best),
+      });
+      this.hunt = null;
+    }
+    if (current) return current;
+    let best = null;
+    for (const monster of monsters) {
+      if (!monster.position || !this.#isAlive(monster)) continue;
+      const key = this.#key(monster);
+      if (this.givenUp.has(key)) continue;
+      const distance = Math.hypot(monster.position.x - player.x, monster.position.y - player.y);
+      if (distance > range || distance < this.options.minimumRange) continue;
+      // It has to be near the way out: a monster a hunt would take the walk off
+      // the plan for is one the walk comes back from with nothing but the walk
+      // it took to get there. See `huntNearPlan`.
+      if (offPlan(monster.position) > this.options.huntNearPlan) continue;
+      if (!clearWalk(this.map, feet, monster.position, { step: 10 })) continue;
+      if (!best || distance < best.distance) best = { ...monster, distance, key };
+    }
+    if (!best) return null;
+    this.hunt = {
+      key: best.key, since: tickStart, startedAt: tickStart, health: best.health,
+      best: best.distance, progressAt: tickStart, from: { x: player.x, y: player.y }, why: null,
+    };
+    this.huntsStarted += 1;
+    this.note("going out of the way for " + (best.classname || ("#" + best.number)) + " at " + Math.round(best.distance) + " units", { health: best.health });
+    return best;
+  }
+
   #lead(player, monster) {
+    // A hitscan weapon needs no lead: the pellets are at the target in the
+    // frame the trigger falls, so leading one is aiming where the soldier was
+    // about to be. See `HITSCAN_WEAPONS` -- and the errand that fetches the
+    // level's own super shotgun, which is the gun this loop is holding for most
+    // of a run now that the key is pressed.
+    if (this.weaponInHand && this.weaponInHand.hitscan) return { ...monster.position };
     const record = monster.number === null ? null : this.targets.get(this.#key(monster));
     return leadPoint(player, monster.position, record ? record.velocity : null, {
       boltSpeed: this.boltSpeed,
       leadFactor: this.options.leadFactor,
+    });
+  }
+
+  // Take the level's own gun into the hand: record what it is, and press the
+  // key the engine's own config binds to it, again once or twice over the next
+  // second so a press that beat the pickup by a frame is not the last word.
+  #equip(errand) {
+    this.weaponInHand = {
+      classname: errand.classname,
+      hitscan: HITSCAN_WEAPONS.has(errand.classname),
+      label: errand.label || null,
+      at: Date.now(),
+    };
+    this.weaponTap = errand.tap ? { key: errand.tap, left: 3, nextAt: Date.now() + 350 } : null;
+    this.weaponEquips += 1;
+    if (errand.tap && typeof this.game.tap === "function") { this.game.tap(errand.tap).catch(() => {}); }
+    this.note("took the level's own " + errand.classname + " and pressed " + (errand.tap || "nothing") + " for it", {
+      hitscan: this.weaponInHand.hitscan,
+      label: this.weaponInHand.label,
     });
   }
 
@@ -1395,6 +1948,17 @@ export class PlayLoop {
   }
 
   #isAlive(monster) {
+    // The game's own answer first, and it outranks everything below. This is
+    // the field the owner's condition is defined on, and the one reading the
+    // client's entity array cannot supply at all: a corpse keeps its model
+    // index, its solid box and its entity number, so a loop that decides "alive"
+    // from the network record decides that a corpse is alive -- forever.
+    //
+    // Measured on the run that stalled: all fifteen of demo1's monsters were
+    // "watched" on all twelve thousand ticks, including the ones the run had
+    // already killed, and the loop spent 781 seconds with the trigger down
+    // taking 200 points off them. It was firing at bodies.
+    if (monster.health !== null && monster.health !== undefined) return monster.health > 0;
     if (monster.source === "map-entity-lump") return true;
     const record = this.targets.get(this.#key(monster));
     if (!record) return true;
@@ -1499,6 +2063,7 @@ export class PlayLoop {
       const floor = this.#floorAt(chosen.point);
       const reach = Math.hypot(chosen.point.x - player.x, chosen.point.y - player.y);
       if (floor === null || reach <= this.options.arriveRadius ||
+          Math.abs(floor - feet.z) > climb ||
           !clearWalk(this.map, feet, { x: chosen.point.x, y: chosen.point.y, z: floor }, { step: 10 })) {
         chosen = null;
       }
@@ -1510,6 +2075,24 @@ export class PlayLoop {
         if (Math.hypot(point.x - player.x, point.y - player.y) > this.options.lookAhead) continue;
         const floor = this.#floorAt(point);
         if (floor === null) continue;
+        // A point more than a step above or below the feet is not a place to
+        // walk to, however clear the line to it looks.
+        //
+        // This is the SAME test the nearest-point pass above makes, and it was
+        // missing here -- which is the whole of why the walk never climbed the
+        // ramp. Measured by replaying this function offline from the corner
+        // every recorded run stopped at (-1648 1540, feet at z -32): the
+        // nearest-point pass correctly found the plan's own ground point at
+        // index 17, and then this scan, which runs from `routeIndex + 16` DOWN
+        // and takes the first point with a clear line, handed the walk index 33
+        // -- the catwalk at (-1632 1416 z 96), 125 units away in x/y and 128
+        // units ABOVE the player's feet. `clearWalk` had no reason to refuse it:
+        // the column between the corridor and the catwalk is open air. The walk
+        // then held a bearing into the sealed face of the exit room for the rest
+        // of the run, which is the 128 units short that four runs in a row
+        // measured. With the guard, the same replay settles on the plan's own
+        // index 18 at (-1608 1704 z -48) and the walk turns north at the ramp.
+        if (Math.abs(floor - feet.z) > climb) continue;
         if (clearWalk(this.map, feet, { x: point.x, y: point.y, z: floor }, { step: 10 })) {
           chosen = { point, index };
           break;
@@ -1543,8 +2126,18 @@ export class PlayLoop {
     return (bearingTo(player, nearest.position) + 180) % 360;
   }
 
-  #stuckNow(player, tickStart) {
+  #stuckNow(player, tickStart, standing = false) {
     const stuck = this.stuck;
+    // A player standing still ON PURPOSE is not a player who is stuck.
+    //
+    // The stop-and-kill hold and this check are both clocks and the hold is the
+    // longer one, so without this every hold ran into a recovery: measured on
+    // the first run that had both, the hold is 1400 ms and the stuck test fires
+    // at 1300, which meant the last tenth of every stand-and-shoot was spent
+    // stepping sideways and -- near the exit -- firing at `func_button *34`
+    // instead of at the soldier. The clock is restarted rather than disabled, so
+    // a player who stands and is then held against something still says so.
+    if (standing) { stuck.from = { ...player }; stuck.since = tickStart; return null; }
     if (!stuck.from) {
       stuck.from = { ...player };
       stuck.since = tickStart;
@@ -1821,8 +2414,18 @@ export class PlayLoop {
       this.routeIndex = 0;
     }
     // A restart hands the player the spawn's own blaster back, so every errand
-    // that was run before the death is owed again.
-    for (const errand of this.errands) errand.taken = false;
+    // that was run before the death is owed again -- and so does the gun in the
+    // loop's own record: it is the blaster until the walk fetches the level's
+    // own weapon again, and a loop that still believed it was holding a super
+    // shotgun would keep suppressing the lead on the blaster's bolts.
+    for (const errand of this.errands) { errand.taken = false; errand.closing = null; }
+    this.weaponInHand = null;
+    this.weaponTap = null;
+    this.engageHold = null;
+    // A new life starts with its own hunts: the monsters it gave up on are the
+    // level's monsters again, standing where the reload put them.
+    this.hunt = null;
+    this.givenUp = new Set();
     this.note("the player is alive again; the plan was rebuilt from " + Math.round(player.x) + " " + Math.round(player.y), { deaths: this.deaths });
     return null;
   }
@@ -1886,6 +2489,13 @@ export class PlayLoop {
       deepest: this.deepest,
       trail: this.trail,
       states: this.states,
+      // The gun the walk was holding, and how long it spent standing still to
+      // shoot: the two levers this pass added to the fight. `hitscan` is what
+      // decides whether the lead is applied at all (see `#lead`).
+      weapon: this.weaponInHand ? { ...this.weaponInHand, equipped: this.weaponEquips } : null,
+      stopAndShootTicks: this.stopAndShootTicks,
+      hunts: { started: this.huntsStarted, givenUp: this.huntsGivenUp, left: this.givenUp.size, log: this.huntNotes.slice(-24) },
+      dropSizes: this.dropSizes,
       shots: this.shots,
       triggerMs: Math.round(this.triggerMs),
       kills: this.kills,
