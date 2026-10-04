@@ -107,6 +107,13 @@ export const ENGAGE_DEFAULTS = {
   // about 150 units of ground and, with the trigger held, several blaster bolts
   // -- three of them kill a soldier, and they are aimed the whole way in.
   engageStepMs: 500,
+  // ...walked in this many pieces, re-aimed at the leg's own route point
+  // between them. One is the behaviour every run before this one was measured
+  // with: a single bearing held for the whole step. Two costs one extra CDP
+  // round trip per leg and lets a leg that is entering a corridor turn with it.
+  // See the measurement in #fight -- 162 units per second of trigger-down time
+  // against a 300 unit per second run.
+  stepRounds: 2,
   // How many walk rounds an ordinary (non-firing) leg may take. The base
   // walker's leg runs goto() until it arrives, which on open ground is many
   // hundred units of walking with no decision made in between -- and that is
@@ -201,20 +208,70 @@ export const ENGAGE_DEFAULTS = {
   // from, and a report whose numbers cannot be checked is a nicer story than
   // the one that happened.
   hudCropDir: null,
+  // Which way a firing leg turns onto its soldier. "mouse" is the default and
+  // it is a measurement, not a preference: on this build the relative-motion
+  // deltas *do* reach the player's own angles, and `face(40, turn: "mouse")`
+  // converges to 0.04 degrees in two rounds and 242 ms against the arrow keys'
+  // 415 ms and 6-degree tolerance. It matters because the turn is taken with
+  // the trigger down (see `#fight`): a 6-degree miss at 300 units is a bolt
+  // that passes a 32-unit-wide soldier by the width of its own body.
+  // `face()` calibrates the two methods itself and puts the keys back if the
+  // mouse ever stops turning the player, so `"auto"` -- keys first, mouse
+  // second -- is still available to a caller that would rather have it.
+  aimTurn: "mouse",
+  // How close the turn onto a soldier has to land, in degrees, and how many
+  // turns it may take. Tighter than the bridge's own default of 6 because the
+  // mouse can hold a hundredth of a degree and a soldier is only 32 units
+  // across: at 300 units, 6 degrees is 31 units, which is the whole of the
+  // soldier.
+  faceTolerance: 2,
+  faceRounds: 4,
+  // How much extra walking a firing leg may do while the status bar is being
+  // read, in milliseconds. The read takes about a second and the player is
+  // firing the whole time; walking it out is what keeps the leg from being a
+  // second of standing still, and the cap is what keeps the reading from
+  // dragging the leg the length of the plan.
+  readWalkMs: 600,
   // Which weapon the fight asks for, named the way the engine's own config
   // names it ("Super Shotgun"). null leaves the player the weapon they walked
   // in with. The press goes through the engine's own `use <weapon>` binding --
   // the same kind of real key event as the trigger, no console -- and a weapon
   // the player does not have is not an error: Quake 2 ignores it and keeps the
   // weapon in hand, so what this buys is measurable and what it costs is one
-  // key press per life.
+  // key press per attempt.
   weapon: null,
   // How a firing leg moves while the trigger is down: "advance" keeps walking
   // the route (the way this walked before the option existed), "retreat" backs
-  // along the route away from the soldier being shot, "hold" stands. "adapt"
+  // along the route away from the soldier being shot, "hold" stands, "sprint"
+  // walks the route with the *view* on the route as well -- see below. "adapt"
   // tries each in turn and then follows the health the fight actually cost --
   // see #fireMode, which is the measurement this option exists for.
   fireWhile: "advance",
+  // "sprint" is the one way of firing in which the leg does not look at the
+  // soldier it is shooting at.
+  //
+  // Every other mode holds the view on the soldier and expresses the route as a
+  // *strafe* (see movementKeys), which is the trade the file's own measurements
+  // were built on: it keeps the aim on the target while the player keeps moving.
+  // On open ground that is free. In a corridor it is not, and demo1's exit
+  // corridor is where the `finish` runs die. The measured corridor legs cover 20
+  // to 90 units against the 175 an average leg covers, and the legs that took a
+  // whole life cover 30, 18, 65 and 68 while the burst lands (80 to 100 health
+  // gone inside one leg with a soldier 86 to 188 units away). A leg that has
+  // turned its view onto a soldier standing off the line of a corridor has
+  // nothing left but strafe and back to walk with, and both of those walk the
+  // player *into the wall* the corridor is made of -- which is exactly the
+  // posture the level kills in: a player who is not moving is hit by every bolt
+  // a soldier fires, and at 300 units a second the bolts are aimed where the
+  // player was.
+  //
+  // So a sprint leg looks where it is going, holds forward, and fires the
+  // blaster down its own path. The blaster costs no ammo and the soldiers it
+  // passes are in front of it often enough to be worth the free bolts; what the
+  // mode buys is the ground, and the ground is the whole defence. It is a mode
+  // and not a rewrite: `advance` still means what every run before this one was
+  // measured with, and a run that wants the sprint asks for it by name.
+  //
   // ...and "kite", which is not a direction but a rule: back along the route
   // away from a soldier that has closed inside this many units, and advance
   // otherwise. Read off the per-leg health series rather than chosen, because
@@ -273,6 +330,45 @@ export const ENGAGE_DEFAULTS = {
   // between the bearing the leg had and the bearing the nudge would give it, so
   // a point on a straight run takes a pickup beside it and a corner does not.
   pickupTurn: 45,
+  // What a *weapon* beside a step of the plan may cost to collect, as the round
+  // trip out to it and back, and how far off the line it may stand.
+  //
+  // A weapon is not a top-up: it changes what the fight costs for the rest of
+  // the life. The measured arithmetic of demo1's exit route is that the walker
+  // needs about 375 health of soldiers cleared and is given about 165, and the
+  // 210 that is missing is the whole gap -- the deepest `finish` runs end in the
+  // exit corridor at 1 health with the level's own plan unspent. A soldier takes
+  // three blaster bolts and the blaster is what the level starts the player
+  // with; the level also *offers* a super shotgun with three boxes of shells
+  // 391 units from the spawn, which is a soldier per shot instead of a soldier
+  // per exchange. That is the trade these two knobs exist to make available, and
+  // they are set from the level's own geometry rather than picked: the
+  // `weapon_supershotgun` at 200 64 stands 322 units off the route's first step
+  // (so the round trip is 644) and the `weapon_machinegun` at -1952 1304 stands
+  // 69 off a later one. 700 is above the first and below the next weapon out,
+  // the `weapon_shotgun` at 713, which is on a floor the route does not visit.
+  //
+  // **Measured, and left off.** A 24-attempt `finish` run with these at 400 and
+  // 700 put the gun and three boxes of shells into the plan (37 points to 46)
+  // and walked them -- and the player ended every life with the blaster in hand:
+  // no ammo number ever appeared on the status bar, so the walk went out to the
+  // gun without taking it, and the whole detour was 600 units of walking through
+  // two soldiers for nothing. Its deepest reading was 632 units short against
+  // 719 for the run without it, which is inside this level's run-to-run spread
+  // and is not claimed for a weapon that never arrived. 0 is the measured
+  // default; the mechanism is kept because the fault it has is the *pickup*
+  // (see `gearOvershoot`), not the idea.
+  gearRange: 0,
+  gearDetour: 0,
+  // ...and how far past the item the last step of that way out stands. See
+  // `past` in `pickupDetours`: the walk has to *cross* the item, and `goto`
+  // answers `reached` inside `max(24, tolerance/2)` -- 48 units on a `finish`
+  // run -- so a step this side of that radius can be stopped short of, on the
+  // near side of the item it came for. Measured on demo1's own plan: 64 keeps
+  // the gun and three boxes of shells in the plan, 80 keeps two, 96 keeps one,
+  // and 110 or more puts the step off the floor and the level's whole way out to
+  // a weapon is refused. 96 is the largest that still pays for the gun.
+  gearOvershoot: 96,
   // What a pickup beside a *step* of the plan may cost to collect, as the round
   // trip out to it and back to the line. This is the bound that does the work
   // `pickupTurn` cannot do for an insert (see `pickupDetours`), and it is set
@@ -536,8 +632,20 @@ export class CombatWalker extends RouteWalker {
     // passes within `pickupRange` of are ever aimed at (see snapPickups), so
     // this is a list of things the level offers rather than a list of errands.
     this.pickups = (map && map.waypoints ? map.waypoints("item") : [])
-      .filter((item) => item.position && /^item_(health|armor)/.test(item.classname))
-      .map((item) => ({ classname: item.classname, position: finitePoint(item.position) }))
+      // Health and armour are top-ups on the way past; a weapon, and the shells
+      // that make it worth having, are `gear` and are allowed a detour of their
+      // own (see `gearDetour`). The blaster is left out: it is what the level
+      // starts the player with, so a route to one is a route to where they
+      // already are.
+      .filter((item) => item.position && (/^item_(health|armor)/.test(item.classname) ||
+        (numberOr(this.engage.gearDetour, 0) > 0 &&
+          ((/^weapon_/.test(item.classname) && !/_blaster$/.test(item.classname)) ||
+            item.classname === "ammo_shells"))))
+      .map((item) => ({
+        classname: item.classname,
+        position: finitePoint(item.position),
+        gear: !/^item_(health|armor)/.test(item.classname),
+      }))
       .filter((item) => item.position);
     // The plan the pickups were snapped onto, and the snapped points. A plan is
     // a fresh array on every re-plan, so the array itself is the cache key.
@@ -590,7 +698,9 @@ export class CombatWalker extends RouteWalker {
           const distance = Math.hypot(pickup.position.x - point.x, pickup.position.y - point.y);
           // A pickup the route already runs over needs no nudge: the point is
           // where the item is, and moving it would be this walker walking to
-          // where it was going anyway.
+          // where it was going anyway. demo1 has one of these -- an
+          // `item_health_small` exactly on a plan point -- and aiming at it
+          // again would only say the route had been changed when it had not.
           if (distance < 2 || distance > range) continue;
           if (best && distance >= best.distance) continue;
           const key = pickup.classname + pickup.position.x + "," + pickup.position.y;
@@ -673,8 +783,12 @@ export class CombatWalker extends RouteWalker {
       // above has already had its chance at it.
       if (!(t > 0.12 && t < 0.88)) continue;
       const off = Math.hypot(pickup.position.x - (from.x + vx * t), pickup.position.y - (from.y + vy * t));
-      if (off > range) continue;
-      if (off * 2 > numberOr(this.engage.pickupDetour, ENGAGE_DEFAULTS.pickupDetour)) continue;
+      // A weapon is worth more of the walk than a top-up is, and is allowed
+      // further off the line and a longer way out to it: see `gearDetour`.
+      const reach = pickup.gear ? numberOr(this.engage.gearRange, ENGAGE_DEFAULTS.gearRange) : range;
+      const cost = pickup.gear ? numberOr(this.engage.gearDetour, ENGAGE_DEFAULTS.gearDetour) : numberOr(this.engage.pickupDetour, ENGAGE_DEFAULTS.pickupDetour);
+      if (off > reach) continue;
+      if (off * 2 > cost) continue;
       found.push({ pickup, key, t, off });
     }
     found.sort((a, b) => a.t - b.t);
@@ -722,13 +836,69 @@ export class CombatWalker extends RouteWalker {
       // part of that same step would refuse the route's own ground.
       const walkable = (a, b) => clearWalk(this.map, a, b, { radius: this.engage.bodyRadius }) ||
         clearWalk(this.map, a, b, { radius: 0 });
-      if (!walkable(previous, via)) continue;
-      if (!walkable(via, detour)) continue;
-      if (!walkable(detour, to)) continue;
+      // A weapon stands further off the line than a top-up does, and a plan is
+      // walked point by point inside `walkReach` (see #walkPoint) -- so a single
+      // long step out to the gun is a step the walk *skips*, and the gun is left
+      // standing while the walk cuts the corner it was inserted to remove. The
+      // way out to it is therefore inserted as short steps of its own, and a
+      // last step stands `gearOvershoot` units *past* the item: a pickup is
+      // taken by walking over it, and a leg aimed exactly at an item stops
+      // inside its own arrival radius and never touches it.
+      const waypoints = [via];
+      if (pickup.gear) {
+        const dx = detour.x - via.x;
+        const dy = detour.y - via.y;
+        const span = Math.hypot(dx, dy);
+        const pieces = Math.max(1, Math.ceil(span / (numberOr(this.engage.walkReach, 240) * 0.8)));
+        let split = false;
+        for (let k = 1; k < pieces; k++) {
+          const t = k / pieces;
+          const x = via.x + dx * t;
+          const y = via.y + dy * t;
+          const z = floorNear(this.map, x, y, chord, this.engage);
+          if (z === null) { split = true; break; }
+          waypoints.push({ x, y, z, gear: true });
+        }
+        if (split) continue;
+      }
+      if (pickup.gear) detour.gear = true;
+      if (pickup.gear) {
+        const span = Math.hypot(detour.x - via.x, detour.y - via.y);
+        if (span > 0) {
+          // The step past the item comes *before* it in the plan, so the walk
+          // crosses the item on the way out and again on the way back. A leg
+          // aimed straight at a pickup stops inside `goto`'s own arrival radius
+          // and a pickup has to be touched, not reached: this is what makes the
+          // walk go over it rather than stop beside it.
+          //
+          // How far past is `gearOvershoot` and not a number picked here: see
+          // the measurement there. A `finish` run walks with a tolerance of 96
+          // and `goto` answers `reached` inside 48, so a step only just past the
+          // item is a step the walk can stop short of, on the near side of the
+          // item it came for -- measured on the 24-attempt gear run, the plan
+          // carried the gun and the player ended every life with the blaster in
+          // hand and no ammo number on the status bar.
+          const past = {
+            x: detour.x + ((detour.x - via.x) / span) * numberOr(this.engage.gearOvershoot, ENGAGE_DEFAULTS.gearOvershoot),
+            y: detour.y + ((detour.y - via.y) / span) * numberOr(this.engage.gearOvershoot, ENGAGE_DEFAULTS.gearOvershoot),
+            gear: true,
+          };
+          past.z = floorNear(this.map, past.x, past.y, detour.z, this.engage);
+          if (past.z !== null) waypoints.push(past);
+        }
+      }
+      waypoints.push(detour);
+      let cursor = previous;
+      let broken = false;
+      for (const step of waypoints) {
+        if (!walkable(cursor, step)) { broken = true; break; }
+        cursor = step;
+      }
+      if (broken) continue;
+      if (!walkable(cursor, to)) continue;
       claimed.add(candidate.key);
-      out.push(via);
-      previous = detour;
-      out.push(detour);
+      for (const step of waypoints) out.push(step);
+      previous = waypoints[waypoints.length - 1];
     }
     return out;
   }
@@ -781,7 +951,7 @@ export class CombatWalker extends RouteWalker {
     this.fireModes.set(mode, row);
   }
 
-  // Ask the engine for the weapon once per life, through the engine's own
+  // Ask the engine for the weapon once per attempt, through the engine's own
   // `use <weapon>` binding. Done at the first firing leg rather than at the
   // start of the attempt, because the first thing a restarted level does is put
   // the player back on the spawn with the spawn's own weapon, and a switch made
@@ -951,6 +1121,23 @@ export class CombatWalker extends RouteWalker {
       const distance = Math.hypot(points[index].x - position.x, points[index].y - position.y);
       if (distance < best) { best = distance; nearest = index; }
     }
+    // The way out to a weapon is walked one point at a time.
+    //
+    // Every other point of a plan may be cut round: the search below takes the
+    // farthest point inside `walkReach` that can be walked to, which on a plan
+    // that goes out to an item and comes back takes the *return* -- the re-join
+    // is nearer than the item is, and it stands later in the plan -- and leaves
+    // the item standing. Measured on demo1's own plan with the gun inserted: the
+    // leg out of the first point aimed at the route 96 units back on the line
+    // and never went near the gun at 322. A weapon's way out is therefore
+    // exempt: its next point is walked, whatever the search would rather do.
+    for (let index = nearest + 1; index < points.length && index - nearest <= this.engage.walkAhead; index++) {
+      const step = points[index];
+      if (!step.gear) break;
+      // ...and never at one the player is already standing inside `goto`'s own
+      // arrival radius of: such a leg is spent without taking a step.
+      if (Math.hypot(step.x - position.x, step.y - position.y) > this.engage.minLegReach) return step;
+    }
     // The player's feet, because a route point is a floor and the engine reports
     // the eye (see EYE_ABOVE_FEET).
     const feet = { x: position.x, y: position.y, z: position.z - EYE_ABOVE_FEET };
@@ -1031,6 +1218,9 @@ export class CombatWalker extends RouteWalker {
   // still decides the cone -- a walk that turns for a soldier behind it is a
   // walk that has stopped going anywhere.
   _legTarget(position, points) {
+    // The level's own pickups sitting on the plan are folded into the plan
+    // before anything is aimed at, so a walk past one is a walk *over* one.
+    points = this.snapPickups(points);
     // The near point first, for every leg and not only the firing ones. The base
     // walker aims at the farthest route point it can see, which is a *chord*
     // across the plan: it is checked for a clear line, not for a walkable floor,
@@ -1039,11 +1229,15 @@ export class CombatWalker extends RouteWalker {
     // that position and the two `func_wall`s it was standing against. Following
     // the plan point by point costs a re-decision every leg and cannot cut a
     // corner, because the points it aims at are points the planner cleared.
-    // The level's own pickups sitting on the plan are folded into the plan
-    // before anything is aimed at, so a walk past one is a walk *over* one.
-    points = this.snapPickups(points);
     const near = this.#walkPoint(position, points);
     const route = near || super._legTarget(position, points);
+    // A leg that is walking over a weapon has just picked it up, and a weapon
+    // picked up is not a weapon in hand: the engine's own `use <weapon>` binding
+    // has to be pressed again for the kill to be fought with it. The press is
+    // asked for once per life (`#ensureWeapon`), so the asking is forgotten here
+    // and the next firing leg asks again -- which is what makes the switch land
+    // on the leg after the pickup rather than never.
+    if (route && route.pickup && /^weapon_/.test(route.pickup.classname)) this.weaponAsked = null;
     if (!route || !this.enemies.length) return route;
     const bearing = bearingTo(position, route);
     const found = threats(this.map, position, {
@@ -1097,14 +1291,19 @@ export class CombatWalker extends RouteWalker {
     // degree off the way forward -- and a soldier's score changes with every
     // step the player takes, so the *best* target changes while the fight is
     // going on. What the per-leg record of four traced `finish` runs shows is
-    // the fire never settling: legs aimed at `monster_soldier` at 127 to 407
-    // units, with the aim landing on every one and the trigger down on every
-    // one, and the player dead at 1 health on the leg after the record starts.
-    // A Quake 2 soldier is 30 health and goes on shooting until it is dead, so
-    // the soldier the last leg shot at is the soldier this leg shoots at, until
-    // the `skip` above takes it out of `found` -- which is what ends it when it
-    // is out of range, out of the fight, or out of the budget, and what a
-    // soldier that dies simply does by no longer being there.
+    // the fire never settling: legs aimed at `monster_soldier` at 127, 150,
+    // 154, 160, 177, 179, 181, 184, 189, 236, 243, 267, 303, 310, 373 and 407
+    // units, with the aim landing on every one (0.00 to 1.37 degrees) and the
+    // trigger down on every one -- and the player dead at 1 health on the leg
+    // after the record starts. A record of distances cannot say how many
+    // soldiers those legs were spread over, which is exactly the point: the
+    // engagement count is kept *per soldier*, and a walker whose aim moves on
+    // before a soldier is dead has no way to know it left one alive. A Quake 2
+    // soldier is 30 health and goes on shooting until it is dead, so the
+    // soldier the last leg shot at is the soldier this leg shoots at, until the
+    // `skip` above takes it out of `found` -- which is what ends it when it is
+    // out of range, out of the fight, or out of the budget, and what a soldier
+    // that dies simply does by no longer being there.
     const kept = this.stickTo === null || this.stickTo === undefined
       ? null
       : answerable.find((candidate) => candidate.index === this.stickTo);
@@ -1135,8 +1334,8 @@ export class CombatWalker extends RouteWalker {
     return this.#fight(target, options);
   }
 
-  // One firing leg: look at the soldier, hold the trigger down, walk the route,
-  // let the trigger up.
+  // One firing leg: hold the trigger down, look at the soldier, walk the route,
+  // read the player's own health off the status bar, let the trigger up.
   //
   // The walk is the part that matters, and it is the route -- not the soldier.
   // Walking at what is being shot at is what a first attempt does and what the
@@ -1147,11 +1346,59 @@ export class CombatWalker extends RouteWalker {
   // while the whole walk in costs nothing). So the leg faces the soldier and
   // walks the way the walker was already going, with the strafe key that keeps
   // the two apart.
+  //
+  // What the leg used to do with its *other* seconds is what this version
+  // fixes, and it was measured on the running game rather than guessed. One
+  // firing leg on this box: the turn onto the soldier 415 ms, the walk 538 ms,
+  // `hudShot` 732 ms and `readHealth` 294 ms, and the trigger was down for the
+  // 538 ms in the middle of that and up for the rest. So a 2.2 s leg was 1.4 s
+  // of the player standing still in the open with the trigger *up*, being shot
+  // at by the level's own soldiers. That is the health reading the fight
+  // instrument reports (23 to 72 lost per firing leg, more than one soldier's
+  // blaster can do in half a second) turned into a mechanism -- and it is the
+  // harness's doing, not the level's.
+  //
+  // Those are the numbers that shaped this and they are kept as they were
+  // measured. The per-call cost underneath them has since been cut at the
+  // source -- one CDP connection for the whole run instead of one per call, and
+  // the status bar read out of the canvas in the page instead of photographed
+  // through the compositor. Measured on this box after that change: `hudShot`
+  // 80 ms (was 391), `position()` 1.1 ms (was 31), a key pair 3.6 ms (was 53),
+  // `fire(120)` 140 ms (was 203, so the overhead over the 120 ms hold is 20 ms
+  // rather than 83). The shape below is what makes the *leg* short; that change
+  // is what made each call in it cheap.
+  //
+  // So the trigger goes down first and comes up last, and the two halves that
+  // used to run with it up now run with it down:
+  //
+  //   * the turn. Aiming goes through the mouse, which this build does apply to
+  //     the player's own angles -- measured, `face(40, turn: "mouse")` converges
+  //     to 0.04 degrees in two rounds and 242 ms, against the arrow keys' 415 ms
+  //     and 6-degree tolerance. Every bolt of that turn is a bolt on the way to
+  //     a soldier that is already shooting back. `face()` keeps its own
+  //     calibration and falls back to the keys by itself if the mouse ever stops
+  //     turning the player.
+  //   * the status-bar read. `hudShot()`'s restyle does not touch a held key --
+  //     the engine goes on applying them -- so the leg goes on walking and firing
+  //     while the reading is taken. It is allowed to drag the leg out by
+  //     `readWalkMs` rather than the leg standing still for the whole of its
+  //     second, and it comes up with the keys rather than after them.
+  //
+  // Neither costs anything to spend: this build's starting weapon is the
+  // blaster, which uses no ammo, so the extra bolts are free and the only
+  // question is whether they land.
   async #fight(target, options) {
     const before = await this.game.position();
     // No position to aim from is not a reason to skip the leg: falling through
     // to the ordinary step reports the miss honestly instead of throwing.
     if (!before || !before.position) return super._leg({ ...target, enemy: undefined }, options);
+    // Nor is a player who is already dead a soldier to shoot at. Every movement
+    // and turn does nothing while the death camera holds the view, so the leg
+    // would spend its aim on a corpse -- and, because a turn that cannot be
+    // taken is exactly how a turning method earns its way to being retired,
+    // spend the mouse on one too. The ordinary leg reports the death for the
+    // price of a `goto()` that says DEAD, and the walker restarts the level.
+    if (before.dead) return super._leg({ ...target, enemy: undefined }, options);
     const aim = { x: target.x, y: target.y, z: before.position.z };
     const facing = bearingTo(before.position, aim);
     // Where to walk: at the route point the leg would have aimed at had there
@@ -1170,24 +1417,61 @@ export class CombatWalker extends RouteWalker {
     // engine's own config already binds to `+attack`; the console path is kept
     // for a game object that has no mouse (the stubs in `scripts/route-test.mjs`).
     // Which weapon the fight is using, asked of the engine's own config once
-    // per life. The press lands before the trigger goes down so that the first
-    // leg of the life is already firing the weapon the level gave out.
+    // per attempt. The press lands before the trigger goes down so that the
+    // first leg of the attempt is already firing the weapon the level gave out.
     await this.#ensureWeapon(options && options.attempt, this.restarts);
     const press = typeof this.game.mouseHold === "function"
       ? await this.game.mouseHold("left", true)
       : await this.game.attackHold(true);
-    let walked = null;
+    // The keys are held by hand rather than through walkKeys(), because the
+    // status-bar read has to happen *between* the press and the release. Every
+    // release is attempted even if one throws: a key left down is a player
+    // walking into a wall for the rest of the run.
+    let down = [];
+    const releaseKeys = async () => {
+      const list = down;
+      down = [];
+      for (const key of [...list].reverse()) {
+        try { await this.game.key(key, false); } catch { /* one key the engine refuses must not leave the others held */ }
+      }
+    };
+    // Change the held keys, rather than let go of all of them and press the new
+    // set. The difference matters because the set changes *during* the leg, when
+    // the aim turn has moved the view the keys were computed from: releasing
+    // everything and pressing again is two CDP round trips per key with the
+    // player standing still between them, and standing still is the one thing
+    // this level punishes. A key both sets want -- forward, on almost every leg
+    // -- is never let go at all, so the walk has no gap in it.
+    const holdKeys = async (wanted) => {
+      const keep = new Set(wanted);
+      for (const key of [...down]) {
+        if (keep.has(key)) continue;
+        down = down.filter((held) => held !== key);
+        try { await this.game.key(key, false); } catch { /* one key the engine refuses must not leave the others held */ }
+      }
+      for (const key of wanted) {
+        if (down.includes(key)) continue;
+        // Recorded as held *before* the press is sent, not after it. A press the
+        // bridge throws on can leave the write half-done -- the engine takes the
+        // key and the caller is answered with an error anyway -- and a key that
+        // is down and not in `down` is a key the leg's release never lifts: the
+        // player walks into a wall for the rest of the run. Measured on a stub
+        // whose `key()` throws on the way down, the release-first order left
+        // both of a firing leg's movement keys held when the leg ended. The
+        // other way round costs a keyup for a key the engine never took, which
+        // is a no-op; this way round costs the run.
+        down.push(key);
+        try { await this.game.key(key, true); } catch { /* a key the engine refuses is a leg that walks less, not one that throws */ }
+      }
+    };
     let aimed = null;
     // Which way this leg walks while it shoots (see #fireMode). "retreat" walks
     // the route backwards -- away from the soldier being shot at, still on the
     // plan; "hold" stands, which the level punishes and which is here as the
-    // third thing to measure rather than as a recommendation. `null` is the
-    // bearing-means-nothing case: see #turnOnTheMove.
-    //
+    // third thing to measure rather than as a recommendation.
     // `kite` is decided here rather than in #fireMode because the rule needs the
     // distance to the soldier this leg is actually fighting, which only the leg
-    // knows (see `kiteRange`). It resolves to one of the two directions, so the
-    // `null` stand-still case below is untouched by it.
+    // knows (see `kiteRange`).
     const wanted = this.#fireMode();
     const kiting = wanted === "kite";
     let mode = kiting
@@ -1211,22 +1495,124 @@ export class CombatWalker extends RouteWalker {
     // for a stub with no `standable`) it would rewrite *every* retreat into an
     // advance, which is not a retreat guarded, it is a retreat deleted.
     if (kiting && mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
-    const walk = mode === "hold" ? null : (mode === "retreat" ? walkBearing + 180 : walkBearing);
-    // The keys the leg is walking on. Computed from the view the player has at
-    // the start of the leg and re-computed after the turn, because Quake 2 walks
-    // a player along the view: the same key is a different direction after the
-    // view has moved. See #turnOnTheMove.
-    let keys = walk === null ? [] : movementKeys(facing, walk);
+    const walk = mode === "retreat" ? walkBearing + 180 : walkBearing;
+    // Where the leg *looks*. Every way of firing but one looks at the soldier it
+    // is shooting at and walks the route as a strafe; a sprint leg looks at the
+    // route instead, so that the keys that walk it are forward rather than a
+    // sideways step into whatever the corridor is made of. See `fireWhile`.
+    const look = mode === "sprint" ? walk : facing;
+    let keys = mode === "hold" ? [] : movementKeys(look, walk);
+    let heldMs = 0;
+    let health = null;
     try {
-      walked = await this.#turnOnTheMove(before, facing, walk, keys, stepMs, options);
-      aimed = walked.aimed;
-      keys = walked.keys;
+      const aimOptions = {
+        from: before,
+        tolerance: numberOr(options.faceTolerance, this.engage.faceTolerance),
+        rounds: numberOr(options.faceRounds, this.engage.faceRounds),
+      };
+      // The walk starts *before* the turn, not after it. `face()` is the longest
+      // thing in the leg that is not walking -- it is a mouse move and a
+      // measurement of where the view landed, and it has taken 242 ms on this
+      // box when it converges first time -- and until this point the keys only
+      // went down once it had finished, so every firing leg began with the
+      // player standing still in the open with the trigger down. That is the
+      // exact posture the file's own measurements say the level kills: 100
+      // health and no armour is a corpse after six seconds of standing still in
+      // demo1's corridor, and 26 firing legs is 26 of these windows.
+      //
+      // So the keys for the view the player has *now* go down first -- the leg
+      // is already walking the way the last leg left it walking -- and the turn
+      // is taken with the player in motion. `holdKeys` then swaps them for the
+      // set the new view wants, and the keys the two sets share are never let
+      // go, so there is no gap between one and the other.
+      if (typeof this.game.key === "function") {
+        const preYaw = before.angles && Number.isFinite(Number(before.angles.yaw))
+          ? Number(before.angles.yaw)
+          : facing;
+        await holdKeys(mode === "hold" ? [] : movementKeys(preYaw, walk));
+      }
+      aimed = await this.game.face(look, { ...aimOptions, turn: options.aimTurn || this.engage.aimTurn });
+      // A turn still has to be taken. The mouse is this leg's first choice and
+      // not its only one: if it did not land the aim, one more try is made the
+      // bridge's own way, which is the order that puts a retired method back on
+      // probation. A leg that walks off with the aim wherever it happened to be
+      // is a leg that fires at the wall it is walking past.
+      //
+      // The retry measures again rather than re-running the first attempt's
+      // arithmetic. `face()` skips its opening probe when it is handed `from`,
+      // and `before` is where the view was *before* the first attempt turned
+      // it -- so handing it back aims the second attempt at the error the first
+      // one has already spent: a 29-degree miss whose first attempt recovered
+      // 25 of it turns another 29 and ends 25 degrees out the other side. It is
+      // the shape of the 10-to-30-degree residuals, and the one of 109, in a
+      // measured `finish` run's leg record.
+      if (aimed && !aimed.facing) {
+        const { from: _spent, ...fresh } = aimOptions;
+        const again = await this.game.face(look, { ...fresh, rounds: 2, turn: "auto" });
+        // The latest word wins even when it is a miss. The retry has turned the
+        // player, so the first attempt's `yaw` is no longer where the view is,
+        // and `viewYaw` below is what the walk's keys are computed from -- a leg
+        // that walked on the first attempt's yaw would walk off-course.
+        if (again) aimed = again;
+      }
+      // The walk is walked on the view the aim actually left behind, not on the
+      // bearing it was asked for -- movementKeys() is what turns the difference
+      // between that view and the way the route goes into forward-and-strafe.
+      const viewYaw = aimed && aimed.yaw !== undefined ? aimed.yaw : facing;
+      keys = mode === "hold" ? [] : movementKeys(viewYaw, walk);
+      if (typeof this.game.key === "function") {
+        await holdKeys(keys);
+        const started = Date.now();
+        // The step is walked in `stepRounds` pieces, re-aimed at the leg's own
+        // route point between them -- and the trigger never comes up for it.
+        //
+        // A leg that holds one bearing for the whole step is a leg that walks
+        // into the corner the corridor turns: the route point it is heading for
+        // is up to `walkReach` units away, it was chosen from where the player
+        // stood when the leg began, and half a second later the player is
+        // somewhere else on a bearing that no longer points down the corridor.
+        // Measured on a live `finish` run: **162 units of ground per second of
+        // trigger-down time**, against the player's own 300 units per second of
+        // running. A leg in the open room covers 306; the legs in the corridor
+        // cover 20 to 90, and they are the legs that cost the health. The one
+        // reading the re-aim needs -- where the player is -- is the one the leg
+        // already takes to judge the aim, and it is taken with the keys still
+        // down, so the correction costs a CDP round trip and no ground.
+        const rounds = Math.max(1, Math.min(4, Math.floor(numberOr(this.engage.stepRounds, 1))));
+        for (let round = 0; round < rounds; round++) {
+          await new Promise((resolve) => setTimeout(resolve, Math.round(stepMs / rounds)));
+          if (round >= rounds - 1 || !target.route || mode === "hold") continue;
+          const here = await this.game.position();
+          if (!here || !here.position) continue;
+          const ahead = bearingTo(here.position, target.route);
+          const yaw = here.angles && Number.isFinite(Number(here.angles.yaw)) ? Number(here.angles.yaw) : viewYaw;
+          keys = movementKeys(yaw, mode === "retreat" ? ahead + 180 : ahead);
+          await holdKeys(keys);
+        }
+        // The status bar is read inside the hold: the player is still walking
+        // and still firing while it is photographed and decoded.
+        const reading = this.engage.readHud === true ? this.#readHud(options) : null;
+        if (reading) await new Promise((resolve) => setTimeout(resolve, Math.max(0, numberOr(this.engage.readWalkMs, 600))));
+        await releaseKeys();
+        // Measured at the release, so `holdMs` is the time the keys were held
+        // rather than that plus however long the status bar took to decode --
+        // the decode outlives the hold, because the keys come up once the read
+        // has had its `readWalkMs` and the reading is awaited after them.
+        heldMs = Date.now() - started;
+        if (reading) health = await reading;
+      } else {
+        // A game object with no key() -- the walker's test stubs -- keeps the
+        // old path: walk, release, then read.
+        heldMs = (await this.game.walkKeys(keys, stepMs, options)).heldMs;
+        health = await this.#readHud(options);
+      }
     } finally {
+      await releaseKeys();
       // The trigger comes up even if the walk threw: fire is also the key that
       // leaves the death camera, and a stuck trigger would respawn the player
       // onto the engine's autosave instead of the level's own spawn.
-      if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", false);
-      else await this.game.attackHold(false);
+      if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", false).catch(() => {});
+      else await this.game.attackHold(false).catch(() => {});
     }
     const after = await this.game.position();
     const at = (after && after.position) || before.position;
@@ -1239,31 +1625,40 @@ export class CombatWalker extends RouteWalker {
       enemyDistance: Math.round(target.enemy.distance),
       fired: !!press.held,
       aimed: !!(aimed && aimed.facing),
-      aimError: aimed && aimed.error !== undefined ? Math.round(aimed.error) : null,
+      // Two decimals rather than none: the mouse path lands the aim inside a
+      // hundredth of a degree and the arrow-key path inside six, and a report
+      // that rounds both to "0deg" cannot tell the fix from the fault.
+      aimError: aimed && aimed.error !== undefined ? Number(aimed.error.toFixed(2)) : null,
+      aimMethod: aimed ? aimed.method : null,
       keys,
       offCourseDegrees: Math.round(shortestTurn(walkBearing - facing)),
       from: before.position,
       at,
       travelled: Math.round(Math.hypot(at.x - before.position.x, at.y - before.position.y)),
-      holdMs: walked ? walked.heldMs : 0,
-      // How much of the leg the turn took, and how long the leg held its keys.
-      // The turn used to be the whole leg -- it was made standing still and the
-      // walking happened after it -- so these two numbers are how "the leg walks
-      // through its turn" is checkable from a run's own record rather than
-      // believed from this file.
-      turnMs: walked && walked.turnMs !== undefined ? walked.turnMs : null,
+      holdMs: heldMs,
       fireMode: mode,
       // The pickup this leg's route point was nudged onto, if any: evidence
       // that "the walk tops up as it passes" is what happened rather than what
       // was intended.
       pickupOnRoute: target.route && target.route.pickup ? target.route.pickup.classname : null,
       dead: !!(after && after.dead),
+      // The engine's own account of who had the keyboard while this leg was
+      // fought. It is read from the same `position()` the aim and the walk are
+      // judged by, so it costs nothing, and it is the one reading that separates
+      // "the walker could not turn" from "the walker was not allowed to turn":
+      // a leg that covered nothing and aimed at nothing because the console or
+      // the menu had the keys is a different fault from one where the bridge
+      // sent a turn into a game that was listening. `paused` is the engine's
+      // own, and it is true for exactly the states that swallow input.
+      inGame: after && after.inGame !== undefined ? after.inGame : null,
+      paused: after && after.paused !== undefined ? after.paused : null,
+      keyDest: after && after.keyDestName !== undefined ? after.keyDestName : null,
     };
     // The one reading the engine will not give: how much of the player is left
-    // after this leg. Taken here, with the trigger up, because that is the
-    // only moment the status bar is showing the player's own state rather than
-    // a death camera -- and because a leg is the unit the fight is fought in.
-    const health = await this.#readHud(options);
+    // after this leg. Taken with the trigger down (see above), because a leg is
+    // the unit the fight is fought in and the status bar shows the player's own
+    // state for all of it -- a death during the leg is the one case that reads
+    // as nothing, and a leg with no health reading says so rather than guessing.
     if (health) Object.assign(record, health);
     // What this leg cost, by the way it was fought. This is the number
     // `fireWhile: "adapt"` chooses on, and it is recorded whether or not the
@@ -1271,90 +1666,6 @@ export class CombatWalker extends RouteWalker {
     this.#recordFireMode(mode, record.travelled, health);
     this.fights.push(record);
     return { ...(after || { position: before.position }), fired: !!press.held, position: at };
-  }
-
-  // One firing leg's movement: the player is walking the route before the turn
-  // starts, keeps walking through it, and is still walking when the leg ends.
-  //
-  // This is the leg's whole defence and it used to be missing. A leg built out
-  // of `face()` and then `walkKeys()` turns first and walks afterwards, and the
-  // turn is the longer half: the arrow keys turn at cl_yawspeed -- 140 degrees a
-  // second -- and face() caps one round at 900 ms, so a soldier 90 degrees off
-  // the way forward is over half a second of a half-second leg spent standing
-  // still, and a soldier behind the player is more. Standing still in demo1's
-  // corridor with full health and no armour was measured to end in a corpse in
-  // six seconds; walking the same ground into the same soldiers costs nothing.
-  // A leg that stands still for most of itself is therefore not fighting, it is
-  // dying, and the fix is the one a player uses without thinking about it: hold
-  // the movement keys down *first* and turn while they are held.
-  //
-  // The keys have to be re-chosen after the turn, and that is not a detail.
-  // Quake 2 moves a player along the view, so `movementKeys(facing, wanted)`
-  // answers "which keys walk `wanted` while looking at `facing`" -- and `facing`
-  // is a different direction once the turn lands. Left as they were, a leg that
-  // turned a quarter turn would keep walking the bearing it started with a
-  // quarter turn away. Both sets are returned so the caller can report which
-  // keys the leg actually walked on.
-  async #turnOnTheMove(before, facing, walkBearing, startKeys, stepMs, options) {
-    // `walkBearing === null` is the caller asking the leg to *stand*: the turn
-    // is still made and the trigger is still held, but no movement key goes
-    // down. It exists for `fireWhile: "hold"`, which is the third thing that
-    // setting puts up against the other two -- standing in demo1's corridor
-    // with full health and no armour was measured to end in a corpse in six
-    // seconds, so this is a case to be measured, not a recommendation.
-    const faceOptions = {
-      from: before,
-      tolerance: numberOr(options.faceTolerance, 6),
-      rounds: numberOr(options.faceRounds, 4),
-    };
-    // A game object that cannot hold a key apart from the call that sends it --
-    // the stubs in scripts/route-test.mjs -- keeps the old shape: turn, then
-    // walk. It is the half of this file's own argument that measurably loses,
-    // and it is here only so that an object with no input state still runs.
-    if (typeof this.game.holdKeys !== "function") {
-      const aimed = await this.game.face(facing, faceOptions);
-      const keys = walkBearing === null ? [] : movementKeys(facing, walkBearing);
-      const walked = await this.game.walkKeys(keys, stepMs, options);
-      return { aimed, keys, heldMs: walked ? walked.heldMs : 0, turnMs: null };
-    }
-    // Down before the first turn: the leg is moving before it has turned a
-    // degree, which is the whole point of this method.
-    let keys = walkBearing === null ? [] : startKeys;
-    let aimed = null;
-    let turnMs = 0;
-    try {
-      // The press goes inside the `try` so that the `finally` below covers it.
-      // A key-down that throws on the way out -- the bridge's own `holdKeys`
-      // catches a refused key, but a session that dies while the keys are going
-      // down does not -- would otherwise leave movement keys held with nothing
-      // left to lift them, and a key left down is a player walking into a wall
-      // for the rest of the run. Releasing keys that were never pressed costs a
-      // keyup the engine ignores.
-      if (keys.length) await this.game.holdKeys(keys, true);
-      const turnedAt = Date.now();
-      aimed = await this.game.face(facing, faceOptions);
-      turnMs = Date.now() - turnedAt;
-      const yaw = aimed && aimed.yaw !== undefined ? aimed.yaw : facing;
-      const after = walkBearing === null ? [] : movementKeys(yaw, walkBearing);
-      if (after.join(",") !== keys.join(",")) {
-        // Release before pressing: a key held down and pressed again is one key
-        // hold, not two, and the direction it is held on is the first one.
-        await this.game.holdKeys(keys, false);
-        await this.game.holdKeys(after, true);
-        keys = after;
-      }
-      // The leg lasts `stepMs` of walking, counted from the moment the keys went
-      // down -- so the turn is spent walking rather than added to the leg. A
-      // soldier far off the way forward costs ground to answer, not health.
-      const rest = stepMs - turnMs;
-      if (rest > 0) await new Promise((resolve) => setTimeout(resolve, rest));
-    } finally {
-      // The keys come up whatever happened above: a leg that throws with a
-      // movement key still down is a player walking into a wall for the rest of
-      // the run. Nothing is released for a leg that held nothing.
-      if (keys.length) await this.game.holdKeys(keys, false);
-    }
-    return { aimed, keys, heldMs: Math.max(turnMs, stepMs), turnMs };
   }
 
   // The player's own state off the status bar, and the picture it was read
@@ -1414,7 +1725,10 @@ export class CombatWalker extends RouteWalker {
       combat: {
         enemiesInLevel: this.enemies.length,
         firingLegs: this.fights.length,
-        onTarget: this.fights.filter((fight) => fight.aimed).length,
+        // Legs whose turn landed on a *soldier*. A sprint leg turns onto the way
+        // it is going and not onto a soldier at all, so counting it here would
+        // report a fight the leg never took (see `fireWhile`).
+        onTarget: this.fights.filter((fight) => fight.aimed && fight.fireMode !== "sprint").length,
         healthReadings: measured.length,
         // A restart puts the player back at 100, so this is the lowest the
         // fight ever took them, not the lowest reading of one life.

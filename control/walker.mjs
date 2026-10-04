@@ -532,24 +532,68 @@ export class RouteWalker {
         // is owed again.
         stage = 0;
         bestDistance = Infinity;
-        const back = await this.game.respawn({ expectMap: this.levelName });
+        // ...and `let`, not `const`: the rescue below is retried, and a retry
+        // reassigns this. A `const` here is a TypeError on the first retry,
+        // which is the one press that fails on a live level under fire.
+        let back = await this.game.respawn({ expectMap: this.levelName });
         this.#note(back.respawned ? "back in the level" : "could not get back into the level", { how: back.how, reason: back.reason });
+        // A rescue that failed once is not a rescue that cannot happen, and the
+        // retry is free: it is the same death, and the budget that matters --
+        // the level restarts the walk will live through -- is charged once.
+        //
+        // Measured on this box, both halves of that. A clean experiment (walk
+        // into demo1's soldiers unarmed, press fire) brought the player back
+        // every time: one click, 2.5 s, roll -1.50 to 0.00, alive. And a
+        // `finish` run ended on a single NOT_RESPAWNED at attempt 3 of 8, with
+        // the player 1,802 units short and four attempts unspent -- so on a
+        // live level, under fire, one press is not always enough. `ALIVE` and
+        // `LEVEL_CHANGED` are answers rather than failures and do not retry.
+        const tries = options.respawnTries === undefined ? 2 : Math.max(0, options.respawnTries);
+        for (let retry = 0; retry < tries && !back.respawned; retry++) {
+          if (back.reason === "ALIVE" || back.reason === "LEVEL_CHANGED") break;
+          this.#note("pressing fire again for the player", { try: retry + 2, reason: back.reason });
+          back = await this.game.respawn({ expectMap: this.levelName });
+          this.#note(back.respawned ? "back in the level" : "still could not get back into the level", { how: back.how, reason: back.reason });
+        }
+        // Fire did not bring the level back, and the walk is over if nothing
+        // else does: the level restarts the player on death and a walker that
+        // cannot restart it can never use the rest of its death budget. So the
+        // last resort is the engine's own restart, by name -- `map demo1`,
+        // which is the one console command this harness is allowed to send and
+        // the same thing a player's own death does to the level.
+        //
+        // Measured: every traced `finish` run that died (four of them, with and
+        // without the fire press held across a frame instead of clicked) logged
+        // NOT_RESPAWNED on all three fire presses and then `deaths: 9,
+        // allowed: 8` -- one death ending a run with seven restarts unspent,
+        // and the walk stopped 1,544 to 2,011 units short every time.
+        if (!back.respawned && back.reason === "NOT_RESPAWNED" && this.levelName) {
+          this.#note("fire did not bring the level back; restarting it by name", { map: this.levelName });
+          back = await this.game.respawn({ how: "map", map: this.levelName, expectMap: this.levelName });
+          this.#note(back.respawned ? "back in the level" : "still could not get back into the level", { how: back.how, reason: back.reason });
+        }
         if (back.reason === "LEVEL_CHANGED") {
           return { reached: false, reason: "LEVEL_CHANGED", map: back.map, level: this.levelName, attempts: attempt, position: back.position, trail, log: this.log };
         }
         const restarted = await this.game.position();
         if (!restarted || !restarted.position) {
+          // The engine stopped answering altogether: no position is not a death
+          // and there is nothing left to walk. `NO_POSITION` and not `DEAD`,
+          // because that is what the top of this loop calls the same reading.
           return { reached: false, reason: "NO_POSITION", attempts: attempt, position: null, deepest: deepestReading(trail), trail, log: this.log };
         }
         if (restarted.dead) {
-          // The player is still a corpse, so the restart did not take. That is
-          // not the end of the walk: it is a restart that has to be tried again,
+          // The player is still a corpse, so the restart did not take -- or the
+          // level put them straight back into the fire that killed them. Neither
+          // is the end of the walk: it is a restart that has to be tried again,
           // and the budget for trying again is the death budget the caller set
           // -- the top of this loop counts it and stops the walk when it runs
           // out. Ending the run here instead is what a proof run did on its
           // fourth death, with six of its eight lives and the level's own route
-          // still unspent. Measured: two restarts came back `ALIVE` from the
-          // bridge's own recheck and the walker read a corpse straight after.
+          // still unspent, and what threw away four attempts and 1,802 units of
+          // ground on a single missed press. Measured: two restarts came back
+          // `ALIVE` from the bridge's own recheck and the walker read a corpse
+          // straight after.
           this.#note("the player is still dead; restarting again");
           continue;
         }
