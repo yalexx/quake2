@@ -95,6 +95,14 @@ export const ENGAGE_DEFAULTS = {
   // the next leg, and the aim on the legs it did take was 0 to 3 degrees, so
   // the firing was never the problem.
   answerRange: 200,
+  // ...and the limit on that override: a soldier further off the way forward
+  // than this many degrees is not answered whatever its distance, so the leg
+  // keeps its ground (see `answerable` in _legTarget). 0 leaves the targeting
+  // exactly as every run before this one was measured with.
+  forwardArc: 0,
+  // ...and the range inside which a soldier is not traded with at all, in units
+  // (see `answerable` in _legTarget). 0 leaves the targeting as it was.
+  avoidRange: 0,
   // How long one firing leg lasts. At the player's 300 units per second this is
   // about 150 units of ground and, with the trigger held, several blaster bolts
   // -- three of them kill a soldier, and they are aimed the whole way in.
@@ -154,6 +162,23 @@ export const ENGAGE_DEFAULTS = {
   // first and falls back to the centre line, so a corridor genuinely narrower
   // than the player is still walked.
   bodyRadius: 16,
+  // How far to one side of the plan a leg may look for ground that fewer
+  // soldiers can shoot, and how finely it looks. 0 turns the search off, which
+  // is the behaviour every run before this one was measured with.
+  //
+  // This is the lever the level's own geometry argued for rather than a knob
+  // that sounded good. `map.isSolid` and `levelShotReaches` can be asked, for
+  // any point, how many of the level's monsters have a clear level line to a
+  // player standing there -- and on demo1 the exit route walks straight down
+  // the middle of that answer. Sampled across the route's own width (see the
+  // run's `cover-grid` evidence): plan points 13 to 19 are seen by 5, 4, 4, 8,
+  // 7, 7 and 7 soldiers, while the ground 200 units to the west of the same
+  // points is seen by 0, 0, 0, 2, 2, 0 and 0 -- and it is floor a body walks on
+  // (`standable`, and `clearWalk` down the lane from point to point 13->14 is
+  // 602 units with the shoulder test passing). The route is not defended
+  // everywhere; it is defended *where the planner put it*.
+  coverLane: 0,
+  coverStep: 40,
   // How far a route point has to be from the player before walking to it is
   // worth a leg. This is the bridge's own `goto` tolerance (48): a target
   // inside it comes back `reached` with no step taken, so a leg aimed there is
@@ -190,6 +215,24 @@ export const ENGAGE_DEFAULTS = {
   // tries each in turn and then follows the health the fight actually cost --
   // see #fireMode, which is the measurement this option exists for.
   fireWhile: "advance",
+  // ...and "kite", which is not a direction but a rule: back along the route
+  // away from a soldier that has closed inside this many units, and advance
+  // otherwise. Read off the per-leg health series rather than chosen, because
+  // that series says the fight is not the attrition race its average made it
+  // look like. On the 24-attempt `finish` run the average is 9.61 health a leg
+  // and reads like a slow bleed; the series itself is not slow. Legs 58 to 61 of
+  // that record go 100, 6, (no reading), then 1 health and dead, and 45 to 46 go
+  // 60, then 3 and dead -- 80 to 100 health gone inside one 1.1 second leg, on
+  // the legs that covered 30, 18, 65 and 68 units against the 175 the average
+  // leg covers. The burst is at close range: the soldier being shot at on those
+  // legs is 86, 115, 139, 167 and 188 units away, against 212 to 360 on the legs
+  // that cost nothing. So the rule is the one a player uses -- do not stand
+  // inside a soldier's face, back out of it with the trigger still down.
+  kiteRange: 150,
+  // How far along the retreat to look for ground before giving the retreat up
+  // (see #canStep). A leg is 500 ms and the player runs 300 units a second, so
+  // this is a little under the ground a leg would cross.
+  retreatProbe: 120,
   // How many firing legs each way of firing is given before "adapt" starts
   // choosing the cheaper one. Two is the smallest number that can show a
   // difference; more would spend the level's health learning instead of
@@ -786,6 +829,115 @@ export class CombatWalker extends RouteWalker {
     return spent + 1;
   }
 
+  // Is there ground to walk on this many units along `bearing` from where the
+  // player stands? The same two tests every walk in this file is held to -- a
+  // floor `floorNear` finds that `standable` accepts, reached by a line
+  // `clearWalk` accepts with the player's shoulders and then with the centre
+  // line. `position` is the engine's eye. See the retreat in #fight.
+  #canStep(position, bearing) {
+    const feet = { x: position.x, y: position.y, z: position.z - EYE_ABOVE_FEET };
+    const span = numberOr(this.engage.retreatProbe, 120);
+    const radians = (Number(bearing) * Math.PI) / 180;
+    const x = feet.x + Math.cos(radians) * span;
+    const y = feet.y + Math.sin(radians) * span;
+    const z = floorNear(this.map, x, y, feet.z, this.engage);
+    if (z === null || !this.map.standable(x, y, z)) return false;
+    const at = { x, y, z };
+    return (
+      clearWalk(this.map, feet, at, { ...this.engage, radius: this.engage.bodyRadius }) ||
+      clearWalk(this.map, feet, at, { ...this.engage, radius: 0 })
+    );
+  }
+
+  // How many of the level's monsters have a clear level shot to a player
+  // standing on the floor at `at`. This is the level's own answer to "who can
+  // shoot me here" -- the same `levelShotReaches` test the fight uses to decide
+  // what is worth turning for, asked of the ground instead of the monsters.
+  // Monsters past `engageRange` are not counted: they cannot reach.
+  #seers(at) {
+    const eye = { x: at.x, y: at.y, z: at.z + EYE_ABOVE_FEET };
+    let count = 0;
+    for (const enemy of this.enemies) {
+      const origin = enemy && enemy.position;
+      if (!origin) continue;
+      if (Math.hypot(origin.x - eye.x, origin.y - eye.y) > this.engage.engageRange) continue;
+      if (levelShotReaches(this.map, eye, origin, this.engage)) count++;
+    }
+    return count;
+  }
+
+  // The same route point, moved sideways onto ground fewer soldiers can shoot.
+  //
+  // The plan is walked only where the planner put it, and the planner knows
+  // nothing about monsters -- so on a defended level it walks the middle of the
+  // room, which is the ground the level's own soldiers are all sighted onto.
+  // The search here is deliberately small and conservative: a fan of offsets to
+  // both sides of the route at the point the leg would have walked to, each one
+  // snapped onto a real floor `map.standable` accepts and reached by a line
+  // `clearWalk` accepts for a body, and the offset kept only when it is seen by
+  // strictly fewer soldiers than the point itself. Ties go to the route (the
+  // loop walks outward, so the first offset to reach a count keeps it), a side
+  // with no floor or no walkable line is skipped rather than aborted -- demo1's
+  // lane has a hole at 120 units out and floor again at 160 -- and when the
+  // search finds nothing better the plan point is returned unchanged.
+  #coverLane(feet, points, index) {
+    const candidate = points[index];
+    const reach = numberOr(this.engage.coverLane, 0);
+    if (!(reach > 0)) return candidate;
+    // Where this leg will actually go, before any side-stepping. A plan is
+    // sparse -- demo1's own points run 300 to 600 units apart -- and a leg is
+    // 500 ms, so the ground a leg crosses lies *between* the plan's vertices,
+    // not at the far one. Measured: aiming the offset at the far vertex bends
+    // the leg about 20 degrees and never reaches the lane at all (on demo1's
+    // arena that recovered 2 of 7 firing lines), because the lane is 200 units
+    // to the side and the vertex is 550 ahead. So the search is anchored on the
+    // route a `walkReach` ahead of the player, which is ground the leg will
+    // cover, and the vertex is only what decides the direction to it.
+    const span = Math.hypot(candidate.x - feet.x, candidate.y - feet.y);
+    if (!(span > 0)) return candidate;
+    const look = Math.min(span, numberOr(this.engage.walkReach, 240));
+    const fx = (candidate.x - feet.x) / span;
+    const fy = (candidate.y - feet.y) / span;
+    const baseX = feet.x + fx * look;
+    const baseY = feet.y + fy * look;
+    const baseZ = floorNear(this.map, baseX, baseY, candidate.z, this.engage);
+    if (baseZ === null) return candidate;
+    const base = { x: baseX, y: baseY, z: baseZ };
+    const baseSeers = this.#seers(base);
+    if (baseSeers === 0) return candidate;
+    const nx = -fy;
+    const ny = fx;
+    const step = Math.max(1, numberOr(this.engage.coverStep, 40));
+    let best = null;
+    let bestSeers = baseSeers;
+    for (const sign of [1, -1]) {
+      for (let offset = step; offset <= reach + 1e-6; offset += step) {
+        const x = base.x + nx * offset * sign;
+        const y = base.y + ny * offset * sign;
+        // A route point is a floor; a point beside one has to be told where its
+        // own floor is, and `floorNear` is the same probe the walk itself uses.
+        const z = floorNear(this.map, x, y, base.z, this.engage);
+        if (z === null || !this.map.standable(x, y, z)) continue;
+        const at = { x, y, z };
+        // The line to it is tested the way every walk in this file is: with the
+        // player's shoulders first, and the centre line second, so a genuinely
+        // narrow approach is still taken.
+        const clear =
+          clearWalk(this.map, feet, at, { ...this.engage, radius: this.engage.bodyRadius }) ||
+          clearWalk(this.map, feet, at, { ...this.engage, radius: 0 });
+        if (!clear) continue;
+        const seen = this.#seers(at);
+        if (seen < bestSeers) {
+          best = at;
+          bestSeers = seen;
+        }
+      }
+    }
+    // Nothing to one side of the plan was quieter than the plan itself: walk the
+    // plan, unchanged.
+    return best || candidate;
+  }
+
   // Where a fighting leg walks towards: the route a few points along the plan
   // from wherever the player is, kept inside walkReach so that the direction is
   // the path's own and not a long chord across it. It falls back to the next
@@ -844,7 +996,7 @@ export class CombatWalker extends RouteWalker {
       // 3, 0 and 0 units in a row -- with a clear 166-unit line to a point four
       // further along the plan sitting right there unused.
       if (distance <= this.engage.minLegReach) continue;
-      within.push(points[index]);
+      within.push({ point: points[index], index });
     }
     // Farthest first, and the shoulders first *for each candidate*: the margin
     // is a preference about a line, not about which point to aim at, and the
@@ -854,9 +1006,14 @@ export class CombatWalker extends RouteWalker {
     // 166 units away that only the centre line cleared. A short leg is not a
     // cheaper leg: it spends one of the attempt's eight legs to cross a fifth
     // of the ground, and at 21 units it spends one to cross none.
-    for (const candidate of within) {
+    for (const entry of within) {
       for (const radius of [this.engage.bodyRadius, 0]) {
-        if (clearWalk(this.map, feet, candidate, { ...this.engage, radius })) return candidate;
+        // The point is walked to; where the walk actually goes is the same point
+        // moved onto ground fewer soldiers can shoot, when there is any (see
+        // #coverLane -- it returns the point unchanged when `coverLane` is 0).
+        if (clearWalk(this.map, feet, entry.point, { ...this.engage, radius })) {
+          return this.#coverLane(feet, points, entry.index);
+        }
       }
     }
     // Nothing on the plan could be walked to at all. Hand back the nearest point
@@ -904,6 +1061,36 @@ export class CombatWalker extends RouteWalker {
       this.stickTo = null;
       return route;
     }
+    // A fight only with what is *in front of* the walk. `engageArc` bounds the
+    // turn, but `answerRange` overrides it inside 200 units, and those overrides
+    // are the legs the per-leg record shows costing the run its ground. Measured
+    // on demo1's finished runs: the two legs that ended an attempt were aimed at
+    // a `monster_soldier` 78 and 52 units away at 87 and 155 degrees off the way
+    // forward -- `offCourseDegrees` -87 and -155 in the leg record -- and a leg
+    // aimed 87 degrees off walks the route with a pure strafe and covered 49
+    // units, where the legs aimed within 25 degrees covered 175 to 282. A leg
+    // that gives its whole second to a soldier behind it is a leg that does not
+    // leave the room the fight is in. With `forwardArc` set, a soldier further
+    // off the way forward than that is not answered at all: the trigger stays
+    // down and the leg spends its second going somewhere. 0 leaves the targeting
+    // exactly as it was.
+    const forwardArc = numberOr(this.engage.forwardArc, 0);
+    let answerable = forwardArc > 0 ? found.filter((candidate) => candidate.off <= forwardArc) : found;
+    // ...and the other end of the same series: a soldier *inside* `avoidRange`
+    // is not answered either. The per-leg health series puts the legs that took
+    // the run's whole life at 86 to 188 units and the legs that cost nothing at
+    // 212 to 360, so the trade at arm's length is the one the level wins. This
+    // is not the same rule as `minimumRange` (which refuses to *turn* for a
+    // monster already touching the player) or as `closeEngagements` (which lets
+    // a capped soldier be fought anyway because it may be blocking the walk):
+    // it is the flat refusal to stand and trade inside the range the burst was
+    // measured in. 0 leaves the targeting as it was.
+    const avoidRange = numberOr(this.engage.avoidRange, 0);
+    if (avoidRange > 0) answerable = answerable.filter((candidate) => candidate.distance >= avoidRange);
+    if (!answerable.length) {
+      this.stickTo = null;
+      return route;
+    }
     // Finish what the last leg started, when it is still a target.
     //
     // The list is scored fresh every leg -- distance plus a penalty for every
@@ -920,8 +1107,8 @@ export class CombatWalker extends RouteWalker {
     // soldier that dies simply does by no longer being there.
     const kept = this.stickTo === null || this.stickTo === undefined
       ? null
-      : found.find((candidate) => candidate.index === this.stickTo);
-    const target = kept || found[0];
+      : answerable.find((candidate) => candidate.index === this.stickTo);
+    const target = kept || answerable[0];
     this.stickTo = target.index;
     this._note("a soldier is on the way; looking at it with the trigger down", {
       classname: target.classname,
@@ -996,7 +1183,34 @@ export class CombatWalker extends RouteWalker {
     // plan; "hold" stands, which the level punishes and which is here as the
     // third thing to measure rather than as a recommendation. `null` is the
     // bearing-means-nothing case: see #turnOnTheMove.
-    const mode = this.#fireMode();
+    //
+    // `kite` is decided here rather than in #fireMode because the rule needs the
+    // distance to the soldier this leg is actually fighting, which only the leg
+    // knows (see `kiteRange`). It resolves to one of the two directions, so the
+    // `null` stand-still case below is untouched by it.
+    const wanted = this.#fireMode();
+    const kiting = wanted === "kite";
+    let mode = kiting
+      ? (target.enemy && target.enemy.distance < numberOr(this.engage.kiteRange, 150) ? "retreat" : "advance")
+      : wanted;
+    // A retreat a body cannot walk is not a retreat, it is a second spent
+    // standing in the open with the trigger down, which is the posture this
+    // level kills. Measured on the 40-attempt kite run: the legs it died on are
+    // retreat legs that covered 0, 2 and 21 units (`monster_soldier_light d149`
+    // covered 0; `monster_soldier_light d50` covered 2; `monster_soldier d142`
+    // covered 21) against the 200-odd an advancing leg covers -- the kite walked
+    // itself into the arena's own geometry and stopped there. So the direction
+    // is only walked if there is ground to walk it on, and otherwise the leg
+    // keeps going the way it was going.
+    //
+    // Guarded by `kiting`, and deliberately: `fireWhile: "retreat"` is a lever
+    // of its own and one the runs before this one were measured with, so it goes
+    // on meaning exactly what it meant. This rule belongs to the kite, and a
+    // guard that also rewrote "retreat" would quietly invalidate that
+    // measurement -- and on a map with no floor to ask (`floorNear` answers null
+    // for a stub with no `standable`) it would rewrite *every* retreat into an
+    // advance, which is not a retreat guarded, it is a retreat deleted.
+    if (kiting && mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
     const walk = mode === "hold" ? null : (mode === "retreat" ? walkBearing + 180 : walkBearing);
     // The keys the leg is walking on. Computed from the view the player has at
     // the start of the leg and re-computed after the turn, because Quake 2 walks

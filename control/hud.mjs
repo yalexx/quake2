@@ -538,6 +538,7 @@ export async function hudShot(game, options = {}) {
   // live player came back with the status bar where the un-framed canvas puts
   // it, off the bottom of the strip, and no number in it.
   await new Promise((resolve) => setTimeout(resolve, options.settleMs === undefined ? 150 : options.settleMs));
+  const clipWidth = Math.max(1, Math.round(box.viewport || options.viewportWidth || 900));
   let png;
   try {
     // Only the band that holds the status bar: a full-page capture is ~600 KB
@@ -548,7 +549,7 @@ export async function hudShot(game, options = {}) {
     png = await game.screenshot({
       clip: {
         x: 0, y: 0, scale: 1,
-        width: Math.max(1, Math.round(box.viewport || options.viewportWidth || 900)),
+        width: clipWidth,
         height: (options.band || HUD_BAND) + 8,
       },
     });
@@ -570,7 +571,15 @@ export async function hudShot(game, options = {}) {
     // `band` rides along because the reader bounds its search by it: without
     // it a caller that took a taller strip would hand over rows the reader
     // then filtered out, and the read would come back empty for no reason.
-    readOptions: { band, rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0) },
+    // `healthFieldRight` rides along because this strip is the canvas slid
+    // left by `left`, so the field is not at the canvas's own fraction of it
+    // (see `healthFieldRightForStrip`); without it every read on this path is
+    // a miss.
+    readOptions: {
+      band,
+      rows: [digitRow - 1, digitRow, digitRow + 1].filter((y) => y >= 0),
+      healthFieldRight: healthFieldRightForStrip(box.width, box.left, clipWidth),
+    },
     source: "screenshot",
   };
 }
@@ -754,20 +763,80 @@ export function readBar(lum, width, height, options = {}) {
   return { numbers: accepted, width, height, scale: options.scale || 1 };
 }
 
+// Where the bar's own layout puts the health number's right edge.
+//
+// The old rule was "the leftmost number on the bar", and it is wrong: the bar's
+// *art* reads as numbers too, and when the real digits could not be read the
+// art to their left won. Measured on 24 live strips off this box's kiosk: the
+// reader returned **1** (score 0.654, at x=227) for a strip whose bar the
+// vision pass reads as **100**, and it returned **1** (score 0.687, at the ammo
+// field's x=788) for a strip with no readable health number at all.
+//
+// What separates them is where the number *ends*. Q2 draws health right-aligned
+// in a fixed field, so the number ends on the same column whatever its width.
+// Every health number that was there to read on those strips -- 100, 72, 62,
+// 47, 43, 9, 6, 5 -- ended on column **573** of the strip's 1366, while the art
+// phantoms ended on 557, 667, 678, 717, 804 and the ammo number on its own
+// field. The strip is the status bar drawn across the canvas, so the field is a
+// *fraction* of the strip and a resize scales it; 573/1366 = 0.4194.
+//
+// A caller reading a bar of its own making can pass `healthFieldRight: null` to
+// drop the constraint, or another fraction to move it.
+export const HEALTH_FIELD_RIGHT = 573 / 1366;
+
+// The same field, as a fraction of a strip that is *not* the canvas's own
+// columns. The in-page read is `gl.readPixels(0, 0, width, rows)` -- the canvas
+// whole, so a canvas column is a strip column and `HEALTH_FIELD_RIGHT` is it.
+// The screenshot fallback is different: it restyles the canvas to its native
+// size and slides it left by `left`, so a canvas column is `left` pixels
+// further right in the strip. Reading that strip with the canvas fraction puts
+// the field `left` pixels off -- measured on this box, 323: the field ends at
+// strip x 250 and the default would look at 573, so every read on the fallback
+// path would come back a miss.
+export function healthFieldRightForStrip(canvasWidth, left, clipWidth) {
+  const fraction = (canvasWidth * HEALTH_FIELD_RIGHT - left) / clipWidth;
+  return Number.isFinite(fraction) ? fraction : null;
+}
+
 // The player's health, read off the status bar.
 //
-// Health is the leftmost number on the bar (the level's armour is drawn to its
-// right, and an empty armour pool draws nothing at all), and on this level it
-// is a value between 1 and 100 that a fight moves downwards. `readStatus`
-// returns every number it can read, so a caller that wants to check this
-// assumption has the evidence.
+// Health is the number the bar draws in its health field -- which is a thing
+// the strip can be asked, rather than assumed. `readStatus` returns every
+// number it can read, so a caller that wants to check this has the evidence.
 export function readHealth(pngBuffer, options = {}) {
   const status = readStatus(pngBuffer, options);
   const usable = status.numbers.filter((candidate) => candidate.value > 0 && candidate.value <= 999);
   // Health is drawn with the `num` pictures; a reading the other family fits
   // better is the armour number and is left for a caller that wants it.
   const health = usable.filter((candidate) => candidate.family === "num");
-  const candidate = (health.length ? health : usable)[0] || null;
+  const pool = health.length ? health : usable;
+
+  // The number that *ends* where the health field ends, and no other. A number
+  // ending anywhere else is the bar's art or the ammo count, and handing either
+  // back as the player's health is the fault this exists to stop. When the
+  // field is known and nothing ends on it, the honest answer is no reading at
+  // all -- `health: null`, which the fight report already writes as `?` and
+  // which the fight can be told to treat as "hurt" -- rather than a number read
+  // out of the scenery.
+  const fraction = options.healthFieldRight === undefined ? HEALTH_FIELD_RIGHT : options.healthFieldRight;
+  const cellWidth = GLYPH_WIDTH * (status.scale || 1);
+  const fieldEdge = fraction === null ? null : Math.round(status.width * fraction);
+  const tolerance = options.healthFieldTolerance === undefined ? 2 : options.healthFieldTolerance;
+  // How wide a reading really is: the cells the reader grew, not the decimal
+  // length of the value it made out of them. They are not the same number when
+  // a run carries a leading zero -- `digits [0,0]` is `0` as a value and *two*
+  // cells on the bar -- and the decimal length would put that run's right edge
+  // one cell short of where it ends. Measured live: on `crops/strip-004.png`
+  // and `crops2/strip-014.png` the run `[0,0]` ends on 573 while the decimal
+  // length calls it 557. `readBar` already calls this the reading's span (see
+  // its overlap rule); this uses the same thing rather than re-deriving it.
+  const rightEdge = (candidate) => candidate.x +
+    ((candidate.cells && candidate.cells.length) || String(candidate.value).length) * cellWidth;
+  const endsAtField = (candidate) => Math.abs(rightEdge(candidate) - fieldEdge) <= tolerance;
+  const aligned = fieldEdge === null ? pool : pool.filter(endsAtField);
+  // More than one reading can end on the field -- overlapping runs are grown
+  // from different anchors -- so the surest one wins, not the leftmost.
+  const candidate = aligned.slice().sort((a, b) => b.score - a.score)[0] || null;
   // How sure the *number* has to be to be handed back as the player's health.
   //
   // A number the reader is only just sure of is a number it may have invented.
@@ -789,6 +858,9 @@ export function readHealth(pngBuffer, options = {}) {
     ...status,
     health: number ? number.value : null,
     healthReading: number || null,
+    // Which column the reading had to end on to be believed, so a caller can
+    // see the constraint the reading survived rather than take it on trust.
+    healthFieldEdge: fieldEdge,
     armour: usable.filter((candidate) => candidate.family !== "num")[0] || null,
   };
 }
