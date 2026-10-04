@@ -69,6 +69,49 @@
   var KEYDEST_CONSOLE = 1;
   var KEYDEST_NAMES = { 0: "game", 1: "console", 3: "menu" };
 
+  // ---------------------------------------------------------------------
+  // The live entity array: `cl_entities`
+  // ---------------------------------------------------------------------
+  // Where the player's own view comes from is one field; where *everything
+  // else* is comes from another, and a harness that wants to aim at a monster
+  // has to have the second one. `cl_entities` is the client's own array of the
+  // entities the server has sent for this frame -- 1024 `centity_t`, 276 bytes
+  // each, static in the image -- and every record opens with the
+  // `entity_state_t` the server sent.
+  //
+  // Recovered the same way as the fields above: by matching live records
+  // against facts the engine itself produced, never by looking for a plausible
+  // number. Record 283 held `origin = -856 584 -24` with `angles = 0 -90 0`,
+  // which is the `monster_soldier_light` the level's own entity lump places at
+  // `-856 584 -24` facing 270; record 284 sat exactly 276 bytes after it and
+  // named itself 284; record 1 held the player's own origin, moving when the
+  // player moved. The fields inside a record were then read off those facts:
+  // `number` 0x00 and `origin` 0x04 are what the match used, `angles` 0x10 is
+  // the angle the lump gives that monster, and `solid` 0x48 reads 8290 for
+  // every monster and 0 for every item, which is the box a soldier is given.
+  var EDICTS = 595280; // 0x91550  cl_entities[0]
+  var EDICT_STRIDE = 276; // sizeof(centity_t)
+  var MAX_EDICTS = 1024;
+
+  // Offsets into one record, into its first entity_state_t.
+  var EDICT_FIELDS = {
+    number: 0x00,
+    origin: 0x04,
+    angles: 0x10,
+    oldOrigin: 0x1c,
+    modelindex: 0x28,
+    modelindex2: 0x2c,
+    modelindex3: 0x30,
+    modelindex4: 0x34,
+    frame: 0x38,
+    skinnum: 0x3c,
+    effects: 0x40,
+    renderfx: 0x44,
+    solid: 0x48,
+    sound: 0x4c,
+    event: 0x50,
+  };
+
   // The view roll is how a reader learns the player is dead without a
   // screenshot, and the threshold has to sit between the two reasons Quake 2
   // rolls the view -- an order of magnitude apart.
@@ -194,6 +237,66 @@
       ammo: null,
       readAt: new Date().toISOString(),
     };
+  }
+
+  // ---------------------------------------------------------------------
+  // The live entity array
+  // ---------------------------------------------------------------------
+  // Every entity the client is holding for this frame, as plain data. A slot
+  // whose `number` is zero is one the engine is not using -- `number` is the
+  // entity's own index in this array, so a used slot always names itself -- and
+  // a record whose origin is not a finite, on-map coordinate is skipped rather
+  // than reported, because a wrong position is worse than a missing one.
+  //
+  // The view is built fresh on every call: the engine grows its heap and a view
+  // kept from an earlier call would be detached. It is not called from the
+  // frame loop -- the console watch below is the only thing that runs that
+  // often -- so the allocation is one per call and not one per frame.
+  function entities() {
+    var buffer = memory();
+    if (!buffer) return null;
+    var dv = new DataView(buffer);
+    var list = [];
+    for (var index = 0; index < MAX_EDICTS; index++) {
+      var slot = EDICTS + index * EDICT_STRIDE;
+      if (slot + EDICT_STRIDE > buffer.byteLength) break;
+      // A record holds the entity's current state first and its previous state
+      // 84 bytes in (`entity_state_t` is 84 bytes on this build). Almost every
+      // slot names itself in the first copy; the client's own player does not
+      // -- its current copy reads zero and its previous one carries the live
+      // state -- so take whichever copy names itself and skip the slot if
+      // neither does.
+      var off = slot;
+      var number = dv.getInt32(off + EDICT_FIELDS.number, true);
+      if (number === 0) {
+        off = slot + 84;
+        number = dv.getInt32(off + EDICT_FIELDS.number, true);
+      }
+      if (number === 0) continue;
+      var x = dv.getFloat32(off + EDICT_FIELDS.origin, true);
+      var y = dv.getFloat32(off + EDICT_FIELDS.origin + 4, true);
+      var z = dv.getFloat32(off + EDICT_FIELDS.origin + 8, true);
+      if (!finite(x) || !finite(y) || !finite(z)) continue;
+      if (Math.abs(x) >= MAX_COORDINATE || Math.abs(y) >= MAX_COORDINATE || Math.abs(z) >= MAX_COORDINATE) continue;
+      list.push({
+        number: number,
+        copy: off === slot ? "current" : "previous",
+        position: { x: x, y: y, z: z },
+        angles: {
+          pitch: dv.getFloat32(off + EDICT_FIELDS.angles, true),
+          yaw: dv.getFloat32(off + EDICT_FIELDS.angles + 4, true),
+          roll: dv.getFloat32(off + EDICT_FIELDS.angles + 8, true),
+        },
+        modelindex: dv.getInt32(off + EDICT_FIELDS.modelindex, true),
+        modelindex2: dv.getInt32(off + EDICT_FIELDS.modelindex2, true),
+        frame: dv.getInt32(off + EDICT_FIELDS.frame, true),
+        skinnum: dv.getInt32(off + EDICT_FIELDS.skinnum, true),
+        effects: dv.getInt32(off + EDICT_FIELDS.effects, true),
+        renderfx: dv.getInt32(off + EDICT_FIELDS.renderfx, true),
+        solid: dv.getInt32(off + EDICT_FIELDS.solid, true),
+      });
+    }
+    return list;
   }
 
   // ---------------------------------------------------------------------
@@ -331,8 +434,12 @@
       vieworg: VIEWORG,
       viewangles: VIEWANGLES,
       keyDest: KEYDEST,
+      edicts: EDICTS,
+      edictStride: EDICT_STRIDE,
+      maxEdicts: MAX_EDICTS,
     },
     read: read,
+    entities: entities,
     state: state,
     watch: watch,
     // The engine's name for the memory, for anything that wants to read it
