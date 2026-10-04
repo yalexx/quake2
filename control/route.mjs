@@ -824,6 +824,26 @@ export class RouteMap {
     const start = parseOrigin(from && from.x !== undefined ? from.x + " " + from.y + " " + from.z : from);
     const goal = parseOrigin(to && to.x !== undefined ? to.x + " " + to.y + " " + to.z : to);
     if (!start || !goal) throw new RouteError("path(from, to) needs points like {x, y, z}", "BAD_REQUEST");
+    // A route that can be walked is asked for before one that has to be jumped,
+    // and the answer to the walk is used whenever there is one.
+    //
+    // `maxJump` is opt-in because a route that silently leaps a chasm is not the
+    // same promise as one that walks (see below), and it is also -- measured on
+    // demo1 -- seventy times the cost. The same plan comes back in 60 ms without
+    // the jump search and 4,225 ms with it: every cell the search expands tries
+    // 48 jump candidates and runs a line trace down each, and 4,518 cells is
+    // 4,518 chances to pay for a leap the route does not use. Those seconds land
+    // on the *game* and not on the planner. The walker plans inside its own
+    // loop, so a re-plan is four seconds in which the player is standing still,
+    // and standing still is the one thing demo1 punishes.
+    //
+    // So a caller who allows jumps gets them only where they are needed. The
+    // fallback keeps the promise exactly: if the walk-only search has no route,
+    // the jump search runs and its answer is returned, jumps and all.
+    if (numberOr(options.maxJump, 0) > 0) {
+      const walked = this.path(from, to, { ...options, maxJump: 0 });
+      if (walked.points.length) return walked;
+    }
     const cell = options.cell || 32;
     const step = options.step || 4;
     const maxStepUp = options.maxStepUp === undefined ? 24 : options.maxStepUp;
@@ -837,6 +857,18 @@ export class RouteMap {
     const grid = this.floorGrid(cell, step);
     const indexOf = (point) => [Math.round((point.x - grid.minX) / cell), Math.round((point.y - grid.minY) / cell)];
     const key = (ix, iy, z) => ix + "," + iy + "," + z;
+
+    // Deliberately absent: a way to route *around* the monsters. `waypoints("enemy")`
+    // is the list, `contentsAt` is the geometry, and it looks like the obvious
+    // answer to "the level is not blocked, it is defended" -- so it was built and
+    // measured. Scoring every cell inside a soldier's reach as expensive changes
+    // the route on demo1 from 4,693 units to between 4,877 and 5,261, and the
+    // closest the route ever comes to a monster stays where it was: 33 units
+    // before, 8 to 29 units after, at every radius tried from 100 to 640. The
+    // level is a corridor and a doorway; there is no way round a soldier who is
+    // standing in one, and the search can only trade a longer walk through the
+    // same fight for a shorter one. That is worth knowing before building it
+    // again.
 
     // Snap each end onto the floor of its own column, searching outward when the
     // exact cell is inside a wall (a target is often a marker in mid-air).
@@ -864,6 +896,26 @@ export class RouteMap {
     const best = new Map([[startKey, { g: 0, prev: null }]]);
     const closed = new Map();
     open.push({ f: heuristic(fromCell.ix, fromCell.iy), key: startKey, g: 0 });
+    // What a grid cell is made of, asked once. The search asks this for every
+    // neighbour of every cell it expands, and the answer for a cell is the same
+    // every time: the level does not change while a route is being planned. It
+    // is not a small saving. `contentsAt` is a BSP walk down the world tree plus
+    // one per static brush model, so on demo1 -- 14,314 brushsides and four
+    // static models -- a single uncached plan is around 250,000 of those walks,
+    // and measured on this box it took 8.4 seconds. That is not a number about
+    // the planner, it is a number about the *game*: the walker plans inside its
+    // own loop, so every re-plan is eight seconds in which the player is not
+    // moving, and on demo1 a player who is not moving is a player the soldiers
+    // kill. The same plan with the answers kept costs a fraction of a second.
+    const contentsCache = new Map();
+    const contentsOf = (nx, ny, level) => {
+      const at = nx + "," + ny + "," + level;
+      const known = contentsCache.get(at);
+      if (known !== undefined) return known;
+      const value = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
+      contentsCache.set(at, value);
+      return value;
+    };
     const limit = options.maxNodes || 400000;
     let bestKey = startKey;
     let bestScore = heuristic(fromCell.ix, fromCell.iy);
@@ -918,7 +970,7 @@ export class RouteMap {
           if (climb > maxStepUp || -climb > maxDrop) continue;
           // A drop is free going down and impossible coming back; the search is
           // one-way, so it is allowed, but a cell that blocks or burns is not.
-          const contents = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
+          const contents = contentsOf(nx, ny, level);
           if (contents & BLOCKING) continue;
           const nextKey = key(nx, ny, level);
           if (closed.has(nextKey)) continue;
@@ -947,7 +999,7 @@ export class RouteMap {
               const nextKey = key(nx, ny, level);
               if (closed.has(nextKey)) continue;
               if (!this.#clearLine(grid.minX + ix * cell, grid.minY + iy * cell, z, grid.minX + nx * cell, grid.minY + ny * cell, level)) continue;
-              const contents = this.contentsAt(grid.minX + nx * cell, grid.minY + ny * cell, level);
+              const contents = contentsOf(nx, ny, level);
               if (contents & BLOCKING) continue;
               const g = current.g + r * cell + Math.abs(level - z) * 2 + cell * 4; // a jump costs more than a step
               const known = best.get(nextKey);

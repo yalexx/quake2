@@ -57,6 +57,149 @@ async function readMapName() {
   return { name: found ? found[1] : null, lines: answer.output || [] };
 }
 
+// What the level itself says a fresh spawn has to go and get before the walk
+// out is a fight it can survive.
+//
+// A level started with `map demo1` hands the player the engine's default
+// loadout -- a blaster and nothing else -- and demo1 is defended by 33 monsters
+// with a soldier standing 33 units from the route. Nothing is given and nothing
+// is invented here: every call below is an entity the level's own author placed,
+// at the origin the entity lump names, reached by the planner's own route from
+// where the player actually stands. "Walk over a weapon the level put on the
+// floor" is what a player does in the first ten seconds of this level.
+//
+// Only what is genuinely near the spawn is taken. The rule is deliberately
+// narrow: the nearest weapon the level offers within REACH units of walking,
+// and the ammunition that feeds it. A wider sweep -- every weapon, every armour
+// vest, every health box -- would walk the player around the level before the
+// walk out even started, and the point of the exercise is the way out.
+function supplyCalls(map, from) {
+  const WALK = { maxStepUp: 45, maxDrop: 300, maxJump: 160, cell: 24 };
+  // How far the player will walk out of the way for a weapon, and how far a
+  // candidate has to be to be worth planning a route to at all. The straight
+  // line screens the entities; the walk distance decides.
+  const REACH = 700;
+  const SCREEN = 1000;
+  const AMMO_FOR = {
+    weapon_supershotgun: "ammo_shells",
+    weapon_shotgun: "ammo_shells",
+    weapon_machinegun: "ammo_bullets",
+    weapon_chaingun: "ammo_bullets",
+    weapon_rocketlauncher: "ammo_rockets",
+    weapon_grenadelauncher: "ammo_grenades",
+    weapon_hyperblaster: "ammo_cells",
+    weapon_railgun: "ammo_slugs",
+  };
+  const near = [];
+  for (const point of map.waypoints("*")) {
+    if (!point.position) continue;
+    const strays = Math.hypot(point.position.x - from.x, point.position.y - from.y);
+    if (strays > SCREEN) continue;
+    if (!/^weapon_|^ammo_/.test(point.classname)) continue;
+    const walk = map.path(from, point.position, WALK);
+    if (!walk.points.length || walk.distance > REACH) continue;
+    near.push({ classname: point.classname, position: point.position, distance: Math.round(walk.distance) });
+  }
+  const weapons = near.filter((entry) => /^weapon_/.test(entry.classname)).sort((a, b) => a.distance - b.distance);
+  if (!weapons.length) return [];
+  const weapon = weapons[0];
+  const calls = [{
+    classname: weapon.classname, call: "weapon",
+    x: weapon.position.x, y: weapon.position.y, z: weapon.position.z,
+    walkDistance: weapon.distance,
+    tap: null,
+    binding: null,
+  }];
+  const ammo = AMMO_FOR[weapon.classname];
+  if (ammo) {
+    for (const box of near.filter((entry) => entry.classname === ammo).sort((a, b) => a.distance - b.distance)) {
+      calls.push({
+        classname: box.classname, call: "ammo",
+        x: box.position.x, y: box.position.y, z: box.position.z,
+        walkDistance: box.distance,
+      });
+    }
+  }
+  // Health and armour boxes are deliberately *not* on this list, and that is a
+  // measurement rather than a preference. They look like the answer: the walk
+  // does not end on the route, it ends on the player's health, which the fights
+  // along demo1's corridor take down about twenty-five points per firing leg,
+  // and the level's own boxes sit 91 to 248 units from the route it already
+  // walks. Measured, with the five nearest added: the walk reached `-379 40`,
+  // 2,053 units short, fired **no shots at all** in five attempts, and spent
+  // every one of them walking between boxes. Against the same code without them:
+  // `-948 457`, 1,366 units short, 42 firing legs. An errand is not free, and on
+  // this level the walk that stops to collect is the walk that never arrives.
+  return calls;
+}
+
+// The level's own health and armour that already stand on the plan, as calls
+// the walk has to *make* rather than places it merely walks past.
+//
+// This is the same defect the `via` list was built for, one item over. A leg
+// stops when it is inside `max(48, tolerance * 2)` of its target (see
+// control/walker.mjs), and a pickup is taken by a 32-unit box overlap -- so a
+// leg that "reached" a health box can be standing a hundred units from it with
+// nothing to show. Measured on the third run of this harness: fight leg 69 is
+// recorded `over item_health_large  health 2  bar 2+1`, and the two legs after
+// it read `bar 2` and `bar 2` again. The player walked over a large health box
+// at two health and gained nothing, and died two legs later. A `via` call is
+// judged by `touchesCall`, which is the boxes overlapping and not a radius, and
+// is aimed at with a 12-unit tolerance; a call that cannot be made is reported
+// as abandoned rather than silently walked past.
+//
+// Only what the plan already goes near is called for: `NEAR` is the same 96
+// units `CombatWalker.snapPickups` uses, so the call adds almost no walking.
+// That distinction is a measurement and not a preference -- the o46qjcc0
+// comment in `supplyCalls` records what happened when five nearest health and
+// armour boxes were swept up regardless of the route: the walk reached
+// `-379 40`, 2,053 units short, and fired no shots at all.
+function topUpCalls(map, plan) {
+  const NEAR = 96;
+  const calls = [];
+  const seen = new Set();
+  // How far an item stands off the *plan*, measured against its segments and
+  // not against its corners. That difference is the whole reason this function
+  // exists: demo1's `item_health_large` sits 64 units off the route line
+  // between two plan points, and a corner test puts it further than `NEAR` from
+  // every one of them -- so the one box worth 50 health was the one a corner
+  // test dropped. Measured: the corner version of this function returned two
+  // `item_health_small` boxes and nothing else.
+  const offRoute = (x, y) => {
+    let best = { distance: Infinity, index: 0 };
+    for (let i = 0; i < plan.points.length; i++) {
+      const a = plan.points[i];
+      const b = plan.points[Math.min(i + 1, plan.points.length - 1)];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const length = dx * dx + dy * dy;
+      const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length));
+      const distance = Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy));
+      if (distance < best.distance) best = { distance, index: i };
+    }
+    return best;
+  };
+  const found = [];
+  for (const item of map.waypoints("*")) {
+    if (!item.position || !/^item_(health|armor)/.test(item.classname)) continue;
+    const near = offRoute(item.position.x, item.position.y);
+    if (near.distance > NEAR) continue;
+    const key = item.classname + Math.round(item.position.x) + "," + Math.round(item.position.y);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    found.push({ item, near });
+  }
+  // In the order the plan meets them, so the errand is walked forwards.
+  found.sort((a, b) => a.near.index - b.near.index);
+  for (const { item, near } of found) {
+    calls.push({
+      classname: item.classname, call: "top-up",
+      x: item.position.x, y: item.position.y, z: item.position.z,
+      routeIndex: near.index, walkDistance: Math.round(near.distance), tap: null,
+    });
+  }
+  return calls;
+}
+
 // How many times the reset is asked for before the run gives up on it.
 //
 // One send is not a start on this box, and it is not the level's fault. The
@@ -132,15 +275,23 @@ async function walk(target) {
 
 async function finish() {
   report("starting", "fresh demo1 with cheats 0");
-  const fresh = await freshDemo1();
-  report("map after reset", fresh.map);
-  report("player at", fresh.position);
-  report("cheats line", fresh.cheatsAnswer.filter((line) => /cheats/.test(line)));
-  if (fresh.map !== "demo1") {
-    report("result", "could not start demo1; stopping rather than walking an unknown level");
-    process.exitCode = 1;
-    return;
-  }
+  // Everything that can be worked out from the level's own archive is worked
+  // out *before* the level is started, and that is not tidiness.
+  //
+  // Planning a route across demo1 takes about eight seconds of this process's
+  // time, and the sweep that finds the level's weapons and shells takes about
+  // seventeen; the game does not stop while they run. A player left standing at
+  // the spawn for that long is a player the level's soldiers can find and kill,
+  // and a death before the walk begins is one the walker finds on its first
+  // read -- it restarts the level, and a restart through the engine's own
+  // autosave puts the player wherever that save left them. Measured, on the two
+  // runs that argued for this: the walk's first recorded position was `-456 20`
+  // on one and `-72 -1` on the next, 676 and 383 units from the spawn it had
+  // just been handed, and the attempts that followed were spent walking back.
+  //
+  // Nothing below touches the game until `freshDemo1()`, so the level starts
+  // with the thinking already done and the walk begins the moment the player is
+  // on the spawn.
   const map = await loadMap("demo1");
   const exit = map.exitPoint();
   // The fight is instrumented: every firing leg reads the player's health and
@@ -150,8 +301,8 @@ async function finish() {
   // way to tell one from the other. See control/hud.mjs.
   // The fight's levers, each one a knob so that a run can be made and read back
   // without editing the walker: which weapon to ask the engine for (by the name
-  // the engine's own config uses), and how a firing leg moves while the trigger
-  // is down. Defaults are the behaviour that was measured before this pass.
+  // the engine's own config uses) and how a firing leg moves while the trigger
+  // is down. Defaults are the behaviour that was measured before they existed.
   const walker = new CombatWalker(game, map, {
     engage: {
       // Reading the status bar costs a screenshot and an image decode inside
@@ -182,23 +333,19 @@ async function finish() {
       ...(process.env.QUAKE2_AVOID_RANGE ? { avoidRange: Number(process.env.QUAKE2_AVOID_RANGE) } : {}),
     },
   });
-  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
-  // QUAKE2_ARM=1 makes the walk call at the level's own super shotgun on the
-  // way. The planner's route leaves it 336 units to one side, so this is the
-  // "detour" the level's own design invites: the gun and three boxes of shells
-  // stand together 391 units from the spawn, past two soldiers. Whether that
-  // trade is worth making is measured (deepest position and level restarts),
-  // not assumed, which is why it is off unless it is asked for.
-  if (process.env.QUAKE2_ARM === "1") {
-    const gun = map.waypoints("item").find((item) => item.classname === "weapon_supershotgun");
-    report("arming at", gun && gun.position);
-    if (gun) {
-      const armed = await walker.follow(gun.position, { attempts: 2, deaths: 2, tolerance: 48 });
-      report("arm walk", { reached: armed.reached, reason: armed.reason, position: armed.position, deaths: armed.deaths });
-    }
-  }
+  // The fight options are reported *after* the weapon lookup below, not here:
+  // the errand may set `engage.weapon` from the level's own gun, and a report
+  // that says `weapon: null` for a run that fought with the super shotgun is
+  // the record disagreeing with the run. See `calls before the exit`.
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
+  // The errands: the level's own weapon and the shells that are near the spawn.
+  // See supplyCalls for why nothing else is on the list.
+  const calls = process.env.QUAKE2_NO_SUPPLY ? [] : supplyCalls(map, map.playerStart().position);
+  // The top-ups come after the weapon, in the order the plan meets them: a
+  // health box on the way out is worth walking onto, and the walk's own
+  // injury record says why (see `topUpCalls`).
+  if (!process.env.QUAKE2_NO_TOPUP) calls.push(...topUpCalls(map, plan));
   if (!plan.points.length) {
     report("  where the plan stopped", plan.reached);
     report("  what the plan says is there", plan.blockers.map((b) => b.classname + " " + b.model + " " + b.why));
@@ -211,16 +358,86 @@ async function finish() {
   // -301 110, beside demo1's dead-end pocket at -427 111: three legs per
   // attempt instead of eight means three times as many of the 400 ms sideways
   // steps that end an attempt, and that step is taken across the route.
-  // The budgets, and the knobs that shorten them for a diagnostic. A run asked
-  // for one attempt and no restarts is a reading of where one life gets to;
-  // `QUAKE2_ATTEMPTS=0` is read as the minimum of one, because a walk with no
-  // attempt at all never asks the engine anything and reports nothing.
-  const attemptKnob = askedFor("QUAKE2_ATTEMPTS");
-  const deathKnob = askedFor("QUAKE2_DEATHS");
-  const attempts = Math.max(1, attemptKnob === null ? 8 : attemptKnob);
-  const deaths = Math.max(0, deathKnob === null ? attempts : deathKnob);
+  // How many re-plans the walk gets, and how many deaths it will live through.
+  // Both are overridable so that a change to the fight can be measured on a
+  // short attempt -- a diagnostic that stops after two deaths still says where
+  // the player got to and how the fight went, and it says it in a fraction of
+  // the wall clock -- while the proof itself still runs the full budget.
+  // `askedFor` is the module's own (see the top of this file), which reads an
+  // explicit zero as zero rather than throwing it away.
+  const attemptBudget = askedFor("QUAKE2_ATTEMPTS");
+  const deathBudget = askedFor("QUAKE2_DEATHS");
+  const attempts = Math.max(1, attemptBudget === null ? 8 : attemptBudget);
+  const deaths = Math.max(0, deathBudget === null ? attempts : deathBudget);
   report("budget", { attempts, deaths });
-  const result = await walker.follow(exit.aim, { attempts, deaths, tolerance: 96 });
+  // Everything the archive can answer has been answered: start the level.
+  const fresh = await freshDemo1();
+  report("map after reset", fresh.map);
+  report("player at", fresh.position);
+  report("cheats line", fresh.cheatsAnswer.filter((line) => /cheats/.test(line)));
+  if (fresh.map !== "demo1") {
+    report("result", "could not start demo1; stopping rather than walking an unknown level");
+    process.exitCode = 1;
+    return;
+  }
+  // The key that selects the weapon is the engine's own, read out of the
+  // player's own config now that the page is up: a weapon in the pack is not a
+  // weapon in hand, and which key the player bound to `use Super Shotgun` is
+  // not something this script may guess. It is one page evaluate, so it costs
+  // the walk nothing -- unlike the sweep above, which is why the sweep happened
+  // first.
+  //
+  // The lookup is `weaponKey` and not `binding`, and that distinction is a
+  // measured one rather than a preference. `binding` compares the whole command
+  // exactly, so asking it for `use supershotgun` finds nothing on a config that
+  // writes `bind 3 "use Super Shotgun"` -- which is the engine's own spelling
+  // and the one this box's config uses. Measured, on the first run of this
+  // harness: the lookup returned NO_BINDING with the super shotgun standing 414
+  // units from the spawn, so the walk would have collected the gun and gone on
+  // firing the spawn's blaster. `weaponKey` is the same question asked the way
+  // the config answers it: case-insensitive, whitespace-flattened. The label
+  // table is the only thing this script has to carry, and a classname it does
+  // not know falls through to the classname itself, which is what a config that
+  // binds the one-word form would name.
+  const WEAPON_LABEL = {
+    blaster: "Blaster", shotgun: "Shotgun", supershotgun: "Super Shotgun",
+    machinegun: "Machinegun", chaingun: "Chaingun", grenadelauncher: "Grenade Launcher",
+    rocketlauncher: "Rocket Launcher", hyperblaster: "HyperBlaster", railgun: "Railgun",
+    bfg10k: "BFG10K",
+  };
+  const armed = calls.find((call) => call.call === "weapon");
+  if (armed) {
+    const short = armed.classname.replace(/^weapon_/, "");
+    const binding = typeof game.weaponKey === "function"
+      ? await game.weaponKey(WEAPON_LABEL[short] || short)
+      : { found: false, reason: "NO_BINDING_LOOKUP" };
+    armed.tap = binding && binding.key ? binding.key : null;
+    armed.binding = binding && binding.command ? binding.command : null;
+    armed.bindingFound = !!(binding && binding.found);
+    armed.bindingReason = binding && !binding.found ? binding.reason : null;
+    armed.label = WEAPON_LABEL[short] || short;
+    // The fight's own weapon knob, when the level's own errand has named a
+    // weapon and the caller has not chosen one: a walk that fetched the super
+    // shotgun should hold it. `selectWeapon` goes back through the same config
+    // lookup per life, so this is the engine's own switch and not a key chosen
+    // here -- and it is only a default, so an explicit QUAKE2_WEAPON still wins.
+    if (!walker.engage.weapon && armed.bindingFound) walker.engage.weapon = armed.label;
+  }
+  const unbound = calls.filter((call) => call.call === "weapon" && !call.tap);
+  if (unbound.length) report("note", "the config binds no key to use " + unbound.map((c) => c.label || c.classname.replace(/^weapon_/, "")).join(", ") + "; the walk relies on the engine's own weapon switch");
+  // The calls the walk makes before the exit: the level's own weapon and the
+  // ammunition for it. `via` is inside the attempt loop, so a death that loses
+  // the weapon makes the walk go back for it, which is the whole reason the
+  // errand is a list the follower owns rather than calls from out here. Reported
+  // here, after the binding lookup, so the key the walk will press is on the
+  // line rather than missing from it.
+  report("calls before the exit", calls.length ? calls.map((call) =>
+    call.call + " " + call.classname + " at " + Math.round(call.x) + " " + Math.round(call.y) + " " + Math.round(call.z) +
+    " (" + call.walkDistance + " units' walk)" + (call.tap ? " press " + call.tap : "")) : "none the level offers within reach");
+  // The levers this run was actually fought with, weapon included: the errand
+  // may have named one, and `#ensureWeapon` asks for it once per life.
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
+  const result = await walker.follow(exit.aim, { attempts, deaths, tolerance: 96, via: calls });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
   // The one reason that is not a failure. `reached` is false because the walk
@@ -301,7 +518,12 @@ async function finish() {
     for (const point of trail) {
       const leg = point.leg === undefined ? "" : " leg " + point.leg;
       report("  a" + point.attempt + leg + "  " + Math.round(point.x) + " " + Math.round(point.y) + " " + Math.round(point.z) +
-        "  short " + Math.round(point.distance));
+        "  short " + Math.round(point.distance) +
+        // ...and, on the legs of the walk that were owed a call, how far it was
+        // from the thing it was owed. A pickup is taken by touching it, so the
+        // number that says whether an errand was run is the distance to the
+        // pickup and not the distance to the exit.
+        (point.need === undefined ? "" : "  need " + Math.round(point.need)));
     }
   }
   // And the fight's own record, leg by leg: the health the player had left
@@ -323,8 +545,16 @@ async function finish() {
         (fight.offCourseDegrees === undefined ? "" : "  off-course " + fight.offCourseDegrees + "deg") +
         (fight.fireMode && fight.fireMode !== "advance" ? "  " + fight.fireMode : "") +
         (fight.pickupOnRoute ? "  over " + fight.pickupOnRoute : "") +
+        // How much of the leg went on turning. It is the number that says
+        // whether the leg walked through its turn or stood still for it.
+        (fight.turnMs === null || fight.turnMs === undefined ? "" : "  turn " + fight.turnMs + "ms") +
         "  health " + (fight.health === null || fight.health === undefined ? "?" : fight.health) +
         (fight.armour === null || fight.armour === undefined ? "" : "  armour " + fight.armour) +
+        // Every number the status bar showed, in the order it showed them:
+        // health, armour, and the ammunition of whatever weapon the player is
+        // actually holding. That last one is the only evidence on this box of
+        // which weapon a picked-up weapon became.
+        (fight.barNumbers && fight.barNumbers.length ? "  bar " + fight.barNumbers.join("+") : "") +
         (fight.dead ? "  DIED ON THIS LEG" : "") +
         // Only when the engine was not the one listening: a leg fought with the
         // console or the menu on screen is a leg that could not have walked or

@@ -266,10 +266,17 @@ function lastLine(lines, pattern) {
 // restores the engine's autosave and puts the player back at the spawn, so every
 // strafe cost a run its ground. `movementKeys()` strafes on every firing leg.
 //
-// 20 is ten times the largest lean measured and half the death camera's own 40,
-// which is as far into the gap between two measured populations as a single
-// number can sit.
-export const ROLL_IS_DEATH = 20;
+// A *hit* kicks the view too, and not as far as a death: measured on a live
+// player fighting through demo1's corridor, the kick reached 1.57 degrees while
+// the status bar was showing 100 health at the same moment -- the four moments a
+// one-degree threshold called death carried rolls of 1.21, 1.25, 1.57 and 1.57
+// beside health readings of 100, 100, 100 and 52. Ten is five times the largest
+// non-death roll measured (2.00) and less than half the smallest death (27.28,
+// the death camera's own reading under fire), so it reads a death early in its
+// roll without ever reading a strafe or a hit as one. The page decides the same
+// question from the same number (`engine-state.js`), and the two must agree:
+// `scripts/engine-state-test.mjs` checks exactly that, roll by roll.
+export const ROLL_IS_DEATH = 10;
 
 // Whether the engine was in a state where *no* turn could have been taken.
 //
