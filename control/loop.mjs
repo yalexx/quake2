@@ -776,6 +776,26 @@ export class PlayLoop {
         reason = outcome.reason;
         break;
       }
+      // A caller's own look at the run, once a tick, after the tick has acted and
+      // before the arrival test. It exists for one purpose: a run that wants a
+      // picture of a state it can only recognise from inside -- where the walk
+      // stands when it reaches the exit approach -- cannot take it from outside,
+      // because the loop holds the only control connection for the whole walk.
+      // The hook is asynchronous and awaited, so a slow hook shows up as a late
+      // tick rather than as a race with the next one. A hook that throws is
+      // noted and dropped; it must never end a walk that is still going.
+      if (this.options.onTick) {
+        try {
+          await this.options.onTick({
+            tick: ticks,
+            position,
+            goal: goalPoint,
+            distance: Math.hypot(position.x - goalPoint.x, position.y - goalPoint.y),
+          });
+        } catch (error) {
+          this.note("the tick hook failed: " + error.message);
+        }
+      }
       if (atGoal(position, goalPoint, tolerance)) {
         reason = "ARRIVED";
         break;
