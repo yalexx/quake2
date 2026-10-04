@@ -112,6 +112,146 @@ const directStateExpression = () => `(function () {
   return JSON.stringify({ read: out.read, watch: out.watch, map });
 })()`;
 
+// ---------------------------------------------------------------------------
+// The live entity array
+// ---------------------------------------------------------------------------
+// `position()` answers where the player is. This answers what else is in the
+// level *right now*: the client's own entity array, read out of the same WASM
+// linear memory the player's own view is read from.
+//
+// `cl_entities` is a static array in this build's image: 1024 `centity_t` of
+// 276 bytes each, based at 0x91550, and each record opens with the
+// `entity_state_t` the server sent -- `number`, `origin`, `angles`,
+// `old_origin`, the model indices, the animation frame, `skinnum`, `effects`
+// and `solid`. The offsets were recovered by matching live records to the
+// level's own entity lump (see control/loop.mjs for the provenance), and this
+// reader is the copy the browser path uses: the page serves the *deployed*
+// app, so a reader that only existed in the checkout's engine-state.js would
+// not be the one the running page had.
+//
+// This ships the same offsets as `engine-state.js`, on purpose and for the same
+// reason `deadFromRoll` exists in both: the page may be running an older copy
+// of the checkout's script, and the bridge is the part that promises its callers
+// a reading they can aim by.
+const ENTITY_BASE = 595280; // 0x91550  cl_entities[0]
+const ENTITY_STRIDE = 276; // sizeof(centity_t)
+const MAX_EDICTS = 1024;
+
+// Where the fields are inside one record. Named rather than numbered so the
+// reader below reads like the structure it is walking.
+const ENTITY_OFFSETS = {
+  number: 0x00,
+  origin: 0x04,
+  angles: 0x10,
+  oldOrigin: 0x1c,
+  modelindex: 0x28,
+  modelindex2: 0x2c,
+  modelindex3: 0x30,
+  modelindex4: 0x34,
+  frame: 0x38,
+  skinnum: 0x3c,
+  effects: 0x40,
+  renderfx: 0x44,
+  solid: 0x48,
+  sound: 0x4c,
+  event: 0x50,
+};
+
+// One page evaluation that answers both halves of one tick: the player's own
+// state (the same reading `position()` is built on) and every live entity. The
+// loop runs this at 12 Hz and cannot afford two round trips for one perception.
+//
+// A page that carries a newer `engine-state.js` answers `entities()` itself and
+// this uses it; otherwise the walk happens here, against the same memory. A
+// record whose `number` is zero is a slot the engine is not using and is
+// skipped -- `number` is the entity's own index in this array, so a used slot
+// always names itself.
+const liveStateExpression = () => `(function () {
+  const hook = (typeof quake2Engine !== "undefined" && quake2Engine) ? quake2Engine : null;
+  const out = hook ? hook.state() : { read: { ok: false, reason: "NO_HOOK" }, watch: null };
+  let entities = null;
+  let entityReason = null;
+  let entitiesFrom = null;
+  try {
+    if (hook && typeof hook.entities === "function") {
+      entities = hook.entities();
+      entitiesFrom = "page-hook";
+    } else if (typeof wasmMemory !== "undefined" && wasmMemory) {
+      entitiesFrom = "bridge-memory";
+      entities = (function () {
+        const buf = wasmMemory.buffer;
+        const dv = new DataView(buf);
+        const base = ${ENTITY_BASE}, stride = ${ENTITY_STRIDE}, max = ${MAX_EDICTS};
+        const O = ${JSON.stringify(ENTITY_OFFSETS)};
+        const list = [];
+        for (let i = 0; i < max; i++) {
+          const slot = base + i * stride;
+          if (slot + stride > buf.byteLength) break;
+          // A record holds three copies of the entity's state -- the current
+          // one first, then the previous one 84 bytes in (this build's
+          // entity_state_t) -- and for most slots the first copy names the
+          // entity. The client's own player is the exception: its current copy
+          // reads all zeros and its previous one carries the live state, so a
+          // reader that only looked at the first copy would report every
+          // monster in the level and not the player. Take whichever copy names
+          // itself; a slot that names itself in neither is unused.
+          let off = slot;
+          let number = dv.getInt32(off + O.number, true);
+          if (number === 0) {
+            off = slot + 84;
+            number = dv.getInt32(off + O.number, true);
+          }
+          if (number === 0) continue;
+          const x = dv.getFloat32(off + O.origin, true);
+          const y = dv.getFloat32(off + O.origin + 4, true);
+          const z = dv.getFloat32(off + O.origin + 8, true);
+          if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+          if (Math.abs(x) > 1000000 || Math.abs(y) > 1000000 || Math.abs(z) > 1000000) continue;
+          list.push({
+            number: number,
+            copy: off === slot ? "current" : "previous",
+            position: { x: x, y: y, z: z },
+            angles: {
+              pitch: dv.getFloat32(off + O.angles, true),
+              yaw: dv.getFloat32(off + O.angles + 4, true),
+              roll: dv.getFloat32(off + O.angles + 8, true)
+            },
+            modelindex: dv.getInt32(off + O.modelindex, true),
+            modelindex2: dv.getInt32(off + O.modelindex2, true),
+            frame: dv.getInt32(off + O.frame, true),
+            skinnum: dv.getInt32(off + O.skinnum, true),
+            effects: dv.getInt32(off + O.effects, true),
+            renderfx: dv.getInt32(off + O.renderfx, true),
+            solid: dv.getInt32(off + O.solid, true)
+          });
+        }
+        return list;
+      })();
+    } else {
+      entityReason = "ENGINE_NOT_LOADED";
+    }
+  } catch (error) {
+    entityReason = "ENTITY_READ_FAILED: " + error.message;
+  }
+  let map = null;
+  const dirs = ${JSON.stringify(GAME_DIRS)};
+  for (const dir of dirs) {
+    try {
+      const log = FS.readFile(dir + "/qconsole.log", { encoding: "utf8" });
+      const lines = log.slice(-${CONSOLE_LOG_TAIL}).split("\\n");
+      for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        const m = line.match(/^mapname\\s+(\\S+)\\s*$/i)
+          || line.match(/^"mapname"\\s+is\\s+"([^"]+)"/i)
+          || line.match(/^Map:\\s+(\\S+)/i);
+        if (m) { map = m[1]; break; }
+      }
+      break;
+    } catch (error) { /* not this build's layout */ }
+  }
+  return JSON.stringify({ read: out.read, watch: out.watch, entities: entities, entityReason: entityReason, entitiesFrom: entitiesFrom, map: map });
+})()`;
+
 // The engine's own key bindings, as a list of { key, command }, after the last
 // `unbindall` (the engine's config opens with one, so only the lines after it
 // count). One reader, because every question about the config is this question:
@@ -2599,6 +2739,121 @@ export class QuakeControl {
   // the canvas.
   async evaluate(expression) {
     return this.#withSession((game) => game.evaluate(String(expression)));
+  }
+
+  // One reading of the whole live game: the player's own state (position,
+  // angles, which destination owns the keyboard, whether the death camera is
+  // up) AND every live entity, in a single round trip.
+  //
+  // This is the perception half of control/loop.mjs, and it is one call on
+  // purpose. A control loop that read the player and the monsters in two
+  // evaluates would be deciding on two different frames, and at 12 Hz it would
+  // be spending twice the round trips for the privilege.
+  //
+  // `entities` is null -- not an empty list -- when the array could not be read
+  // at all, and `entityReason` says why. An empty list is a real answer: a level
+  // with nothing in it. A caller that cannot tell those apart will aim at
+  // nothing and call it calm.
+  async live(options = {}) {
+    const answer = await this.#withSession((game) => game.evaluate(liveStateExpression()));
+    const parsed = JSON.parse(answer);
+    const entities = Array.isArray(parsed.entities) ? parsed.entities : null;
+    return {
+      read: parsed.read || { ok: false, reason: "NO_READING" },
+      watch: parsed.watch || null,
+      entities,
+      entityCount: entities ? entities.length : null,
+      entityReason: parsed.entityReason || null,
+      // Which reader produced the list, as the page reported it -- not as this
+      // method guessed it. The guess used to be "no error means the page hook
+      // did it", and the page the kiosk serves carries no `entities()` at all,
+      // so every run of the loop recorded `page-hook` for a list this bridge
+      // had walked out of the WASM memory itself.
+      entitiesSource: entities ? (parsed.entitiesFrom || "unknown") : null,
+      map: parsed.map || null,
+      mapSource: parsed.map ? "console-log" : null,
+      // Whether the console was left alone on this read, for a caller that
+      // needs to promise the run never paused the game. It is the page's own
+      // count (see engine-state.js), not this bridge's opinion of itself.
+      console: parsed.watch ? { clean: parsed.watch.clean === true, samples: parsed.watch.samples } : null,
+    };
+  }
+
+  // Lift a named set of keys whatever this bridge instance *believes* it is
+  // holding.
+  //
+  // `hold()` is a diff against its own memory of what it pressed, so it cannot
+  // lift a key another instance pressed -- and an earlier process's bridge is
+  // exactly that, an instance this one has never met. The keys are still down
+  // in the engine, because a keyup is the only thing that lifts one. A runner
+  // that restarts a level under whatever player it finds therefore has to be
+  // able to send the keyups outright, and this is that.
+  //
+  // Measured: a smoke run of the play loop threw on its first tick with `w`
+  // held, and the next run's `map demo1` -- a level restart that puts the
+  // player on the spawn -- found them 600 units into the level, at exactly the
+  // distance a player walks in the 2.5 seconds the reset waits.
+  async release(keys = ["w", "a", "s", "d", "Space", "ArrowLeft", "ArrowRight"]) {
+    return this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      for (const key of keys) await this.#sendKey(game, String(key), false);
+      if (this.heldKeys) this.heldKeys.clear();
+      return { released: keys.map(String) };
+    });
+  }
+
+  // One relative turn, in degrees, in Quake 2's own sense (positive raises the
+  // yaw, which is anticlockwise on the level).
+  //
+  // This is the mouse alone and one delta per call, which is what a control
+  // loop needs: a continuous aim is a small correction every tick, not a
+  // closed-loop `face()` that spends four rounds finding the bearing. `face()`
+  // remains the right call for "point me at this and tell me when it landed";
+  // this is the right call for "nudge me towards it and tell me nothing".
+  //
+  // A turn smaller than one mouse count -- about a fifteenth of a degree --
+  // answers `method: "none"` and sends nothing, which is not a failure: it is
+  // the aim already being inside the resolution of its own correction.
+  async look(degrees, options = {}) {
+    const wanted = Number(degrees);
+    if (!Number.isFinite(wanted)) {
+      throw new ControlError("look(degrees) needs a number of degrees", "BAD_REQUEST");
+    }
+    return this.#turnBy(wanted, { turn: "mouse", ...options });
+  }
+
+  // Hold exactly this set of keys, and only this set: keys that are held and no
+  // longer wanted are released, keys that are wanted and not held are pressed,
+  // and a call that changes nothing sends nothing at all.
+  //
+  // The diff is the point. A control loop recomputes its movement keys every
+  // tick, and the same two keys come back tick after tick; `key("w", true)`
+  // would press them again each time, and a key that is pressed while it is
+  // already down is a key the engine sees twice.
+  //
+  // The set this tracks is the set *this method* holds. A caller that also uses
+  // `key()` directly owns that key itself, and `hold([])` will not release it.
+  async hold(keys, options = {}) {
+    const wanted = new Set((Array.isArray(keys) ? keys : [keys]).filter((key) => key !== null && key !== undefined).map(String));
+    return this.#withSession(async (game) => {
+      await this.focusCanvas(game);
+      const held = this.heldKeys || (this.heldKeys = new Set());
+      const changes = [];
+      for (const key of [...held]) {
+        if (wanted.has(key)) continue;
+        await this.#sendKey(game, key, false);
+        held.delete(key);
+        changes.push("-" + key);
+      }
+      for (const key of wanted) {
+        if (held.has(key)) continue;
+        await this.#sendKey(game, key, true);
+        held.add(key);
+        changes.push("+" + key);
+      }
+      if (options.remember !== false) this.heldKeys = held;
+      return { changes, held: [...held] };
+    });
   }
 
   // A PNG of the game frame as a Buffer. A framed game is cropped to its frame,
