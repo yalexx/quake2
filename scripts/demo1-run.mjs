@@ -24,6 +24,8 @@ import { RouteWalker } from "../control/walker.mjs";
 import { CombatWalker } from "../control/combat.mjs";
 import { PlayLoop } from "../control/loop.mjs";
 import { fastRequest, enterFastMode, leaveFastMode, readCvars, FAST_FLAG, FAST_BANNER, FAST_TIMESCALE_CHOICES } from "../control/fast.mjs";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 const CDP = process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801";
 const game = new QuakeControl({ cdpUrl: CDP, timeoutMs: 20000 });
@@ -40,6 +42,52 @@ let fastState = null;
 function report(label, value) {
   if (value === undefined) { console.log(label); return; }
   console.log(label + ": " + (typeof value === "string" ? value : JSON.stringify(value)));
+}
+
+// ---- evidence: pictures of a run, for the run's own record ---------------
+//
+// Off unless the caller names a folder. When it does, the run writes PNGs into
+// it at three moments that only mean anything together: the level fresh from
+// the reset (the start the proof is measured from), the walk at the exit
+// approach (the last ground before the engine changes level), and the engine
+// showing whatever it loaded (the change itself). Every picture is the game's
+// own frame, taken through the same control connection the walk uses, and the
+// path and byte count of each go into the report so the pictures and the run
+// can be read as one thing.
+//
+// A picture is not a claim, and nothing here decides anything: a shot that
+// cannot be taken is reported and the run carries on. The finish proof is still
+// the engine's own `mapname` answer, not the pictures.
+const EVIDENCE_DIR = process.env.QUAKE2_EVIDENCE_DIR || null;
+async function evidence(name, detail) {
+  if (!EVIDENCE_DIR) return null;
+  try {
+    const png = await game.screenshot();
+    const file = path.join(EVIDENCE_DIR, name);
+    await fs.writeFile(file, png);
+    report("evidence", file + " (" + png.length + " bytes)" + (detail ? " " + JSON.stringify(detail) : ""));
+    return file;
+  } catch (error) {
+    report("evidence", name + " could not be taken (" + error.message + "); the run carries on");
+    return null;
+  }
+}
+
+// The exit approach, recognised from the loop's own position each tick. One
+// picture, not one per tick: `APPROACH` is the last stretch of ground before
+// the engine loads the next map (the loop's arrival tolerance is 96 units), and
+// a restart that puts the player back at the spawn re-arms it, so a death on
+// the way in does not leave the record with a picture of the wrong attempt.
+const APPROACH_UNITS = 450;
+const RESTART_UNITS = 1500;
+function approachShot() {
+  let armed = true;
+  return async ({ distance, position }) => {
+    if (distance > RESTART_UNITS) armed = true;
+    if (!armed || distance > APPROACH_UNITS) return;
+    armed = false;
+    await evidence("02-exit-approach.png", { distance: Math.round(distance), at: position });
+  };
 }
 
 // A budget knob read from the environment. Read so that an explicit zero
@@ -708,7 +756,18 @@ async function play() {
     // behaviour every run before this one was measured with.
     ...(process.env.QUAKE2_HUNT_RANGE ? { huntRange: Math.max(0, Number(process.env.QUAKE2_HUNT_RANGE)) } : {}),
     ...(process.env.QUAKE2_HUNT_GIVEUP_MS ? { huntGiveUpMs: Math.max(0, Number(process.env.QUAKE2_HUNT_GIVEUP_MS)) } : {}),
+    // The hunter's two other bounds, which the second-condition experiments had
+    // no way to move. `huntNearPlan` is how far off the way out a monster may
+    // stand before the walk refuses to detour for it (the guard that stopped the
+    // hunt wandering into a side room); `answerRange` is how far an off-arc
+    // monster is answered without turning. Both are read-only knobs: absent, the
+    // defaults in PLAY_DEFAULTS are exactly what they were.
+    ...(process.env.QUAKE2_HUNT_NEAR_PLAN ? { huntNearPlan: Math.max(0, Number(process.env.QUAKE2_HUNT_NEAR_PLAN)) } : {}),
+    ...(process.env.QUAKE2_ANSWER_RANGE ? { answerRange: Math.max(1, Number(process.env.QUAKE2_ANSWER_RANGE)) } : {}),
     trace: process.env.QUAKE2_TRACE === "1",
+    // Only when a caller named a folder to write pictures into (see evidence()).
+    // Left unset, the loop runs exactly as it did.
+    ...(EVIDENCE_DIR ? { onTick: approachShot() } : {}),
   });
   loop.plan = plan;
   report("loop levers", {
@@ -771,6 +830,13 @@ async function play() {
       fastState = null;
     }
   }
+  // The start, on the record: demo1 fresh from the reset, before the walk has
+  // taken a step. The clock starts after the picture, so the picture is not
+  // billed to the walk. The settle is for the console: the read-backs above
+  // open it, and a picture taken in the same breath still has their last lines
+  // drawn over the level. Half a second of level, and the frame is the start.
+  if (EVIDENCE_DIR) await new Promise((resolve) => setTimeout(resolve, 800));
+  await evidence("01-fresh-demo1-start.png", { map: fresh.map, at: fresh.position });
   const started = Date.now();
   const result = await loop.run(exit.aim, { tolerance: 96, level: "demo1" });
   report("loop reason", result.reason);
@@ -948,12 +1014,25 @@ async function play() {
   const after = await readMapName();
   report("engine says the map is", after.name);
   report("proof", after.lines.filter((line) => /"mapname" is "/.test(line)));
+  // The same answer with the console's own echo beside it. The line above keeps
+  // only what the engine said; this keeps the `]mapname` the answer came from,
+  // because an answer with the question stripped out cannot show that the two
+  // belong together.
+  report("proof, echo included", after.lines.filter((line) => /mapname/i.test(line)));
   // The other half of the proof, and the engine's own answer rather than the
   // script's promise: a walk at a multiplied clock or with cheats on is not a
   // finish whatever the `mapname` says. Asked here, at the end, on the same
   // console the `mapname` above came off.
   const cheatsAfter = await readCvars(game, ["cheats", "timescale"]).catch((error) => ({ values: null, reason: error.message }));
   report("cheats and timescale, the engine's own answer after the walk", cheatsAfter.values || cheatsAfter.reason);
+  // The engine showing what it loaded, taken after the console work above so the
+  // frame is the level itself and not a console drawn over it. It is the last
+  // thing this run does to the game: nothing reloads demo1, so whatever is on
+  // the screen when this script exits is what the walk actually produced. The
+  // settle is the same half-second the start picture takes, and for the same
+  // reason -- the `mapname` read-back opens the console a breath before this.
+  if (EVIDENCE_DIR) await new Promise((resolve) => setTimeout(resolve, 800));
+  await evidence("03-next-map.png", { engineSays: after.name, cheats: cheatsAfter.values || null });
   const playedStraight = cheatsAfter.values && cheatsAfter.values.cheats === "0" && (cheatsAfter.values.timescale === "1" || cheatsAfter.values.timescale === "0");
   // The finish line. What makes a run a finish proof is not the flag, it is what the run
   // actually was: normal speed and cheats 0. `QUAKE2_FAST=1
