@@ -77,15 +77,26 @@
   // corridor, that kick reached 1.57 degrees while the status bar was showing
   // 100 health at the same moment: the four moments a one-degree threshold
   // called death carried rolls of 1.21, 1.25, 1.57 and 1.57 beside health
-  // readings of 100, 100, 100 and 52. A *death* rolls it much further -- the
-  // death camera held 27.28 degrees in that same run, and 39 when this offset
-  // was first recovered.
+  // readings of 100, 100, 100 and 52. *Strafing* leans it too, and further:
+  // Yamagi Quake II has a `cl_rollangle` that stock Quake 2 does not, measured
+  // on a live player on demo1 at one reading per CDP round trip -- standing
+  // still 0, walking forward at most 0.72, and strafing up to 2.00 over 47
+  // samples of pure strafe, none above 2.0. The fight walker's own
+  // `movementKeys()` strafes on every firing leg, so that population is not a
+  // corner case: at a threshold of 1, 24 of the 171 readings taken while
+  // walking a player into demo1's corridor were called deaths by a roll the
+  // player was strafing through, and a false death is not cosmetic -- the
+  // walker restarts the level for one, which puts the player back at the spawn.
   //
-  // At one degree every hit was read as a death. Ten is six times the largest
-  // kick measured and less than half the smallest death. control/bridge.mjs
-  // carries the same number for the same reason and decides the same question
-  // for itself, because a page that is already running keeps the script it
-  // loaded.
+  // A *death* rolls the view much further: the death camera held 27.28 degrees
+  // in the corridor run, 39 when this offset was first recovered, and exactly
+  // 40 held over the whole death when a player was walked into demo1's soldiers
+  // with nothing fired. Ten is five times the largest non-death roll measured
+  // (2.00) and less than half the smallest death (27.28), so it reads a death
+  // early in its roll without ever reading a strafe as one.
+  // control/bridge.mjs carries the same number for the same reason and decides
+  // the same question for itself, because a page that is already running keeps
+  // the script it loaded.
   var ROLL_IS_DEATH = 10;
 
   // A reading further from the origin than this is not a map this engine has;
@@ -174,7 +185,8 @@
       dead: dead,
       // Reported as null on purpose: this pass did not recover these fields,
       // and a made-up zero would be worse than an honest gap. `alive` is
-      // derived from the view roll, which was measured, and says so.
+      // derived from the view roll, separately from the lean the same build
+      // puts on a strafing player, and says so.
       alive: !dead,
       aliveSource: "view-roll-above-strafe-lean",
       health: null,

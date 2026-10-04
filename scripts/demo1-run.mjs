@@ -33,6 +33,20 @@ function report(label, value) {
   console.log(label + ": " + (typeof value === "string" ? value : JSON.stringify(value)));
 }
 
+// A budget knob read from the environment. Read so that an explicit zero
+// survives: `Number(x) || fallback` throws a zero away because zero is falsy,
+// and zero is the value this knob most needs to be able to say -- "do not
+// restart the level at all" is the one-life diagnostic, and quietly turning it
+// into the default makes a run that was asked for one life report eight without
+// saying so. An absent or unreadable knob is null, and the caller picks the
+// default.
+function askedFor(name) {
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") return null;
+  const value = Number(raw);
+  return Number.isFinite(value) ? value : null;
+}
+
 // The engine's answer to "which map is running". This is the finish line: not a
 // position the script believes it reached, but the level the engine itself says
 // it loaded. Quake 2 prints it as `"mapname" is "demo2"`.
@@ -276,17 +290,8 @@ async function finish() {
   // short attempt -- a diagnostic that stops after two deaths still says where
   // the player got to and how the fight went, and it says it in a fraction of
   // the wall clock -- while the proof itself still runs the full budget.
-  // Read so that an explicit zero survives. `Number(x) || fallback` throws a
-  // zero away because zero is falsy, and zero is the value this knob most needs
-  // to be able to say: "do not restart the level at all" is the one-life
-  // diagnostic, and quietly turning it into "eight" makes a run that was asked
-  // for one life report eight without saying so.
-  const askedFor = (name) => {
-    const raw = process.env[name];
-    if (raw === undefined || raw === "") return null;
-    const value = Number(raw);
-    return Number.isFinite(value) ? value : null;
-  };
+  // `askedFor` is the module's own (see the top of this file), which reads an
+  // explicit zero as zero rather than throwing it away.
   const attemptBudget = askedFor("QUAKE2_ATTEMPTS");
   const deathBudget = askedFor("QUAKE2_DEATHS");
   const attempts = Math.max(1, attemptBudget === null ? 8 : attemptBudget);
@@ -327,10 +332,6 @@ async function finish() {
   }
   const unbound = calls.filter((call) => call.call === "weapon" && !call.tap);
   if (unbound.length) report("note", "the config binds no key to " + unbound.map((c) => "use " + c.classname.replace(/^weapon_/, "")).join(", ") + "; the walk relies on the engine's own weapon switch");
-  const result = await walker.follow(exit.aim, {
-    attempts, deaths, tolerance: 96,
-    via: calls,
-  });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
   // The one reason that is not a failure. `reached` is false because the walk

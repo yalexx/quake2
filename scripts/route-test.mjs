@@ -12,6 +12,7 @@ import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
+import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -356,6 +357,164 @@ check("a leg that does not move the player is not progress", standerResult.reach
 check("so the walk re-plans instead of spending the attempt standing still", pinned.gotos < 12, pinned.gotos);
 check("and it says so rather than reporting an arrival", standerResult.log.some((entry) => /no progress/.test(entry.message)), standerResult.log.map((e) => e.message));
 
+// A firing leg is one decision and one trigger press, and the press has to
+// cover the whole of it. It did not: the turn onto the soldier and the
+// status-bar read both ran with the trigger *up*, and those two are most of a
+// leg's wall clock -- measured on the live game, the turn 415 ms, the walk
+// 538 ms, `hudShot` 732 ms and `readHealth` 294 ms, so 1.4 s of every 2.2 s leg
+// was the player standing still in the open being shot at with nothing fired
+// back. (Those are the numbers that shaped this and they are left as measured;
+// the per-call cost under them was cut at the source afterwards -- one CDP
+// connection for the whole run, and the status bar read in the page -- which
+// took `hudShot` from 391 ms to 80 ms on this box.) This pins the shape of the
+// fix, with no browser: the trigger goes down first, the turn and the
+// status-bar read are taken inside that press, and the trigger comes up last.
+console.log("a firing leg holds the trigger for the whole of it");
+const legCalls = [];
+const fightStub = {
+  async position() { legCalls.push("position"); return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+  async mouseHold(button, down) { legCalls.push("fire:" + down); return { held: !!down, button, buttons: down ? 1 : 0 }; },
+  async face(bearing, options) { legCalls.push("face:" + ((options && options.turn) || "auto")); return { facing: true, target: bearing, yaw: bearing, error: 0.01, rounds: 2, method: "mouse" }; },
+  async key(key, down) { legCalls.push("key:" + key + (down ? "+" : "-")); return { key, down }; },
+  async evaluate(expression) {
+    if (/getBoundingClientRect/.test(expression)) { legCalls.push("hud:frame"); return JSON.stringify({ width: 1366, height: 768, left: 0, top: 728, shownLeft: 0, shownTop: -728, viewport: 1366 }); }
+    legCalls.push("hud:style");
+    return /setAttribute/.test(expression) ? "restored" : "display:block";
+  },
+  async screenshot() { legCalls.push("hud:capture"); return fs.readFileSync(new URL("../favicon.png", import.meta.url)); },
+};
+const legWalker = new CombatWalker(fightStub, map, { engage: { readHud: true } });
+await legWalker._leg({
+  x: -672, y: 336, z: 14,
+  enemy: { index: 0, classname: "monster_soldier", position: { x: -672, y: 336, z: -16 }, distance: 46 },
+  route: { x: -696, y: 192, z: -48 },
+}, { attempt: 1, leg: 1 });
+const firstDown = legCalls.findIndex((call) => /^key:.+\+$/.test(call));
+const capture = legCalls.indexOf("hud:capture");
+const fireDown = legCalls.indexOf("fire:true");
+const fireUp = legCalls.indexOf("fire:false");
+// The movement keys that are down at a point in the trace, replayed from the
+// key events themselves. This is what "the player is walking" means -- a set
+// that is non-empty -- and it is stronger than counting presses and releases,
+// which a swap of one key for another moves around without changing.
+const heldAt = (index) => {
+  const held = new Set();
+  for (const call of legCalls.slice(0, index)) {
+    const match = /^key:(.+)([+-])$/.exec(call);
+    if (!match) continue;
+    if (match[2] === "+") held.add(match[1]);
+    else held.delete(match[1]);
+  }
+  return held;
+};
+check("the trigger goes down before the turn and before any movement key",
+  fireDown > 0 && fireDown < legCalls.indexOf("face:mouse") && fireDown < firstDown, legCalls);
+check("the turn onto the soldier is taken with the mouse",
+  legCalls.indexOf("face:mouse") > fireDown && legCalls.indexOf("face:keys") === -1, legCalls);
+// The walk starts *before* the turn, not after it. A leg used to take its aim
+// with nothing held, so every firing leg began with the player standing still
+// in the open with the trigger down -- the one posture this level's own
+// measurements say kills (100 health and no armour is a corpse after six
+// seconds of standing still in demo1's corridor). The keys for the view the
+// player *has* go down first and the turn is taken in motion.
+check("the walk starts before the turn, not after it",
+  firstDown > fireDown && firstDown < legCalls.indexOf("face:mouse"), legCalls);
+// ...and they are then swapped for the ones the view the aim actually left
+// behind wants, because Quake 2 moves a player along their view and a leg that
+// walked on the requested bearing after the turn landed somewhere else would
+// walk off the route.
+check("and they are swapped for the ones the aim's own view wants",
+  legCalls.slice(legCalls.indexOf("face:mouse"), capture).some((call) => /^key:.+\+$/.test(call)), legCalls);
+check("the status bar is photographed while the player is still walking",
+  capture > firstDown && heldAt(capture).size > 0, { atCapture: [...heldAt(capture)], trace: legCalls });
+check("and no movement key is still down when the leg ends",
+  heldAt(legCalls.length).size === 0, { atEnd: [...heldAt(legCalls.length)], trace: legCalls });
+check("and still firing", capture < fireUp, legCalls);
+check("nothing comes up between the read and the trigger except the walk's own keys",
+  fireUp > capture && legCalls.slice(capture + 1, fireUp).every((call) => /^key:.+-$/.test(call) || call === "hud:style"), legCalls);
+const legRecord = legWalker.fights[0];
+check("the leg's own record says which way it turned", legRecord.aimMethod === "mouse", { aimMethod: legRecord.aimMethod });
+check("and how close the turn landed, to a hundredth of a degree",
+  legRecord.aimError === 0.01, { aimError: legRecord.aimError });
+check("a leg that fired says so", legRecord.fired === true, { fired: legRecord.fired });
+
+// ...and a leg that a key press throws inside still lifts every key it put down.
+// A press the bridge throws on can leave the write half-done -- the engine takes
+// the key and the caller is answered with an error anyway -- so a key recorded
+// as held only *after* its press returns is a key the release never lifts, and
+// the player walks into a wall for the rest of the run. Measured on a stub whose
+// `key()` throws on the way down, the release-first order left both of a firing
+// leg's movement keys held when the leg ended.
+console.log("a firing leg lifts its keys even when a press throws");
+const throwingHeld = new Set();
+const throwingStub = {
+  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: 0, roll: 0 }, map: "demo1", dead: false }; },
+  async mouseHold(button, down) { return { held: !!down, button, buttons: down ? 1 : 0 }; },
+  async face(bearing) { return { facing: true, target: bearing, yaw: bearing, error: 0.01, rounds: 2, method: "mouse" }; },
+  async key(key, down) {
+    if (down) { throwingHeld.add(key); throw new Error("the press was taken and the caller was refused"); }
+    throwingHeld.delete(key);
+    return { key, down };
+  },
+};
+const throwingWalker = new CombatWalker(throwingStub, map, {});
+await throwingWalker._leg({
+  x: -672, y: 336, z: 14,
+  enemy: { index: 0, classname: "monster_soldier", position: { x: -672, y: 336, z: -16 }, distance: 46 },
+  route: { x: -696, y: 192, z: -48 },
+}, { attempt: 1, leg: 1 });
+check("no movement key is left down by a press that threw", throwingHeld.size === 0, [...throwingHeld]);
+
+// A failed aim is retried, and the retry has to measure again rather than
+// re-run the first attempt's arithmetic. `face()` skips its opening probe when
+// it is handed `from`, and `from` here is the position read *before* the first
+// attempt turned the player -- so passing it back aims the second attempt at
+// the error the first one has already spent. Measured on a live `finish` run's
+// leg record: residuals of 10 to 30 degrees, and one of 109, after first
+// attempts that had already turned most of the way.
+console.log("a failed aim is retried against the view the player actually has");
+const retryCalls = [];
+const retryStub = {
+  // The stub's player carries the yaw the turns left behind, because that is
+  // what the engine does and the walk's keys are computed from it. A stub that
+  // reported yaw 0 whatever `face()` returned would answer the question below
+  // with a view the player never had.
+  yaw: 0,
+  async position() { return { probed: true, position: { x: -672, y: 300, z: 14 }, angles: { pitch: 0, yaw: this.yaw, roll: 0 }, map: "demo1", dead: false }; },
+  async mouseHold(button, down) { return { held: !!down, button, buttons: down ? 1 : 0 }; },
+  async face(bearing, options) {
+    retryCalls.push({ turn: (options && options.turn) || "auto", hasFrom: !!(options && options.from) });
+    // The first attempt gets most of a 29-degree miss back and still fails; the
+    // retry ends somewhere else entirely.
+    if (retryCalls.length === 1) { this.yaw = 25; return { facing: false, target: bearing, yaw: 25, error: 29.7, rounds: 4, reason: "NOT_CONVERGED", method: "mouse" }; }
+    this.yaw = 200;
+    return { facing: false, target: bearing, yaw: 200, error: 12.5, rounds: 2, reason: "NOT_CONVERGED", method: "keys" };
+  },
+  async key(key, down) { return { key, down }; },
+  async evaluate() { return "1"; },
+  async screenshot() { return fs.readFileSync(new URL("../favicon.png", import.meta.url)); },
+};
+const retryWalker = new CombatWalker(retryStub, map, { engage: { readHud: false } });
+await retryWalker._leg({
+  x: -672, y: 336, z: 14,
+  enemy: { index: 0, classname: "monster_soldier", position: { x: -672, y: 336, z: -16 }, distance: 46 },
+  route: { x: -696, y: 192, z: -48 },
+}, { attempt: 1, leg: 1 });
+check("the first aim is given the view the leg already read", retryCalls[0] && retryCalls[0].hasFrom === true, retryCalls);
+check("a miss is retried the bridge's own way", retryCalls.length === 2 && retryCalls[1].turn === "auto", retryCalls);
+check("and the retry measures again instead of reusing the spent view", retryCalls[1].hasFrom === false, retryCalls);
+const retryRecord = retryWalker.fights[0];
+check("the leg's record is the retry's answer, not the first attempt's",
+  retryRecord.aimError === 12.5 && retryRecord.aimMethod === "keys" && retryRecord.aimed === false, retryRecord);
+// The walk is walked on the yaw the aim left behind. Taken from the first
+// attempt it would be 25, and the keys for the route at 25 are not the keys at
+// 200 -- so this is what says the leg did not walk off on a spent view.
+const walkBearing = ((Math.atan2(192 - 300, -696 + 672) * (180 / Math.PI)) + 360) % 360;
+check("the walk's keys are computed from the view the retry left behind",
+  JSON.stringify(retryRecord.keys) === JSON.stringify(movementKeys(200, walkBearing)) &&
+  JSON.stringify(movementKeys(200, walkBearing)) !== JSON.stringify(movementKeys(25, walkBearing)),
+  { keys: retryRecord.keys, at200: movementKeys(200, walkBearing), at25: movementKeys(25, walkBearing) });
+
 // A level restart is not a plan that failed. This stub's player is dead on
 // every read except the one right after a restart -- which is the shape of a
 // `finish` run on demo1, where six and seven of eight attempts went on restarts
@@ -422,6 +581,104 @@ console.log("the weapon a fighting walker asks the engine for");
     fightStub.asked === 2, { asked: fightStub.asked, attempt: legOptions.attempt, restarts: armed.restarts });
 }
 
+// The same question asked the other way, through the walk's own loop rather
+// than one leg called by hand: a stub whose player really dies gives up its
+// lives through `follow`, and every one of them is a life the engine has to be
+// asked about again.
+{
+  const enemy = map.waypoints("enemy").filter((e) => e.classname === "monster_soldier")
+    .sort((a, b) => Math.hypot(a.position.x + 856, a.position.y - 240) - Math.hypot(b.position.x + 856, b.position.y - 240))[0];
+  const standing = { x: enemy.position.x + 150, y: enemy.position.y, z: enemy.position.z + 22 };
+  const fightStub = {
+    asked: 0, dead: false, keys: 0, respawns: 0,
+    async position() { return { probed: true, position: standing, angles: { pitch: 0, yaw: 0, roll: this.dead ? 39 : 0 }, map: "demo1", dead: this.dead }; },
+    async respawn() { this.respawns++; this.dead = false; return { respawned: true, how: "fire", position: standing }; },
+    async selectWeapon(name) { this.asked++; return { selected: true, weapon: name, method: "key", key: "3" }; },
+    async face() { return { facing: true, yaw: 0, error: 0, rounds: 1 }; },
+    async key(key, down) { this.keys++; if (this.keys > 4) this.dead = true; return { held: !!down, key }; },
+    async mouseHold() { return { held: true }; },
+    async attackHold() { return { held: true }; },
+    async useHold() { return { held: true }; },
+    async goto(point) { return { reached: true, reason: "reached", target: point, position: standing, rounds: 1, travelled: 10, trail: [] }; },
+    async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+    async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+    async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  };
+  const armed = new CombatWalker(fightStub, map, { engage: { weapon: "Super Shotgun", readHud: false, maxEngagements: 20 } });
+  // Four attempts, not more: the stub's player is dead by the third, and every
+  // attempt is a full A* over demo1's grid, which is the slowest thing in this
+  // file.
+  const armedResult = await armed.follow(map.exitPoint().aim, { attempts: 4, deaths: 2, tolerance: 96, maxLegs: 2 });
+  check("the walk fought, died and was put back on the spawn",
+    armed.restarts >= 1 && armedResult.reason !== "NO_POSITION",
+    { lives: armed.restarts + 1, reason: armedResult.reason, asks: fightStub.asked });
+  check("and asked the engine for its weapon once in every life it fought",
+    fightStub.asked === armed.restarts + 1, { lives: armed.restarts + 1, asks: fightStub.asked });
+}
+
+// A missed respawn is not the end of the walk, and this is the run that said
+// so: a `finish` run ended on a single `NOT_RESPAWNED` at attempt 3 of 8 with
+// the player 1,802 units short, four attempts unspent. One press of fire is
+// enough in a clean experiment -- measured live: a click, 2.5 s, roll -1.50 to
+// 0.00, alive -- and evidently not always enough under fire on a live level.
+console.log("a missed respawn does not end the walk");
+const flakyStub = {
+  respawns: 0,
+  alive: false,
+  async position() {
+    return { probed: true, position: { x: 128, y: -319, z: 46 }, angles: { pitch: 0, yaw: 135, roll: this.alive ? 0 : 39 }, map: "demo1", dead: !this.alive };
+  },
+  async respawn() {
+    this.respawns++;
+    if (this.respawns === 1) return { respawned: false, reason: "NOT_RESPAWNED", how: "fire" };
+    this.alive = true;
+    return { respawned: true, how: "fire" };
+  },
+  async goto(point) { return { reached: true, reason: "reached", target: point, position: { x: 128, y: -319, z: 46 }, rounds: 0, travelled: 0, trail: [] }; },
+  async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+  async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
+  async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+  async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  async attackHold() { return { held: true }; },
+  async useHold() { return { held: true }; },
+};
+const flakyResult = await new RouteWalker(flakyStub, map, {}).follow(map.exitPoint().aim, { attempts: 2, deaths: 1, backOff: false });
+check("a respawn that comes back NOT_RESPAWNED is pressed again", flakyStub.respawns === 2, flakyStub.respawns);
+check("and the walk does not end on the one miss", flakyResult.reason !== "DEAD", flakyResult.reason);
+
+// The other end of it: a player the level will not give back at all is a
+// restart budget that runs out -- the honest ending -- and not a walk that stops
+// on the first refusal with the budget unspent.
+const stubbornStub = {
+  respawns: 0,
+  mapRestarts: 0,
+  async position() { return { probed: true, position: { x: -427, y: 111, z: -1 }, angles: { pitch: 0, yaw: 0, roll: 39 }, map: "demo1", dead: true }; },
+  async respawn(options = {}) {
+    this.respawns++;
+    if (options.how === "map") this.mapRestarts++;
+    return { respawned: false, reason: "NOT_RESPAWNED", how: options.how || "fire" };
+  },
+  async goto(point) { return { reached: true, reason: "reached", target: point, position: { x: -427, y: 111, z: -1 }, rounds: 0, travelled: 0, trail: [] }; },
+  async strafe() { return { key: "a", requestedMs: 400, heldMs: 400 }; },
+  async face() { return { facing: true, target: 0, yaw: 0, error: 0, rounds: 1 }; },
+  async walk() { return { key: "w", requestedMs: 400, heldMs: 400 }; },
+  async walkKeys() { return { keys: ["w"], requestedMs: 400, heldMs: 400 }; },
+  async attackHold() { return { held: true }; },
+  async useHold() { return { held: true }; },
+};
+const stubbornResult = await new RouteWalker(stubbornStub, map, {}).follow(map.exitPoint().aim, { attempts: 2, deaths: 3, backOff: false });
+check("a player that will not come back ends on the restart budget, not on one refusal",
+  stubbornResult.reason === "DEATHS", stubbornResult.reason);
+check("with three presses of fire spent on each of the three restarts it was allowed",
+  stubbornStub.respawns === 12, { respawns: stubbornStub.respawns, deaths: 3 });
+// ...and the fourth, once per death, is the engine's own restart by name --
+// `map demo1`, the command a player's death runs for them. A level that will
+// not hand the player back to the fire button is still a level this walker is
+// standing in, and giving up on it there is what ended four traced runs on
+// their first death with seven restarts unspent.
+check("and one restart by name per death as the fire button's fallback",
+  stubbornStub.mapRestarts === 3, stubbornStub.mapRestarts);
+
 // The furthest reading is a different reading from the last one, and on a run
 // that ends in a death they are hundreds of units apart. The walker's `position`
 // is the last thing the engine said -- before a restart, where the corpse was --
@@ -475,14 +732,23 @@ function paintBar(text, options = {}) {
       rgba[at + 3] = 255;
     }
   }
-  let ox = 20;
+  // Where the number starts. Q2 right-aligns a number in its field, so the
+  // field's own reading is checked by painting one where the engine draws it:
+  // the field's right edge less one 16-wide cell per digit. See the check for it
+  // below.
+  let ox = options.offsetX === undefined ? 20 : options.offsetX;
+  // ...and where it sits vertically. A real status bar draws its digits in the
+  // canvas's bottom 24 rows, which is the row the field's own reading looks at
+  // (see `field` in control/hud.mjs), so a bar painted at 0 has its number above
+  // the row that read is about.
+  const oy = options.offsetY === undefined ? 8 : options.offsetY;
   for (const character of text) {
     const glyph = digitGlyphs[options.family || "num"][Number(character)];
     for (let y = 0; y < glyph.height; y++) {
       for (let x = 0; x < glyph.width; x++) {
         if (!glyph.mask[y * glyph.width + x]) continue;
         const px = ox + x;
-        const py = 8 + y;
+        const py = oy + y;
         if (px >= width || py >= height) continue;
         lum[py * width + px] = ink;
         const at = (py * width + px) * 4;
@@ -525,6 +791,29 @@ check("an armour number is read as armour, not as health",
 check("and a health number is read as health",
   readPainted("100").leftmost.family === "num", readPainted("100").leftmost.family);
 
+// The number in the health *field*, read where the field is.
+//
+// A real status bar puts the health number right-aligned on a fixed column and
+// the level's own health icon (a bright cross) three units to the right of it,
+// and the general scan's "most confident cell first" can anchor on the icon and
+// grow a number across the digits -- measured on this box, on two strips of the
+// same legible 100 a second apart (`hud-probe` in the run's evidence): one read
+// 100 and the other found only a `0` that ends on 557, so the player's health
+// came back as nothing at all. Both readings are taken here: the field's own
+// read has to find the 100 in the field, and a painted bar whose number is
+// right-aligned there is what that is checked against.
+const fieldEdge = Math.round(1366 * (573 / 1366));
+const fieldBar = paintBar("100", { width: 1366, offsetY: 16, offsetX: fieldEdge - 3 * 16 });
+const fieldStatus = readBar(fieldBar.lum, fieldBar.width, fieldBar.height, { searchBottom: fieldBar.height - 1, rgba: fieldBar.rgba, healthFieldRight: 573 / 1366 });
+check("the health field is read from the field the engine draws it in",
+  fieldStatus.field && fieldStatus.field.value === 100, fieldStatus.field && fieldStatus.field.value);
+check("...and a number that is not in the field is not reported as being in it",
+  (() => {
+    const elsewhere = paintBar("100", { width: 1366, offsetX: 20 });
+    const read = readBar(elsewhere.lum, elsewhere.width, elsewhere.height, { searchBottom: elsewhere.height - 1, rgba: elsewhere.rgba, healthFieldRight: 573 / 1366 });
+    return !read.field || read.field.value !== 100;
+  })(), "a bar with its number at the far left has nothing in the health field");
+
 // The reader's other half is the decoder, and it had no check at all: every
 // case above hands `readBar` a luminance plane, so the PNG chunk walk, the
 // IDAT inflate and the per-row filter reconstruction -- the part production
@@ -540,6 +829,68 @@ check("an RGB picture with no alpha channel comes back fully opaque",
 check("and the pixels are the picture's, not one flat fill",
   new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4])).size > 1,
   [...new Set(Array.from({ length: 64 }, (_, x) => favicon.data[x * 4]))].slice(0, 4));
+
+// A turn that could not be taken is not evidence about the method that could
+// not take it. This is the fault the named blocker of the round before this one
+// was: the death camera holds the view, so a miss while the player is dead says
+// nothing about the mouse or the keys -- but three of them retired a method for
+// the rest of the run, and both methods could be retired one death apart, after
+// which `face()` answered NO_TURN without sending anything at all and the walk
+// could only push forward at whatever bearing it happened to have. The stub
+// below is a player who is dead and cannot be turned; the mouse is the method
+// the fighting walker asks for by name (see combat.mjs `aimTurn`).
+console.log("a turn that could not be taken does not retire the method that could not take it");
+check("the engine's own states that take the keyboard off the game are the ones that block a turn",
+  turnIsBlocked({ dead: true }) && turnIsBlocked({ inGame: false }) && turnIsBlocked({ paused: true }) &&
+  !turnIsBlocked({ dead: false, inGame: true, paused: false }) && !turnIsBlocked(null),
+  [turnIsBlocked({ dead: true }), turnIsBlocked({ inGame: false }), turnIsBlocked({ paused: true }), turnIsBlocked({ inGame: true })]);
+
+class DeadPlayer extends QuakeControl {
+  constructor(state) {
+    super({ cdpUrl: "http://127.0.0.1:1", timeoutMs: 1000 });
+    this.state = state;
+    this.moves = 0;
+  }
+  async position() { return this.state; }
+  async mouseMove(dx) {
+    this.moves++;
+    // The death camera holds the view: the turn is applied and changes nothing.
+    if (!this.state.dead) {
+      this.state = { ...this.state, angles: { ...this.state.angles, yaw: this.state.angles.yaw - dx * 0.05 } };
+    }
+    return { dx };
+  }
+}
+const corpse = new DeadPlayer({ probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 40 }, dead: true, inGame: true, paused: false, keyDestName: "game" });
+const corpseAim = await corpse.face(90, { tolerance: 2, rounds: 4, turn: "mouse" });
+check("a dead player's turns are still sent", corpse.moves === 4, corpse.moves);
+check("and the aim is reported as not taken rather than as taken badly",
+  corpseAim.facing === false && corpseAim.reason === "NOT_CONVERGED" && corpseAim.method === "mouse", corpseAim.reason);
+check("the mouse is not retired by four misses the death camera caused",
+  corpse.turnCalibration.mouseWorks === null || corpse.turnCalibration.mouseWorks === undefined ||
+  corpse.turnCalibration.mouseWorks === true, corpse.turnCalibration.mouseWorks);
+// ...and the proof that "not retired" means something: the same bridge, with the
+// player alive again and a mouse that turns, still turns them.
+corpse.state = { probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 0 }, dead: false, inGame: true, paused: false, keyDestName: "game" };
+const revivedAim = await corpse.face(90, { tolerance: 2, rounds: 6, turn: "mouse" });
+check("the same bridge turns a live player after living through a death",
+  revivedAim.facing === true && Math.abs(revivedAim.error) <= 2, { facing: revivedAim.facing, error: revivedAim.error, rounds: revivedAim.rounds });
+
+// The other half: when the player *is* in a state to be turned and the method
+// the caller asked for achieves nothing twice in a row, `face()` tries the
+// other one inside the same call. The mouse here is applied and changes the
+// yaw by nothing, which is what a live player whose mouse has stopped turning
+// them looks like. The keys cannot be sent without a game -- this stub has none
+// -- so what the check reads is that the mouse was abandoned after exactly two
+// blank turns and the call went to the keys instead of spending all six rounds
+// on the same dead turn.
+console.log("a method that cannot turn a live player is abandoned inside the call, not between calls");
+const stubborn = new DeadPlayer({ probed: true, position: { x: 0, y: 0, z: 0 }, angles: { pitch: 0, yaw: 0, roll: 0 }, dead: false, inGame: true, paused: false, keyDestName: "game" });
+stubborn.mouseMove = async function (dx) { this.moves++; return { dx }; };
+let stubbornThrew = null;
+try { await stubborn.face(90, { tolerance: 2, rounds: 6, turn: "mouse" }); } catch (error) { stubbornThrew = error; }
+check("the dead mouse gets two rounds before the keys are tried",
+  stubborn.moves === 2 && stubbornThrew !== null, { mouseTurnsSent: stubborn.moves, then: stubbornThrew && stubbornThrew.name });
 
 console.log("errors are named, never empty");
 let threw = null;
