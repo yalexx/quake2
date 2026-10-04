@@ -2583,9 +2583,11 @@ the same way, from bolts actually in flight (the run reports how many it saw;
 none seen, the loop keeps the documented 1000 and says so).
 
 `turnScale` exists because the mouse on this box is not the mouse the bridge
-documents. The bridge's default is 0.066 degrees per mouse count; measured here,
-three 20-degree requests produced **0, 39.4 and 39.4 degrees** -- the real
-figure is about 0.13, twice the default. The loop therefore measures what its
+documents. The bridge's default was 0.066 degrees per mouse count when this was
+written (it is the measured 0.1302 now -- see [the pass that finished
+demo1](#the-pass-that-finished-demo1)); measured here, three 20-degree requests
+produced **0, 39.4 and 39.4 degrees** -- the real figure is about 0.13, twice
+the default. The loop therefore measures what its
 last turn actually achieved and folds it back in, which is also why the run
 prints the scale it settled on (0.51 in every run of this pass).
 
@@ -2952,8 +2954,11 @@ yaw's is.
 The pitch is calibrated exactly as the yaw is -- ask for a correction, read what
 the pitch actually did, fold the ratio back in -- because `m_pitch` and `m_yaw`
 are two cvars and this box's two axes need not agree. Measured this pass, the
-pitch scale settled at **0.53** (the yaw's is 0.51, and the bridge's documented
-default is 0.066).
+pitch scale settled at **0.53** (the yaw's is 0.51, and the bridge's default was
+0.066 at the time). Those two numbers are 1/1.973: they were the bridge's error
+being cancelled, not a property of the box -- see [the pass that finished
+demo1](#the-pass-that-finished-demo1), where the default was measured and both
+scales went to 1.0.
 
 With the axis on, the shot gate becomes `beamReaches()` -- the same test in three
 dimensions, down the actual segment from the eye to the target's own origin --
@@ -3317,7 +3322,7 @@ measured and thrown away (see below).
 
 | run | ticks | wall clock | deepest reading | met / killed | the engine said |
 |---|---|---|---|---|---|
-| every run before this pass | -- | 649-1125 s | `-1648 1540` **128 short** | 15 / 1-2 | `"mapname" is "demo1"` |
+| every run before this pass | -- | 649-1125 s | `-1648 1540` **128 short** | 15 / 0-7 | `"mapname" is "demo1"` |
 | 1 -- the finish, and nothing else yet | 1776 | 206 s | 9 short | 15 / 1 | `"mapname" is "demo2"` |
 | 3 -- after the aim, the corpses and the ghosts | 1744 | 173 s | 5 short | 15 / 7 | `"mapname" is "demo2"` |
 | 6 -- after the hunt | 539 | 51 s | 7 short | 14 / 9 | `"mapname" is "demo2"` |
@@ -3347,9 +3352,14 @@ So every turn the loop asked for was **1.973 times the one it meant**. The yaw
 had been absorbing that in its own fold-back -- the 0.506 to 0.510 this file has
 recorded for three passes is 1/1.973, which is the bridge's error being
 cancelled rather than a property of the box. The constant is now the measured
-one, and the loop's two scales now settle at **1.0** (measured: yaw 0.981 to 1.0,
-pitch 0.996 to 1.094 across runs) instead of spending the first seconds of every
-short life discovering a factor of two.
+one, and the loop's two scales now settle at **1.0**: across the six complete
+runs of this pass the yaw landed between **0.998 and 1.016** and the pitch
+between **0.921 and 1.300** (the two smoke runs of 400 and 700 ticks read 1.000
+and 0.981 for the yaw, 0.996 and 0.671 for the pitch), where before the change
+the same fold-back spent the first seconds of every short life discovering a
+factor of two. The pitch's spread is the honest number -- it is a short sample
+per run (3 to 67 readings, against 1267 on the one long run) and is not as tight
+as the yaw's, which is why the range is written here and not a single value.
 
 #### The pitch scale, settled
 
@@ -3582,10 +3592,16 @@ of one.
 
 The second condition is still short, and the shape of what is missing has not
 changed since the trace that found it: the soldiers that survive are the ones
-the walk never engages at all -- **zero hits** on each of them -- because nothing
-on the route they stand off has a line to them. Everything the loop engages, it
-kills: 9 of 11 in one run, 7 of 8 in another. Making those five engageable is
-the next thing to measure, and it is not a matter of aim or of weapon.
+the walk never engages at all -- **zero hits** on every one of them, in every
+run of this pass that reports a per-monster table. Making those five engageable
+is the next thing to measure, and it is not a matter of aim or of weapon.
+
+What the loop does engage, it mostly kills, and here is the one run where that
+can be counted exactly rather than estimated: the traced run of this pass
+engaged **eight** distinct soldiers (`#2 #243 #272 #280 #293 #294 #308 #309`,
+counted from its own per-tick trace) and killed **seven** of them. The eighth,
+`#243`, was engaged and survived. That is the shape of the whole fight: the
+losses are in the soldiers never engaged, not in the ones that are.
 
 ### The MCP server
 

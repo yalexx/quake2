@@ -802,18 +802,20 @@ async function play() {
   report("aim, the first axis (yaw)", result.turnScale && { scaleLearned: result.turnScale.learned, samples: result.turnScale.samples });
   // The gun in hand, and what the loop did with it. The weapon is the loop's own
   // record of which key it pressed for the gun the level's errand fetched; the
-  // damage-per-drop numbers beside it are the game's evidence for whether that
-  // press took effect (10 a bolt for the spawn's blaster, 6 a pellet for the
-  // level's own super shotgun).
+  // fingerprint below is the game's evidence for whether that press took
+  // effect. A blaster bolt is a flat 10 -- measured, and the only weapon this
+  // level actually hands the player -- so a drop of anything else is a
+  // different gun firing, whatever the loop's own record says.
   report("the gun the walk fetched", result.weapon || "none fetched (spawn blaster)");
   report("ticks spent standing still to shoot (stop and kill)", result.stopAndShootTicks + " of " + result.ticks);
   // Going out of the way for what was met and not killed. `left` is how many
   // monsters the walk decided it could not reach.
   if (result.hunts) report("hunts (met, alive, and walkable: the walk went to it)", result.hunts);
   // The game's own fingerprint of which gun was really firing: the size of every
-  // drop in a monster's own health, in order. A blaster bolt is a flat 10; a
-  // super shotgun's pellets are 6 each. The loop's record of the key it pressed
-  // is a claim; this is the engine's answer to the same question.
+  // drop in a monster's own health, in order. A blaster bolt is a flat 10 --
+  // measured on a whole run -- so a series that is not all 10s is a different
+  // gun. The loop's record of the key it pressed is a claim; this is the
+  // engine's answer to the same question.
   if (result.dropSizes && result.dropSizes.length) {
     const sizes = new Map();
     for (const size of result.dropSizes) sizes.set(size, (sizes.get(size) || 0) + 1);
