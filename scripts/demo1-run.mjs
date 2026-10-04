@@ -532,8 +532,8 @@ async function play() {
   const plan = map.path(map.playerStart().position, exit.aim, walk);
   report("route plan", plan.points.length ? plan.points.length + " points, " + Math.round(plan.distance) + " units" : plan.reason);
   // The errands, in the loop's own terms: the level's gun and its ammunition
-  // (see supplyCalls) and the health boxes the plan already passes (see
-  // topUpCalls). The loop runs them when they are owed and reachable, which is
+  // (see supplyCalls) and the health boxes the plan already passes (built
+  // below). The loop runs them when they are owed and reachable, which is
   // a decision taken every tick rather than a waypoint inserted into a plan.
   const errands = [];
   if (!process.env.QUAKE2_NO_SUPPLY) {
@@ -548,8 +548,52 @@ async function play() {
     }
   }
   if (!process.env.QUAKE2_NO_TOPUP) {
-    for (const call of topUpCalls(map, plan)) {
-      errands.push({ classname: call.classname, call: "health", position: { x: call.x, y: call.y, z: call.z }, walkDistance: call.walkDistance });
+    // The level's own health and armour boxes that already stand on the plan,
+    // as errands the loop may detour for when the player is hurt enough (see
+    // PlayLoop's `#activeErrand`).
+    //
+    // Built here rather than borrowed, and that is a merge decision worth
+    // naming: the base's `finish()` used to get this list from a `topUpCalls()`,
+    // and PR #10 removed that function along with the walker's own errand list
+    // -- its pickups are handled by routing the *plan* over them instead
+    // (CombatWalker's `snapPickups`). This loop has no walker and does not
+    // re-route the plan, so its equivalent is an errand list, and this is where
+    // its list comes from. A call to the removed `topUpCalls()` is a call to
+    // nothing, which is what the rebase produced before this was written.
+    //
+    // Only boxes the plan already passes are taken (`NEAR`), because the
+    // measurement behind that limit still holds: the walk that swept up every
+    // health box it could see reached 2,053 units short and fired no shots at
+    // all.
+    const NEAR = 96;
+    const offPlan = (x, y) => {
+      let best = { distance: Infinity, index: 0 };
+      for (let index = 0; index < plan.points.length; index++) {
+        const a = plan.points[index];
+        const b = plan.points[Math.min(index + 1, plan.points.length - 1)];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = dx * dx + dy * dy;
+        const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length));
+        const distance = Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy));
+        if (distance < best.distance) best = { distance, index };
+      }
+      return best;
+    };
+    const boxes = [];
+    const already = new Set();
+    for (const item of map.waypoints("*")) {
+      if (!item.position || !/^item_(health|armor)/.test(item.classname)) continue;
+      const near = offPlan(item.position.x, item.position.y);
+      if (near.distance > NEAR) continue;
+      const key = item.classname + Math.round(item.position.x) + "," + Math.round(item.position.y);
+      if (already.has(key)) continue;
+      already.add(key);
+      boxes.push({ item, near });
+    }
+    boxes.sort((a, b) => a.near.index - b.near.index);
+    for (const { item, near } of boxes) {
+      errands.push({ classname: item.classname, call: "health", position: { x: item.position.x, y: item.position.y, z: item.position.z }, walkDistance: Math.round(near.distance) });
     }
   }
   report("errands the loop carries", errands.length
