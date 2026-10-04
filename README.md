@@ -3141,6 +3141,12 @@ and how often both are -- the only state the trigger is allowed down in.
 | 3 | 11133 | 8694 (78%) | 9502 (85%) | 8663 (78%) | 3.59 deg | 2.58 deg | 0.506 | 0.472 |
 | 4 | 2535 | 704 (28%) | 1693 (67%) | 644 (25%) | 28.12 deg | 3.76 deg | 0.510 | 5.535 |
 
+A review pass narrowed what counts as "a tick with a target": `engage` and
+`retreat` only. A `recover` tick has a target in its percept and aims at a
+`func_button` instead, so counting it averaged the button's bearing into the
+number that is supposed to be about the monster. The rows above are the
+un-narrowed counts; the reading is the same shape and slightly smaller now.
+
 **The two axes behave differently and the runs say so.** The yaw's scale settles
 at **0.506 to 0.510** every time -- the same number this file has recorded for
 three passes -- and its gate is crossed 78% of the time on a run long enough to
@@ -3181,6 +3187,22 @@ on all four runs, which is the last word on that sensor.
   the same eight monsters and reported three killed with **zero** health drops
   are the reading that made this visible -- those three were killed in a
   previous life, and the per-attempt split says so.
+
+  **A review pass found that split was one number short, and fixed it.** "Killed"
+  counts a monster that is not standing at the end of the attempt, which is what
+  the owner's condition turns on -- but a monster met **already dead** is not a
+  kill the attempt made, and the two were being added together. That is how the
+  run above reported `met 8, killed 3` beside `0 over 0 drops` on twelve
+  consecutive attempts, and how this pass's own commit came to claim *41 kills*
+  across run 4. `killedByThisAttempt` is now reported beside `killed` (the
+  condition's number, unchanged, because a corpse is not "still standing"), and
+  a monster already at zero on the tick it was first met says so in its own
+  note and in its own field. Re-measured on a fresh 5-attempt run: attempt 4
+  reads `met 7, killed 3 (of which this attempt's: 0), still standing 4, health
+  taken off them 0 over 0 drops`, and the run's honest total is **1**, not the
+  41 the added-up line had claimed. A kill this harness reports is still the
+  game's own `health <= 0`; what changed is that it no longer claims credit for
+  one it did not make.
 * **`cheats 0` is now the engine's own answer, not the script's promise.** Every
   run reads `cheats` and `timescale` back off the console before and after the
   walk and reports them: `{"cheats":"0","timescale":"1"}` before and after, on

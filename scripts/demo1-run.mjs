@@ -723,12 +723,14 @@ async function play() {
   // (control/edicts.mjs), not from the network entity state and not from a
   // landed turn. It is the only reading of a monster's health the harness has.
   if (result.enemies) {
-    report("enemies met (within reach of the player, from the loop's own record)", result.enemies.met);
-    report("enemies killed (the game's own edict says health <= 0)", result.enemies.killed);
+    report("enemies met in the LAST attempt (within reach of the player, from the loop's own record)", result.enemies.met);
+    report("  of those, killed (the game's own edict says health <= 0)", result.enemies.killed);
+    report("  of those killed, killed BY this attempt (alive when it first met them)", result.enemies.killedByThisAttempt);
+    if (result.enemies.alreadyDeadWhenMet) report("  already dead when the attempt first met them (an earlier attempt's kills, or a first tick reading the level being left)", result.enemies.alreadyDeadWhenMet);
     report("enemies met and still standing", result.enemies.stillStanding);
     if (result.enemies.unreadableHealth) report("enemies whose health the game's edict would not give up", result.enemies.unreadableHealth);
     report("SECOND SUCCESS CONDITION (kill everything met)", result.enemies.met === 0
-      ? "no enemy was met this run -- nothing was slipped past and nothing was proven"
+      ? "no enemy was met in this attempt -- nothing was slipped past and nothing was proven"
       : (result.enemies.stillStanding === 0
         ? "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- every enemy met was killed"
         : "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- " + result.enemies.stillStanding + " STILL STANDING"));
@@ -746,15 +748,21 @@ async function play() {
     report("attempts (a death reloads the level, so its monsters come back alive and the count starts again)", result.attempts.length + 1);
     for (const attempt of result.attempts) {
       report("  attempt " + attempt.attempt + " (" + attempt.endedBy + ")",
-        "met " + attempt.met + ", killed " + attempt.killed + ", still standing " + attempt.stillStanding +
+        "met " + attempt.met + ", killed " + attempt.killed + " (of which this attempt's: " + attempt.killedByThisAttempt + ")" +
+        ", still standing " + attempt.stillStanding +
         ", health taken off them " + attempt.healthDamage + " over " + attempt.healthDamageEvents + " drops" +
         ", " + Math.round(attempt.wallClockMs / 1000) + "s");
     }
     report("  attempt " + result.enemies.attempt + " (the last one)",
-      "met " + result.enemies.met + ", killed " + result.enemies.killed + ", still standing " + result.enemies.stillStanding +
+      "met " + result.enemies.met + ", killed " + result.enemies.killed + " (of which this attempt's: " + result.enemies.killedByThisAttempt + ")" +
+      ", still standing " + result.enemies.stillStanding +
       ", health taken off them " + result.healthDamage + " over " + result.healthDamageEvents + " drops" +
       ", " + Math.round(result.enemies.wallClockMs / 1000) + "s");
-    report("enemies killed across the whole run, attempts added up", result.attempts.reduce((sum, attempt) => sum + attempt.killed, 0) + result.enemies.killed);
+    // Kills this run can actually claim. A monster met already dead is not one
+    // of them -- counting those is how the same run reported three kills an
+    // attempt beside zero health taken off anything.
+    report("monsters this run killed itself (alive when its attempt first met them, dead at the end of it)",
+      result.attempts.reduce((sum, attempt) => sum + attempt.killedByThisAttempt, 0) + result.enemies.killedByThisAttempt);
   }
   report("health the game says was taken off monsters", result.healthDamage + " over " + result.healthDamageEvents + " drops" +
     (result.healthDamageTotal !== undefined && result.healthDamageTotal !== result.healthDamage

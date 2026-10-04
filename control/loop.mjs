@@ -1029,11 +1029,27 @@ export class PlayLoop {
           hits: 0,
           killed: false,
           killedBy: null,
+          // A monster already at or below zero on the tick it was FIRST seen
+          // within reach was not killed by this attempt. A death reloads the
+          // level, and a monster that comes back -- or a first tick that still
+          // reads the level being left -- is met as a corpse. It is not
+          // "standing", so it must not hold up the owner's condition; but it is
+          // also not a kill of ours, and counting it as one is how a report
+          // came to say "killed 3" beside "0 health taken off them" on twelve
+          // consecutive attempts of a run (run 2, attempts 14 to 25).
+          alreadyDead: monster.health !== null && monster.health !== undefined && monster.health <= 0,
           at: null,
         };
+        // Met already dead: not standing, and not this attempt's kill. Marked
+        // here so the two readings cannot be confused later.
+        if (record.alreadyDead) {
+          record.killed = true;
+          record.killedBy = "already dead when first met (not this attempt's kill)";
+        }
         this.met.set(key, record);
         this.note("met " + record.classname + " (#" + monster.number + ") at " + record.distanceWhenMet + " units, health " +
-          (record.healthFirst === null ? "unreadable" : record.healthFirst));
+          (record.healthFirst === null ? "unreadable" : record.healthFirst) +
+          (record.alreadyDead ? " -- already dead, so not a kill of this attempt" : ""));
       }
       record.samples += 1;
       record.lastSeen = Date.now();
@@ -1077,6 +1093,13 @@ export class PlayLoop {
       wallClockMs: Date.now() - this.attemptStartedAt,
       met: records.length,
       killed: records.filter((record) => record.killed).length,
+      // The subset the attempt can actually claim: not standing at the end AND
+      // alive when this attempt first met it. Kept apart from `killed` because
+      // the owner's condition turns on "not standing" while a claim about what
+      // this attempt did turns on this one, and a report that ran them together
+      // said "killed 3" beside "0 health taken off them".
+      killedByThisAttempt: records.filter((record) => record.killed && !record.alreadyDead).length,
+      alreadyDeadWhenMet: records.filter((record) => record.alreadyDead).length,
       stillStanding: records.filter((record) => !record.killed).length,
       unreadableHealth: records.filter((record) => record.healthFirst === null).length,
       healthDamage: damage,
@@ -1090,6 +1113,7 @@ export class PlayLoop {
         hits: record.hits,
         killed: record.killed,
         killedBy: record.killedBy,
+        alreadyDead: record.alreadyDead === true,
         samples: record.samples,
       })),
     };
@@ -1701,8 +1725,14 @@ export class PlayLoop {
     const wantFire = decision.fire === true && aimError !== null && aimError <= this.options.aimTolerance && pitchReady;
     // Counted here, on the tick's own corrected aim, so a run that never asks
     // for the per-tick trace still carries the measurement the second axis is
-    // judged by. `ticks` is every tick with a target in front of the player.
-    if (percept && percept.target) {
+    // judged by. `ticks` is every tick whose decision AIMED AT THE TARGET --
+    // `engage` and `retreat` and nothing else. A `recover` tick has a target in
+    // its percept and aims at a `func_button` instead, and `advance` has no
+    // target at all; counting either of those as "a tick with a target" would
+    // average the button's bearing into the number that is supposed to be about
+    // the monster.
+    const aimedAtTarget = decision.mode === "engage" || decision.mode === "retreat";
+    if (aimedAtTarget && percept && percept.target) {
       const yawIn = aimError !== null && aimError <= this.options.aimTolerance;
       this.gate.ticks += 1;
       if (yawIn) this.gate.yawInside += 1;
