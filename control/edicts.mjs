@@ -30,7 +30,13 @@
 // it and its own `number` seventy-two bytes before that. The client's own array
 // satisfies that signature by construction; the second set of records that did
 // -- at 0x35EA250, 892 bytes apart -- is the game DLL's edicts. Three checks
-// hold on it, and `verifyEdicts()` re-runs them at runtime:
+// hold on it. Two of them are re-run on every reading the harness takes, by the
+// code that consumes this one: the walk below keeps only slots whose first word
+// is their own index (the array naming itself), and `healthOf` checks the origin
+// agreement and counts what disagreed. The third -- health against the entity's
+// class -- was measured once, and the live replacement for it is the player's
+// own health checked against the status bar every run (`crossCheck`, counted in
+// control/loop.mjs), which is ground truth this reading did not supply.
 //
 //   * `edict[i].s.number === i` for every used slot (the array names itself);
 //   * a monster edict's `s.origin` equals the client's network origin for the
@@ -178,6 +184,15 @@ export function healthOf(monsters, edicts, options = {}) {
   for (const monster of Array.isArray(monsters) ? monsters : []) {
     const edict = index.get(monster.number);
     if (!edict) { unmatched += 1; out.push({ ...monster, health: null, maxHealth: null, dead: null, source: "no-edict" }); continue; }
+    // A monster the caller handed over with no position at all: `staticMonsters`
+    // in control/loop.mjs passes the level's own `enemy.position` straight
+    // through, and an entity lump whose origin will not parse gives `undefined`.
+    // `originAgrees` already refuses that reading; the error MEASUREMENT has to
+    // refuse it too, or the mismatch is reported by throwing a TypeError out of
+    // a function whose whole job is to report what it could not read.
+    const measured = monster.position
+      ? Math.round(Math.hypot(edict.x - monster.position.x, edict.y - monster.position.y, edict.z - monster.position.z) * 10) / 10
+      : null;
     const agreed = originAgrees(edict, monster, tolerance);
     if (!agreed) disagreed += 1;
     const live = liveOf(edict);
@@ -187,7 +202,7 @@ export function healthOf(monsters, edicts, options = {}) {
       maxHealth: live.maxHealth,
       dead: live.dead,
       source: agreed ? "game-edict" : "game-edict-origin-disagrees",
-      originError: Math.round(Math.hypot(edict.x - monster.position.x, edict.y - monster.position.y, edict.z - monster.position.z) * 10) / 10,
+      originError: measured,
     });
   }
   return { monsters: out, unmatched, disagreed, edicts: index.size };

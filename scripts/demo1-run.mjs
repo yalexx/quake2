@@ -676,9 +676,14 @@ async function play() {
         report("iteration mode", "asked for timescale " + FAST.timescale + " but the engine answers " + JSON.stringify(fastState.confirmed.timescale) + "; continuing at whatever it accepted");
       }
       // The loop's own level restart sends `map <level>` and a cheats line. In
-      // iteration mode that line is `cheats 1`, because a restart with
-      // `cheats 0` would turn the timescale off halfway through the run and the
-      // second half would silently be at normal speed.
+      // iteration mode that line is `cheats 1` rather than `cheats 0`, so a
+      // restart cannot be the thing that ends iteration mode halfway through a
+      // run. This is DEFENSIVE and is labelled as such: what was measured is
+      // that `cheats` is latched for the next game, and that `timescale` is a
+      // client cvar a level load does not touch -- so the lever guards against
+      // a restart turning the cheat off, and this pass did NOT measure that it
+      // would have. Setting it costs nothing and leaves the normal path alone:
+      // without `--fast` the option is unset and the line is `cheats 0`.
       loop.options.cheatsAfterRestart = fastState.cheat ? "cheats 1" : "cheats 0";
     } catch (error) {
       report("iteration mode", "could not be entered (" + error.message + "); playing at normal speed");
@@ -793,12 +798,7 @@ async function play() {
   const after = await readMapName();
   report("engine says the map is", after.name);
   report("proof", after.lines.filter((line) => /"mapname" is "/.test(line)));
-  // The finish line, and the one place iteration mode is not allowed to speak.
-  // A map change under `timescale` is the same engine event, but a run whose
-  // simulation was multiplied was not the walk the level is measured by, so it
-  // is reported as what it is: a fast-mode result, to be confirmed at normal
-  // speed with cheats 0.
-  // What makes a run a finish proof is not the flag, it is what the run
+  // The finish line. What makes a run a finish proof is not the flag, it is what the run
   // actually was: normal speed and cheats 0. `QUAKE2_FAST=1
   // QUAKE2_FAST_TIMESCALE=1` does the render/sound cuts and touches NOTHING
   // about the simulation -- no `cheats 1`, no `timescale` -- so a map change in
@@ -861,9 +861,15 @@ try {
   if (fastState) {
     const left = await leaveFastMode(game, fastState, { level: fastState.level || "demo1" })
       .catch((error) => ({ reason: "COMMAND_FAILED", message: error.message }));
+    const latch = left.relatched || {};
     console.log("iteration mode off: timescale " + JSON.stringify(left.timescale) + ", cheats " + JSON.stringify(left.cheats) +
       " (restored " + (left.restored || []).length + " cvars)" +
-      (left.latched ? ", and `cheats 0` had to be latched by reloading " + (left.relatched && left.relatched.level) + " -- Quake 2 keeps cheats for the running game until a level loads" : "") +
+      // Only claim the reload worked when it was READ BACK. A reload that was
+      // sent and never checked is not a restore, and saying it was is how a
+      // broken branch reads as a working one.
+      (left.latched && latch.ok
+        ? ", and `cheats 0` had to be latched by reloading " + latch.level + " -- Quake 2 keeps cheats for the running game until a level loads"
+        : (left.latched ? ", and the reload that was meant to latch `cheats 0` could NOT be verified: " + (latch.error || "no read-back") + " (level " + latch.level + ")" : "")) +
       (left.reason ? " -- " + left.reason + ": " + left.message : ""));
     if (left.cheats !== "0" && left.cheats !== null) {
       console.log("WARNING: the game is still at cheats " + left.cheats + ". Do not make a normal-speed run until it reads `cheats 0`.");

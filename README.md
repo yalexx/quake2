@@ -2800,6 +2800,20 @@ which is what applies the latch -- waits for the load, and reads again. A
 restore that stopped at `cheats 0` handed the next run a game with cheats 1,
 which is the one thing this mode must never leave behind.
 
+**That latch branch shipped broken and a review pass caught it.** It called
+`numberOr()` to size its settle wait, and `numberOr` is private in bridge.mjs,
+combat.mjs and route.mjs and exported by none of them -- so the branch threw
+`ReferenceError: numberOr is not defined`. What made it worse than a plain
+crash is *where* it threw: the name is evaluated while building the arguments to
+`setTimeout`, so the wait never ran, the read-back that would have noticed never
+happened, and the `catch` turned the whole thing into "the latch was needed",
+which the driver printed as *"had to be latched by reloading demo1"*. The reload
+had been sent; nothing had checked that it worked. The branch now computes the
+wait itself, and `relatched.ok` records whether the reload was **read back**, so
+a caller cannot report a latch as fixed on the strength of having asked.
+`scripts/route-test.mjs` reproduces the case against a stub engine, which is why
+that group exists.
+
 #### What each lever bought, measured
 
 Every number below is this pass's own, measured on the live game from a fresh
@@ -3265,7 +3279,23 @@ DLL's edicts become a health and never a guess: a monster whose edict agrees
 gets its own health; one whose edict is 300 units from where the client says it
 is is FLAGGED and not believed; one with no edict at all comes back with
 `health: null` rather than a made-up zero; and `health <= 0` is the only thing
-this reading calls dead. 181 checks in all, all passing.
+this reading calls dead.
+
+A fifth group covers **iteration mode putting the engine back**. Its restore is a
+console conversation, so it is checked against a stub engine that answers what
+Quake 2 answers -- no browser, no game. That the multiplier goes back to **1**
+and never to whatever the baseline happened to read; that `cheats 0` is always
+sent and read back; that no reload is sent when cheats really did go off; that a
+latched `cheats` makes the level reload **and that the reload is read back**
+before a caller is told it worked; and that a reload which could not be read back
+is reported as unverified rather than as a fix. It also pins what a run may call
+itself: `timescale 1` is not a cheat and its result counts, `--timescale 5`
+turns the mode on, no flag and no env is the normal path, and
+`QUAKE2_FAST_TIMESCALE` alone does not turn cheats on. That group exists because
+this branch had a real fault: see the broken-latch note in the iteration-mode
+section above.
+
+196 checks in all, all passing.
 
 **`scripts/engine-state-test.mjs`** needs no browser and no game either: it
 loads `engine-state.js` into a Node `vm` sandbox with a synthetic WASM linear
