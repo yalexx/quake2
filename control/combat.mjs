@@ -465,6 +465,30 @@ export function levelShotReaches(map, eye, origin, options = {}) {
   return true;
 }
 
+// Would a shot fired at `point` -- along the view, which with a pitch is not a
+// level line -- reach it?
+//
+// The same question as `levelShotReaches` one axis over: that one holds z fixed
+// at the eye's own height because a level view fires a level shot, and this one
+// walks the actual segment from the eye to the point. It is what the second aim
+// axis needs, and it is what makes a target on another floor answerable: a
+// soldier standing 40 units below the player is not reachable by a level line
+// through the wall beside them, and is reachable by a line down the step.
+//
+// The samples are the level's own `isSolid`, so a map with no geometry to ask
+// -- a stub in a test -- has no wall to invent and answers true.
+export function beamReaches(map, eye, point, options = {}) {
+  if (!eye || !point) return false;
+  if (!map || typeof map.isSolid !== "function") return true;
+  const span = Math.hypot(point.x - eye.x, point.y - eye.y, point.z - eye.z);
+  const steps = Math.max(2, Math.ceil(span / (options.step || 24)));
+  for (let index = 1; index < steps; index++) {
+    const t = index / steps;
+    if (map.isSolid(eye.x + (point.x - eye.x) * t, eye.y + (point.y - eye.y) * t, eye.z + (point.z - eye.z) * t)) return false;
+  }
+  return true;
+}
+
 // The four heights a standing player occupies above the floor they are on:
 // knees, waist, chest, top of the head. Every clearance test in this module and
 // in walker.mjs samples the same four, so that "the player fits" means one thing.

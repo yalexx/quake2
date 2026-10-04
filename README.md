@@ -2723,8 +2723,325 @@ QUAKE2_MAX_TICKS / QUAKE2_TICK_MS / QUAKE2_DEATHS  # budgets
 QUAKE2_ENGAGE_RANGE / QUAKE2_AIM_TOLERANCE / QUAKE2_LOW_HEALTH   # the levers
 QUAKE2_HEALTH_READ_MS                             # how often the status bar is read
 QUAKE2_NO_SUPPLY / QUAKE2_NO_TOPUP                 # turn the errands off
+QUAKE2_FAST=1 / --fast                             # ITERATION MODE (cheat, see below)
+QUAKE2_FAST_TIMESCALE=1 QUAKE2_FAST=1              # render speed-up only, no cheat
+QUAKE2_FAST_RENDER=0 / QUAKE2_FAST_RES=1           # multiplier only / also cut resolution
+QUAKE2_PITCH_AIM=0                                 # back to the old yaw-only aim
+QUAKE2_MET_RANGE                                   # how close counts as "met"
 ```
 
+### Iteration mode: `control/fast.mjs` (`play --fast` / `QUAKE2_FAST=1`)
+
+**This is a cheat mode. It is for iteration only, a result made in it is not a
+finish, and every number from it has to say so.** The finish proof is a
+normal-speed, `cheats 0` walk that ends with the engine itself printing
+`"mapname" is "demo2"`.
+
+A `play` run costs minutes of wall clock, and almost all of it is the level
+being walked in real time. `control/fast.mjs` is the switch that buys that time
+back. It has two halves, and they are not the same kind of thing:
+
+* **the render/sound half** -- `cl_maxfps`, `vid_maxfps`, `s_initsound`,
+  `s_volume`, `cl_particles`, `gl_texturemode`, `r_shadows`, `r_fullbright`,
+  `r_lightmap`, `r_norefresh`, `r_drawworld`, `r_drawentities`. This changes
+  only how long a frame takes to draw, nothing about what the engine
+  simulates. The HUD read is frame-locked (control/hud.mjs grabs the WebGL
+  buffer inside the engine's own `requestAnimationFrame`), so a cheaper frame is
+  also a faster loop.
+* **the simulation half** -- `timescale N`, which multiplies the server's frame
+  time. **This is the cheat**: it is registered `CVAR_CHEAT`, so it needs
+  `cheats 1`, and cheats are the one thing this project never uses outside
+  iteration mode. No god, no noclip, no give, no teleport -- in either mode,
+  ever.
+
+Both halves off is the normal path, and it is unchanged.
+
+```
+node scripts/demo1-run.mjs play --fast                    # both halves, timescale 2
+node scripts/demo1-run.mjs play --fast --timescale 5      # pick the multiplier
+QUAKE2_FAST=1 node scripts/demo1-run.mjs play             # the same, from the env
+QUAKE2_FAST=1 QUAKE2_FAST_TIMESCALE=1 node scripts/demo1-run.mjs play
+                                                          # render half ONLY -- no cheat
+QUAKE2_FAST=1 QUAKE2_FAST_RENDER=0 node scripts/demo1-run.mjs play
+                                                          # multiplier only
+QUAKE2_FAST_RES=1 ...                                     # also drop the resolution
+```
+
+`QUAKE2_FAST_TIMESCALE=1` is worth its own line: it runs the render half with
+**no cheat at all** -- no `cheats 1`, no `timescale` change -- so a run made
+with it is still a normal-speed, `cheats 0` walk and its result counts. It is
+the recommended way to iterate.
+
+#### How the cvars are set, and why it is the console
+
+The Qwasm2 build exports no cvar or command accessor to JavaScript (its wasm
+exports are libc and SDL only), so nothing in the harness can write a cvar
+directly. The two available routes are console commands and a config the engine
+`exec`s. This module uses **console commands**, in two round trips through
+`QuakeControl.command()`: one to read the values that are there now, one to set
+and read them back. Each round trip opens the console briefly and the engine
+pauses while it is open -- once or twice per run, not once per command.
+
+The `exec <cfg>` route was rejected for a measured reason: the engine's
+filesystem is an IDBFS mount restored from the save store **only when the page
+loads** (`app.js` `restoreUserData`), so a config file written to disk would
+need the kiosk page reloaded to be seen at all.
+
+`leaveFastMode()` puts everything back -- including `timescale`, which has to be
+in the baseline explicitly because it is not in the render plan (the first
+version of this module left the multiplier on, and it was caught by reading the
+game back, not by reasoning) -- and it always ends at `timescale 1`, the level's
+own speed, rather than at whatever a previous run happened to leave behind.
+
+**Quake 2 latches `cheats`.** `cheats 0` answers `cheats will be changed for next
+game.` and the RUNNING game keeps cheats on until a level is loaded. The restore
+therefore checks, and when the read-back still says 1 it reloads the level --
+which is what applies the latch -- waits for the load, and reads again. A
+restore that stopped at `cheats 0` handed the next run a game with cheats 1,
+which is the one thing this mode must never leave behind.
+
+#### What each lever bought, measured
+
+Every number below is this pass's own, measured on the live game from a fresh
+`demo1` spawn. `wall clock` is for **250 loop ticks**, so the rows are directly
+comparable; `units/wall-s` is the player's own peak speed, read out of the
+engine's memory by `fast-probe.mjs speed`.
+
+| run | timescale | cheat? | 250 ticks in | loop Hz | ms/tick of work | ms of that in ACT | player peak units/wall-s | route left when it stopped | units/s of wall clock |
+|---|---|---|---|---|---|---|---|---|---|
+| normal (the baseline) | 1 | no | 25 s | 11.1 | 44 | 33 | 349 | 594 | 164 |
+| render half only | 1 | **no** | 24 s | 11.4 | 37 | 23 | 349 | 1,784 | 121 |
+| multiplier only | 2 | yes | 37 s | 7.1 | 99 | 87 | 727 | 532 | 112 |
+| both halves | 2 | yes | 37 s | 7.2 | 106 | 91 | 727 | 128 | 123 |
+
+**The finding that matters: `timescale` makes the HARNESS slower, not faster.**
+The player really does move faster -- the peak speed scales almost exactly with
+the multiplier, measured at 349, 727, 1,108, 1,610 and 2,721 units/wall-second
+for `timescale` 1, 2, 3, 5 and 10, which is what "run the level at that multiple
+of real time" means -- but the loop's cost per tick goes up by more than the
+multiplier does. The harness is bound by round trips to the engine, and the
+engine's own frame time is what those round trips wait on; at `timescale 2` the
+tick's acting cost went from 33 ms to 87 ms and the loop fell from 11.1 Hz to
+7.1 Hz. The two columns on the right are the honest bottom line, and the last one
+is NOISY -- how far a run gets in 250 ticks depends on the fight it picks, and
+the four runs above ended 128, 532, 594 and 1,784 units from the exit for reasons
+that have nothing to do with their tick rate. What is not noisy is the wall clock
+and the work: **the same 250 ticks cost 48% more clock in iteration mode and
+bought about 11% more ground**, so there is no version of this measurement in
+which the multiplier paid for itself. The control loop also gets worse as it goes
+faster: a correction that lands on twice as much movement is a correction with
+half the resolution, which is why the fast runs are visibly jerkier.
+
+**What actually buys wall clock is the render half plus a lower `QUAKE2_TICK_MS`.**
+The default tick is 80 ms and the loop's work is 33 to 44 ms of it -- the rest is
+deliberate sleep. Cutting the render cost drops the acting from 33 ms to 23 ms
+and the whole tick's work from 44 ms to 37 ms, and `QUAKE2_TICK_MS=20` (the
+floor) turns that into ticks more often. Measured: `QUAKE2_TICK_MS=60` on the
+normal path gave **250 ticks in 18 s (14.1 Hz) against 25 s (11.1 Hz)** at the
+80 ms default -- about 850 ticks a minute instead of 670, **with no cheat and no
+change to the simulation**. That is what this pass's attempts were run with.
+
+The honest summary of the two halves: **the render/sound/frame-cap half is worth
+having and the `timescale` half is worth measuring and then leaving off.** It is
+kept, off by default, because "the engine accepts it and the player really does
+move 7.8x as fast" is a fact a later pass should not have to rediscover -- but a
+run that wants to iterate faster should use `QUAKE2_FAST_TIMESCALE=1` and a lower
+`QUAKE2_TICK_MS`, not a multiplier.
+
+**What the engine accepts.** `timescale` is accepted at every value tried --
+1, 2, 3, 5, 10 and 20 all came back as typed, so what limits the multiplier is
+the harness and not the engine. `vid_maxfps 0` is clamped by the engine to 999
+(it ships at 300). And the cvars a first guess reaches for on this build **do
+not exist**: `r_picmip`, `gl_picmip`, `gl_drawflat`, `gl_shadows`, `gl_dynamic`,
+`gl_flashblend`, `gl_overbrightbits`, `gl_texturesolidmode`, `gl_maxfps` and
+`gl_particle_size` all answer `Unknown command`. The active renderer is
+`ref_gles3` (app.js passes `+set vid_renderer gles3`) and the `gl_*` family
+belongs to `ref_gl1` and the soft renderer; the knobs that exist here are the
+`r_*` ones in the table above. There is no `r_picmip` on this configuration at
+all, and the report says so rather than leaving the absence of a lever looking
+like an oversight.
+
+### The game's own edicts: `control/edicts.mjs`
+
+**A monster's health is readable. It is in the game DLL's own memory, and this
+is where it was found.**
+
+Every pass before this one had to say that it was not: the client's entity array
+(`cl_entities`) is the NETWORK state and carries origin, angles, model index,
+frame and effects, and no health field. That is why the previous pass could only
+guess at a hit from an animation frame moving, and measured zero damage events
+in 23.8 seconds of firing.
+
+The game DLL is a side module of the engine's own wasm -- `game_baseq2.wasm`
+imports `env.memory`, measured with `WebAssembly.Module.imports` -- so its
+`g_edicts` array is in the same linear memory the page already reads. It is
+simply further along:
+
+| | |
+|---|---|
+| base | `0x35EA250` (`g_edicts[0]`) |
+| stride | 892 (`sizeof(edict_t)` on this build) |
+| count | 1024 (`MAX_EDICTS`) |
+| `s.number` | +0x00 |
+| `s.origin` | +0x04 |
+| `s.modelindex` | +0x28 |
+| `s.solid` | +0x48 |
+| **`health`** | **+0x1e0** |
+| `max_health` | +0x1e4 |
+
+**How it was found, and how it is checked.** Not by guessing an address: by a
+record search over the whole 128 MiB image for every 4-byte word equal to the
+`solid` box a monster's `entity_state_t` carries (8290) whose record also had
+`modelindex` 44 thirty-two bytes before it and its own `number` seventy-two
+bytes before that. The client's array satisfies that signature by construction;
+the second set of records that did -- 892 bytes apart, at `0x35EA250` -- is the
+game DLL's edicts. Three things then have to hold, and they do:
+
+* `edict[i].s.number === i` for every used slot (the array names itself);
+* a monster edict's `s.origin` equals the client's network origin for the same
+  entity number -- measured across all 15 of demo1's soldiers;
+* **every monster's health equals its class's own health**: 20 for
+  `monster_soldier_light`, 30 for `monster_soldier`, 40 for
+  `monster_soldier_ss`, measured 15 of 15.
+
+**The cross-check that makes it believable.** The player's own health has ground
+truth the harness did not have to trust any offset for: the status bar
+(control/hud.mjs), read off the screen. `+0x1e0` came back 100/100 for the
+player and 40/30/20 for the soldiers, and the loop now reads both every run and
+counts where they disagree -- measured, **17 agreements and 0 disagreements** at
+full health on one run, and one disagreement (bar 5, edict 75) on another in the
+ticks while the player was dying, which is reported rather than averaged away.
+
+**What is not read, and is not guessed.** `classname` is a pointer into the game
+DLL's string data and is not read; monsters are named from the level's own entity
+lump, as `control/loop.mjs` already did. `deadflag` was **not** pinned down by
+value: the word after `max_health` reads -30 on every live soldier, which is not
+a deadflag, so nothing reads it as one. "Dead" therefore means `health <= 0`,
+which is the game's own state for it, and every number built on it says so.
+
+### The second aim axis: pitch
+
+The loop could only yaw. It could not look up or down, so `decide()` returned a
+bearing and nothing else, and the shot gate was `levelShotReaches()` -- a
+horizontal line at the eye's own height. That is right for a soldier on the
+player's own floor (the eye sits inside that soldier's box) and wrong for
+anything else.
+
+`control/bridge.mjs` now has `lookPitch(degrees)`, the same one-delta-per-call
+shape as `look()`, driven by the mouse's other axis: `mouseMove(0, dy)`, which
+the page hands to SDL as `movementY`, which the engine adds to
+`cl.refdef.viewangles[PITCH]` scaled by `m_pitch`. **Positive looks down**, which
+is the sign the engine's own angles carry, so the aim angle is
+`-atan2(dz, ground distance)` and the mouse delta is not sign-flipped the way the
+yaw's is.
+
+The pitch is calibrated exactly as the yaw is -- ask for a correction, read what
+the pitch actually did, fold the ratio back in -- because `m_pitch` and `m_yaw`
+are two cvars and this box's two axes need not agree. Measured this pass, the
+pitch scale settled at **0.53** (the yaw's is 0.51, and the bridge's documented
+default is 0.066).
+
+With the axis on, the shot gate becomes `beamReaches()` -- the same test in three
+dimensions, down the actual segment from the eye to the target's own origin --
+and `pitchAim: false` gives back exactly the old yaw-only behaviour so the change
+can be measured against the thing it replaced.
+
+#### The fix that actually made the trigger go down
+
+The gate was right and the *reading it was asked about* was wrong. The fire gate
+was measured against `read.angles.yaw` -- the angle from the TOP of the tick --
+but the turn is a round trip inside that same tick, so by the time the gate runs
+the correction has already landed and the reading is one correction stale. The
+controller's gain is 0.5, each tick removes half the error, so the stale reading
+is always about **twice** the real one: a 1.6-degree gate was a gate the loop
+could only cross by luck.
+
+Measured, one traced run before the fix: of **182 engagement ticks, 28 had the
+trigger down**, and the aim error in the ticks around them sat at 2.0 to 2.4
+degrees -- inside the gate after the turn that was already on its way. The gate
+is now checked against `yaw + the turn this tick just sent`. Measured after, on
+the next run: **192 of 301 engagement ticks with the trigger down**, 13,344 ms of
+trigger-down instead of 1,802 ms, and **17 drops in the game's own monster health
+instead of 0**.
+
+### The second success condition: kill what you meet
+
+Finishing the level is no longer the whole of it. **A finish with a soldier still
+standing is not success**, so the loop now reports, every run, three numbers
+built on the game DLL's own state and on nothing else:
+
+```
+enemies met (within reach of the player, from the loop's own record): 15
+enemies killed (the game's own edict says health <= 0): 3
+enemies met and still standing: 12
+SECOND SUCCESS CONDITION (kill everything met): met 15, killed 3 -- 12 STILL STANDING
+```
+
+* **met** -- a monster the loop has seen within `metRange` (default 1100 units,
+  `QUAKE2_MET_RANGE`) of the player on a tick where the player was alive. The
+  definition is written down here and nowhere else so the number is
+  reproducible; it is the same range at which the level's own soldiers open
+  fire.
+* **killed** -- the game DLL's own `health <= 0` for that entity. Never a landed
+  turn, never a frame that moved, never the loop's opinion. Each kill records
+  which reading said so.
+* **stillStanding** -- met and not killed. This is the number the condition turns
+  on, and `enemies.met === 0` is reported as its own outcome: a run that met
+  nothing proved nothing rather than passing vacuously.
+
+Every enemy the loop met is listed with the health the game gave it when it was
+first seen, the lowest health it was ever seen at, how many times that number
+fell, and whether it was killed. The run also reports **how much health the game
+says was taken off monsters** and **how many drops** -- the direct replacement
+for the animation-frame proxy the earlier passes had to use.
+
+**Where this pass got to.** Measured across this pass's complete runs: 15 enemies
+met in every one, **2 to 6 killed**, and 175 to **1,006** points of health taken
+off them over 17 to 81 drops. The condition is **not met**. The fight is now a
+fight -- it did not exist two passes ago -- but the corridor's soldiers win it,
+and the level restarts the walk when they do.
+
+#### A correction: the bolt sensor was never measuring bolts
+
+This pass found that the reading the previous pass reported as **"bolts in the
+live entity array: 875 of 2,000 ticks had at least one in the air"** was not
+bolts. demo1 has **twelve static entities carrying model index 45** -- `effects`
+0, `solid` 0, `frame` changing between 1 and 4, sitting at fixed positions the
+player's PVS brings in and out -- and the loop's bolt filter tested the model
+index and the solid box but never the blaster effect bit. Measured on a 2,000
+tick run with the effect bit required: the count of model-index-45 entities
+without it is **exactly 12 on every one of the 2,000 ticks** (24,000 in all) and
+**not one entity in any frame carries `EF_BLASTER`**. So on this build the
+client's entity array does not present a blaster bolt the way the earlier pass
+described, the "bolts in flight" line was counting the level's own props, and
+the bolt speed has never been measured -- the loop keeps the documented default
+of 1,000 and `samples: 0` says so.
+
+The filter now requires the effect bit, and the props are counted separately and
+reported next to the bolts (`rejectedModelIndexOnly`), so a sensor that has
+stopped discriminating cannot read as a trigger that never stops firing. That is
+the honest state of it: **the bolt sensor is unresolved on this build**, and this
+pass says so rather than leaving twelve props standing in for a firing rate.
+
+#### What the aim fix bought, measured
+
+Every number below is from a complete `play` run at normal speed with `cheats 0`.
+
+| measured | before this pass | after |
+|---|---|---|
+| engagement ticks with the trigger down | 28 of 182 (15%) | **192 of 301 (64%)**, 192 of 732 on the longest run |
+| trigger-down time in a run | 1.8 s | **13.3 s to 84.6 s** |
+| drops in a monster's own health | **0** (never measured) | **17 to 81** |
+| health the game says was taken off monsters | **0** | **175 to 1,006** |
+| enemies killed of the 15 met | 0 | **2 to 6** |
+| deepest reading | 190 units short | **128 units short** |
+| the engine's own answer | `"mapname" is "demo1"` | `"mapname" is "demo1"` |
+
+**It is not finished.** The best of this pass's runs stood `-1648 1543 14`, 128
+units from the exit aim point -- the closest any recorded run has been, against
+190 units before -- with the engine still answering `"mapname" is "demo1"`. And
+the second success condition is further off than the first: 9 of the 15 soldiers
+the walk met were still standing at the end.
 
 ### The HTTP API
 
@@ -2932,7 +3249,23 @@ that view is from before the first attempt turned the player, so handing it back
 re-aims the second attempt at the error the first one has already spent. The
 stub's retry ends 175 degrees from where the first attempt stopped, and the test
 reads the leg's own keys back out to prove they were computed from the retry's
-view and not the spent one. 120 checks in all.
+view and not the spent one.
+
+This pass added a fourth group, and it is the one about the two changes above.
+That the **second aim axis is in the engine's own sign**: a target level with the
+eye is zero pitch, one below it is POSITIVE (Quake 2 looks down on positive),
+one above it is negative, and a target 100 units down at 100 units out is
+exactly -45 degrees -- and that `decide()` carries the target's pitch when the
+axis is on and **no pitch at all** when `pitchAim: false`, which is what makes
+the flag a real control for the change rather than a cosmetic one. That a shot
+at a point is the level's own geometry **in three dimensions** (`beamReaches`:
+clear on the eye's own level, blocked when it dives under the floor, clear
+upwards, no wall invented on a map with no geometry to ask). And that the game
+DLL's edicts become a health and never a guess: a monster whose edict agrees
+gets its own health; one whose edict is 300 units from where the client says it
+is is FLAGGED and not believed; one with no edict at all comes back with
+`health: null` rather than a made-up zero; and `health <= 0` is the only thing
+this reading calls dead. 181 checks in all, all passing.
 
 **`scripts/engine-state-test.mjs`** needs no browser and no game either: it
 loads `engine-state.js` into a Node `vm` sandbox with a synthetic WASM linear

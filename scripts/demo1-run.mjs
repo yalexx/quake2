@@ -23,9 +23,17 @@ import { loadMap } from "../control/route.mjs";
 import { RouteWalker } from "../control/walker.mjs";
 import { CombatWalker } from "../control/combat.mjs";
 import { PlayLoop } from "../control/loop.mjs";
+import { fastRequest, enterFastMode, leaveFastMode, FAST_FLAG, FAST_BANNER, FAST_TIMESCALE_CHOICES } from "../control/fast.mjs";
 
 const CDP = process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801";
 const game = new QuakeControl({ cdpUrl: CDP, timeoutMs: 20000 });
+
+// Iteration mode, as the caller asked for it on the command line or the
+// environment. Read once, at the top, so the flag means the same thing for the
+// whole run. See control/fast.mjs for what it does and why it is a cheat.
+const FAST = fastRequest(process.env, process.argv.slice(2));
+// What `enterFastMode()` changed, kept so the `finally` can put it all back.
+let fastState = null;
 
 // A line of the run's report. `value` is optional: a label on its own is a
 // heading, and heading that reads "undefined" is worse than no heading at all.
@@ -620,6 +628,12 @@ async function play() {
     ...(process.env.QUAKE2_LOW_HEALTH ? { lowHealth: Number(process.env.QUAKE2_LOW_HEALTH) } : {}),
     ...(process.env.QUAKE2_MAX_TICKS ? { maxTicks: Math.max(1, Number(process.env.QUAKE2_MAX_TICKS)) } : {}),
     ...(process.env.QUAKE2_HEALTH_READ_MS ? { healthReadMs: Math.max(0, Number(process.env.QUAKE2_HEALTH_READ_MS)) } : {}),
+    // The two levers this pass added. `QUAKE2_PITCH_AIM=0` is the control for
+    // the second aim axis: it gives back exactly the old yaw-only behaviour, so
+    // a change to the aim can be measured against the thing it replaced rather
+    // than against a memory of it.
+    ...(process.env.QUAKE2_PITCH_AIM === "0" ? { pitchAim: false } : {}),
+    ...(process.env.QUAKE2_MET_RANGE ? { metRange: Math.max(1, Number(process.env.QUAKE2_MET_RANGE)) } : {}),
     trace: process.env.QUAKE2_TRACE === "1",
   });
   loop.plan = plan;
@@ -642,6 +656,35 @@ async function play() {
     return;
   }
   if (armed && armed.tap) await game.tap(armed.tap).catch(() => {});
+  // ITERATION MODE, and only here: after `freshDemo1()` has put the level back
+  // to `cheats 0`, so the reset is a reset, and before the clock starts, so the
+  // console pause it costs is not billed to the run. It is deliberately after
+  // the level check above: a fast run that could not start demo1 should say that
+  // rather than spend two console round trips on a game that is not there.
+  if (FAST.on) {
+    report("ITERATION MODE", FAST_BANNER);
+    report("iteration mode asked for", { timescale: FAST.timescale, resolution: FAST.resolution, via: FAST.source });
+    try {
+      fastState = await enterFastMode(game, { timescale: FAST.timescale, resolution: FAST.resolution, render: FAST.render });
+      // Which level the restore has to reload if `cheats 0` turns out to be
+      // latched (see control/fast.mjs). It is always demo1 on this script.
+      fastState.level = "demo1";
+      report("iteration mode, what the engine confirmed", fastState.taken.map((entry) => entry.name + "=" + (entry.got === null ? "?" : entry.got) + (entry.ok ? "" : " (ASKED " + entry.asked + ")")));
+      if (fastState.refused.length) report("iteration mode, cvars this build does not have", fastState.refused.join(", ") + " -- Unknown command");
+      if (fastState.cheat) report("iteration mode, cheat", "cheats 1 + timescale " + fastState.timescale + " -- the only cheat in this mode; no god, noclip, give or teleport");
+      if (FAST.timescale !== 1 && fastState.confirmed.timescale !== String(FAST.timescale)) {
+        report("iteration mode", "asked for timescale " + FAST.timescale + " but the engine answers " + JSON.stringify(fastState.confirmed.timescale) + "; continuing at whatever it accepted");
+      }
+      // The loop's own level restart sends `map <level>` and a cheats line. In
+      // iteration mode that line is `cheats 1`, because a restart with
+      // `cheats 0` would turn the timescale off halfway through the run and the
+      // second half would silently be at normal speed.
+      loop.options.cheatsAfterRestart = fastState.cheat ? "cheats 1" : "cheats 0";
+    } catch (error) {
+      report("iteration mode", "could not be entered (" + error.message + "); playing at normal speed");
+      fastState = null;
+    }
+  }
   const started = Date.now();
   const result = await loop.run(exit.aim, { tolerance: 96, level: "demo1" });
   report("loop reason", result.reason);
@@ -663,6 +706,43 @@ async function play() {
   }
   report("damage events (a live monster's animation frame moved with the trigger down)", result.damageEvents);
   report("  of those, flinches (the frame ran backwards)", result.flinches);
+  // ---- the game's own state: health, hits and kills -----------------------
+  // Everything below comes from the game DLL's own edict array
+  // (control/edicts.mjs), not from the network entity state and not from a
+  // landed turn. It is the only reading of a monster's health the harness has.
+  if (result.enemies) {
+    report("enemies met (within reach of the player, from the loop's own record)", result.enemies.met);
+    report("enemies killed (the game's own edict says health <= 0)", result.enemies.killed);
+    report("enemies met and still standing", result.enemies.stillStanding);
+    if (result.enemies.unreadableHealth) report("enemies whose health the game's edict would not give up", result.enemies.unreadableHealth);
+    report("SECOND SUCCESS CONDITION (kill everything met)", result.enemies.met === 0
+      ? "no enemy was met this run -- nothing was slipped past and nothing was proven"
+      : (result.enemies.stillStanding === 0
+        ? "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- every enemy met was killed"
+        : "met " + result.enemies.met + ", killed " + result.enemies.killed + " -- " + result.enemies.stillStanding + " STILL STANDING"));
+    for (const enemy of result.enemies.list) {
+      report("  #" + String(enemy.number).padStart(4) + " " + (enemy.classname || "monster").padEnd(22) +
+        " met at " + String(enemy.metAt).padStart(5) + "u  health " + enemy.healthFirst + " -> " + enemy.healthLowest +
+        "  hits " + enemy.hits + "  " + (enemy.killed ? "KILLED (" + enemy.killedBy + ")" : "alive"));
+    }
+  }
+  report("health the game says was taken off monsters", result.healthDamage + " over " + result.healthDamageEvents + " drops");
+  report("edict read (the game DLL's own array)", result.edictRead && {
+    ticks: result.edictRead.ticks,
+    from: result.edictRead.source,
+    monstersWithHealth: result.edictRead.withHealth,
+    unmatched: result.edictRead.unmatched,
+    originDisagreed: result.edictRead.originDisagreed,
+    playerEdict: result.edictRead.playerEdict,
+    crossCheckAgainstStatusBar: result.edictRead.crossCheck,
+  });
+  report("player health series (game's own edict, on change)", (result.edictHealth || []).map((entry) => entry.health).join(", ") || "none read");
+  report("aim, the second axis (pitch)", result.pitch && {
+    on: result.pitch.on,
+    scaleLearned: result.pitch.scale,
+    samples: result.pitch.samples,
+    failures: result.pitch.failures,
+  });
   if (result.hitRate) {
     report("hit accounting", {
       damageEventsPerTriggerPress: Math.round(result.hitRate.damageEventsPerPress * 1000) / 1000,
@@ -678,6 +758,9 @@ async function play() {
   // The bolts are the only direct evidence that the trigger did anything: a
   // bolt is an entity of its own and the live array is where it is.
   report("bolts seen in the live entity array", result.bolts);
+  if (result.bolts && result.bolts.rejectedModelIndexOnlyTotal) {
+    report("  (of which model index 45 WITHOUT the blaster effect: the level's own props, at fixed positions -- kept apart from the bolts, and the reason the bolt speed below is measurable at all)");
+  }
   if (result.targets && result.targets.length) {
     report("monsters the loop watched (entity, name, readings, flinches, killed, distinct solid values, distinct effects, last frame)");
     for (const target of result.targets) {
@@ -710,8 +793,31 @@ async function play() {
   const after = await readMapName();
   report("engine says the map is", after.name);
   report("proof", after.lines.filter((line) => /"mapname" is "/.test(line)));
-  report("result", after.name === "demo2" ? "FINISHED -- the engine loaded demo2" : "NOT finished -- the engine is still on " + after.name);
-  report("wall clock", Math.round((Date.now() - started) / 1000) + "s");
+  // The finish line, and the one place iteration mode is not allowed to speak.
+  // A map change under `timescale` is the same engine event, but a run whose
+  // simulation was multiplied was not the walk the level is measured by, so it
+  // is reported as what it is: a fast-mode result, to be confirmed at normal
+  // speed with cheats 0.
+  // What makes a run a finish proof is not the flag, it is what the run
+  // actually was: normal speed and cheats 0. `QUAKE2_FAST=1
+  // QUAKE2_FAST_TIMESCALE=1` does the render/sound cuts and touches NOTHING
+  // about the simulation -- no `cheats 1`, no `timescale` -- so a map change in
+  // a run like that is the same engine event a normal run produces and it is
+  // reported as a finish. A run whose simulation was multiplied is not, and
+  // says so.
+  const cheated = fastState ? fastState.cheat === true : false;
+  if (after.name === "demo2") {
+    if (cheated) report("result", "FAST-MODE RESULT ONLY -- the engine loaded demo2, but this run's SIMULATION was multiplied (cheats 1, timescale " + fastState.timescale + "), so it is NOT a finish. Re-run at normal speed with cheats 0 to prove it.");
+    else report("result", "FINISHED -- the engine loaded demo2" + (FAST.on ? " (normal speed, cheats 0; the render/sound cuts were on and change nothing the engine simulates)" : ""));
+  } else {
+    report("result", (cheated ? "(iteration mode, simulation multiplied) " : "") + "NOT finished -- the engine is still on " + after.name);
+  }
+  report("wall clock", Math.round((Date.now() - started) / 1000) + "s" + (cheated ? " (iteration mode, timescale " + fastState.timescale + ")" : " (normal speed)"));
+  report("this run was", cheated
+    ? "ITERATION MODE WITH THE SIMULATION MULTIPLIED -- cheats 1, timescale " + fastState.timescale + ". Its numbers are iteration numbers, not the level's."
+    : (FAST.on
+      ? "NORMAL SPEED, cheats 0, with the render/sound speed-up on -- it changes how long a frame takes to draw and nothing the engine simulates, so a result from it counts. Timescale 1."
+      : "NORMAL SPEED, cheats 0 -- the mode every finish proof has to be made in."));
 }
 
 const [command, argument] = process.argv.slice(2);
@@ -724,7 +830,14 @@ try {
   // and QUAKE2_LEGACY=1 hands the job back to the leg script, which is how a
   // change can be measured against the thing it replaced.
   else if (command === "finish") await (process.env.QUAKE2_LEGACY === "1" ? finish() : play());
-  else console.log("usage: node scripts/demo1-run.mjs plan|walk X,Y,Z|finish|play");
+  else if (command === FAST_FLAG || command === "fast") await play();
+  else console.log("usage: node scripts/demo1-run.mjs plan|walk X,Y,Z|finish|play|--fast [--timescale N]");
+  // `--timescale N` is read by fastRequest() out of argv, so nothing else has to
+  // see it. Saying so here keeps a typo from being silently a normal-speed run.
+  const strayTimescale = process.argv.slice(2).findIndex((arg) => arg === "--timescale");
+  if (strayTimescale !== -1 && !Number.isFinite(Number(process.argv[strayTimescale + 1]))) {
+    console.log("--timescale needs a number; the engine's own list this pass tried: " + FAST_TIMESCALE_CHOICES.join(", "));
+  }
 } catch (error) {
   console.error("ERROR " + (error.code ? error.code + ": " : "") + error.message);
   if (process.env.QUAKE2_DEBUG === "1" && error.stack) console.error(error.stack);
@@ -737,6 +850,27 @@ try {
   if (game.attacking) {
     if (typeof game.mouseHold === "function") await game.mouseHold("left", false).catch(() => {});
     else await game.attackHold(false).catch(() => {});
+  }
+  // Iteration mode comes off before the movement keys and before the bridge
+  // goes away, so the game is handed back at normal speed and with `cheats 0`
+  // whether the run finished, threw or was cut short. A timescale left on is the
+  // worst thing this pass could leave behind: the owner's own normal-speed test
+  // would run at five times speed and every number from it would be wrong. It
+  // comes after the trigger release only because a console round trip with the
+  // trigger still down would leave the player firing through it.
+  if (fastState) {
+    const left = await leaveFastMode(game, fastState, { level: fastState.level || "demo1" })
+      .catch((error) => ({ reason: "COMMAND_FAILED", message: error.message }));
+    console.log("iteration mode off: timescale " + JSON.stringify(left.timescale) + ", cheats " + JSON.stringify(left.cheats) +
+      " (restored " + (left.restored || []).length + " cvars)" +
+      (left.latched ? ", and `cheats 0` had to be latched by reloading " + (left.relatched && left.relatched.level) + " -- Quake 2 keeps cheats for the running game until a level loads" : "") +
+      (left.reason ? " -- " + left.reason + ": " + left.message : ""));
+    if (left.cheats !== "0" && left.cheats !== null) {
+      console.log("WARNING: the game is still at cheats " + left.cheats + ". Do not make a normal-speed run until it reads `cheats 0`.");
+    }
+    fastState = null;
+  } else if (FAST.on) {
+    console.log("iteration mode was asked for but never entered; the game is at normal speed");
   }
   // And the movement keys, for the same reason one order of magnitude louder:
   // fire left down shoots at nothing, but `+forward` left down *walks the
