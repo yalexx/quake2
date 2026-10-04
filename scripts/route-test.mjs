@@ -10,10 +10,11 @@
 
 import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker, deepestReading } from "../control/walker.mjs";
-import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
+import { CombatWalker, threats, levelShotReaches, beamReaches, movementKeys, clearWalk } from "../control/combat.mjs";
+import { healthOf, liveOf } from "../control/edicts.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
 import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
-import { bearingTo, shortestTurn, leadPoint, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
+import { bearingTo, shortestTurn, leadPoint, aimPitch, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -994,6 +995,86 @@ check("a walk that has stopped is recovered, not advanced",
   decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).mode === "recover" &&
   decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).aim === 90);
 check("no reading at all is not a reason to fire", decide(null).fire === false);
+
+// ---------------------------------------------------------------------------
+// The second aim axis, and the game DLL's edicts
+// ---------------------------------------------------------------------------
+// Both groups below are pure: the pitch aim is arithmetic, the beam test is the
+// level's own geometry, and `healthOf` is a mapping from a reading to a reading.
+// No browser and no game, which is why they are pinned here rather than only
+// measured live.
+
+console.log("");
+console.log("the second aim axis: pitch, in Quake 2's own sign");
+{
+  const eye = { x: 0, y: 0, z: 46 };
+  check("a target level with the eye is zero pitch", aimPitch(eye, { x: 100, y: 0, z: 46 }) === 0);
+  check("a target BELOW the eye is a POSITIVE pitch (Quake 2 looks down on positive)",
+    aimPitch(eye, { x: 100, y: 0, z: 0 }) > 0, aimPitch(eye, { x: 100, y: 0, z: 0 }));
+  check("a target ABOVE the eye is a NEGATIVE pitch",
+    aimPitch(eye, { x: 100, y: 0, z: 100 }) < 0, aimPitch(eye, { x: 100, y: 0, z: 100 }));
+  check("45 degrees down is -45 degrees of pitch",
+    Math.abs(aimPitch(eye, { x: 100, y: 0, z: 46 - 100 }) - 45) < 0.001, aimPitch(eye, { x: 100, y: 0, z: -54 }));
+  check("the angle is measured on the ground plane, not the straight line",
+    Math.abs(aimPitch({ x: 0, y: 0, z: 0 }, { x: 30, y: 40, z: 50 }) - (-45)) < 0.001);
+  check("a reading with no position has no pitch", aimPitch(eye, null) === null);
+
+  // The decision carries it, and the geometry control still works: with the
+  // axis off, `pitchAim: false` asks for no pitch at all -- exactly the old
+  // yaw-only behaviour.
+  const armed = { dead: false, health: 100, target: { bearing: 90, pitch: -5 }, targetClear: true, routeBearing: 0, retreatBearing: null, arrived: false, recover: null };
+  check("engaging carries the target's own pitch", decide(armed, {}).pitch === -5);
+  check("with the axis off, no pitch is asked for", decide(armed, { pitchAim: false }).pitch === null);
+  check("walking asks for a LEVEL view, so the walk does not drift up or down",
+    decide({ ...armed, target: null }, {}).pitch === 0);
+}
+
+console.log("");
+console.log("a shot at a point is the level's own geometry in three dimensions");
+{
+  // A stub map: solid only below z = 0, so a beam that goes UNDER the floor is
+  // blocked and one that stays above it is clear. This is the difference from
+  // `levelShotReaches`, which holds z at the eye's own height.
+  const map = { isSolid: (x, y, z) => z < 0 };
+  const eye = { x: 0, y: 0, z: 46 };
+  check("a beam to a point on the eye's own level is clear", beamReaches(map, eye, { x: 100, y: 0, z: 46 }) === true);
+  check("a beam that dives under the floor is blocked", beamReaches(map, eye, { x: 100, y: 0, z: -100 }) === false);
+  check("a beam to a point above the eye is clear", beamReaches(map, eye, { x: 100, y: 0, z: 200 }) === true);
+  check("a map with no geometry to ask has no wall to invent", beamReaches({}, eye, { x: 100, y: 0, z: -100 }) === true);
+  check("and a missing reading is never a reach", beamReaches(map, null, { x: 1, y: 0, z: 0 }) === false);
+}
+
+console.log("");
+console.log("the game DLL's edicts become a health, and never a guess");
+{
+  const monsters = [
+    { number: 2, position: { x: 0, y: 0, z: 0 } },
+    { number: 5, position: { x: 500, y: 0, z: 0 } },
+    { number: 9, position: { x: 900, y: 0, z: 0 } },
+  ];
+  const edicts = [
+    { number: 2, x: 0, y: 0, z: 0, health: 40, maxHealth: 40 },
+    // The same entity number, but standing 300 units from where the client says
+    // it is: a stale slot, and the reading is flagged rather than believed.
+    { number: 5, x: 800, y: 0, z: 0, health: 30, maxHealth: 30 },
+    // 9 is not in the edict array at all.
+  ];
+  const answer = healthOf(monsters, edicts);
+  check("a monster whose edict agrees gets the game's own health",
+    answer.monsters[0].health === 40 && answer.monsters[0].source === "game-edict", answer.monsters[0]);
+  check("a monster whose edict does NOT agree is flagged, not believed",
+    answer.monsters[1].source === "game-edict-origin-disagrees" && answer.monsters[1].originError === 300, answer.monsters[1]);
+  check("the counts say how many disagreed and how many could not be matched",
+    answer.disagreed === 1 && answer.unmatched === 1, answer);
+  check("a monster with no edict has NO health rather than a made-up zero",
+    answer.monsters[2].health === null && answer.monsters[2].source === "no-edict", answer.monsters[2]);
+
+  check("health above zero is alive", liveOf({ number: 1, health: 30, maxHealth: 30 }).alive === true);
+  check("health at or below zero is dead -- the game's own state for it",
+    liveOf({ number: 1, health: 0, maxHealth: 30 }).dead === true &&
+    liveOf({ number: 1, health: -5, maxHealth: 30 }).dead === true);
+  check("no edict is not an opinion about whether something is dead", liveOf(null) === null);
+}
 
 console.log("errors are named, never empty");
 let threw = null;
