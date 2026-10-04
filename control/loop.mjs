@@ -212,6 +212,11 @@ export const PLAY_DEFAULTS = {
   // Health. Below `lowHealth` the loop stops advancing into a fight it can
   // leave; `retreatHealth` is where it starts backing out of one.
   lowHealth: 28,
+  // How long a retreat may last before the walk takes the lead back. A retreat
+  // is a manoeuvre, not a mode: see `#tick`'s own note for the run that proved
+  // it -- 9904 of 12000 ticks spent backing away, 128 units from the exit, and
+  // not one step closer in fifteen minutes.
+  retreatMs: 4000,
   // How long a stopped player is allowed to stand still before the loop
   // intervenes, and for how long each intervention lasts.
   stuckMs: 1300,
@@ -431,7 +436,12 @@ export function decide(percept, options = {}) {
   if (percept.dead) return { mode: "dead", move: null, aim: null, pitch: null, fire: false, reason: "PLAYER_DEAD" };
   if (percept.arrived) return { mode: "arrived", move: null, aim: null, pitch: null, fire: false, reason: "AT_THE_EXIT" };
   if (percept.recover) {
-    return { mode: "recover", move: percept.recover.bearing, aim: percept.recover.aim || null, pitch: level, fire: percept.recover.fire === true, reason: percept.recover.reason || "STUCK" };
+    // The recovery carries its own pitch when the thing it is about to shoot is
+    // not on the player's own level -- the exit's `func_button` is 121 units
+    // above the eye that has to hit it. `null` when the axis is off, which is
+    // the same promise the rest of this function makes.
+    const recoverPitch = axisOff ? null : (finite(percept.recover.pitch) ? percept.recover.pitch : level);
+    return { mode: "recover", move: percept.recover.bearing, aim: percept.recover.aim || null, pitch: recoverPitch, fire: percept.recover.fire === true, reason: percept.recover.reason || "STUCK" };
   }
   const target = percept.target || null;
   // The pitch that points at the target's own z, carried on the target by the
@@ -441,7 +451,12 @@ export function decide(percept, options = {}) {
   // level's own corridor is the thing that is killing them. It still shoots --
   // this level punishes a player who stops.
   const hurt = finite(percept.health) && percept.health <= lowHealth;
-  if (hurt && target && percept.retreatBearing !== null && percept.retreatBearing !== undefined) {
+  // `retreatSpent` is the caller's clock on the manoeuvre (see `#tick`): once
+  // it is set, being hurt is no longer a reason to stop walking, and the
+  // decision falls through to `engage` -- same aim, same trigger, but the walk
+  // keeps its bearing. A caller that never sets it (the pure-function tests, a
+  // tool driving `decide()` by hand) gets the old behaviour exactly.
+  if (hurt && percept.retreatSpent !== true && target && percept.retreatBearing !== null && percept.retreatBearing !== undefined) {
     return { mode: "retreat", move: percept.retreatBearing, aim: target.bearing, pitch: atTarget, fire: true, reason: "LOW_HEALTH" };
   }
   if (target) {
@@ -487,6 +502,9 @@ export class PlayLoop {
     this.entityIntegrity = { checked: 0, agreed: 0, worstError: null, source: "live-memory" };
     this.lastView = { monsters: [], health: null, tick: 0 };
     this.stuck = { since: null, from: null, stage: 0, nudges: 0 };
+    // When the retreat began, for the clock `retreatMs` puts on it. Null while
+    // the player is not hurt.
+    this.retreatSince = null;
     this.boltSpeed = this.options.boltSpeed;
     this.boltSamples = 0;
     this.log = [];
@@ -510,6 +528,19 @@ export class PlayLoop {
     this.pitchSamples = 0;
     this.pitchFailures = 0;
     this.pendingPitch = null;
+    // ---- the aim gate, counted on both axes every tick ---------------------
+    //
+    // The second axis is judged by this and by nothing else: for every tick that
+    // had a target, how often the yaw and the pitch were each inside their
+    // tolerance once the tick's own corrections had been sent, and how often
+    // BOTH were -- which is the only state the trigger is allowed down in. A
+    // landed turn is not a hit and neither is a trigger press with no target,
+    // so the run reports the gate directly rather than leaving it to a trace
+    // that has to be switched on.
+    this.gate = {
+      ticks: 0, yawInside: 0, pitchInside: 0, bothInside: 0, fire: 0,
+      aimErrorSum: 0, aimErrorCount: 0, pitchErrorSum: 0, pitchErrorCount: 0,
+    };
     // ---- enemies met, and enemies killed ----------------------------------
     //
     // The owner's second success condition: the walk has to kill what it meets,
@@ -518,9 +549,28 @@ export class PlayLoop {
     // on a tick where the player was alive. "Killed" is the GAME's own answer --
     // its edict's health at or below zero -- and never a landed turn, a frame
     // that moved, or the loop's own opinion.
+    //
+    // And it is counted PER ATTEMPT, because an attempt here is one life. A
+    // death hands the engine its own level-start autosave back, which reloads
+    // the level and revives every monster on it; the entity numbers are reused,
+    // so a kill from a life that is over is NOT a kill in the life that follows
+    // and a record that kept it would report a soldier as dead while it stands
+    // on the spawn reloading its blaster. Each death therefore closes the
+    // attempt -- its numbers are kept in `attempts` -- and the accounting starts
+    // again on the level the player is handed next. The success condition is
+    // read off the LAST attempt, which is the one that would have finished the
+    // level.
     this.met = new Map();
+    this.attempt = 1;
+    this.attempts = [];
+    // When this attempt began, so the report can say what each trip down the
+    // corridor cost in wall clock and not only what the run cost in total.
+    this.attemptStartedAt = Date.now();
     this.healthDamage = 0;
     this.healthDamageEvents = 0;
+    // Where the run totals stood when the current attempt began, so the report
+    // can say what this attempt alone took off the level's monsters.
+    this.attemptDamageBase = { damage: 0, events: 0 };
     this.killEvents = [];
     this.edictRead = { ticks: 0, withHealth: 0, unmatched: 0, originDisagreed: 0, source: null, reason: null };
     this.playerEdictNumber = null;
@@ -798,10 +848,36 @@ export class PlayLoop {
     const stuck = this.#stuckNow(player, tickStart);
     const retreatBearing = this.#retreatBearing(player, ranked, route);
     const arrived = goal ? Math.hypot(player.x - goal.x, player.y - goal.y) <= this.goalTolerance : false;
+    // How long the loop has been backing off, and whether that has gone on long
+    // enough to stop.
+    //
+    // A retreat that never ends is not a retreat. Measured on the 12000-tick
+    // run of 2026-10-04: the loop spent **9904 of those ticks in `retreat`**,
+    // parked at -1648 1436 with 128 units to go and all fifteen soldiers in
+    // frame, firing at them for fifteen minutes and never taking another step
+    // towards the exit. Two runs before it ended the same way, and the deepest
+    // reading of all three is the same corner. The health it was protecting
+    // never came back, because this level does not let a stopped player heal.
+    //
+    // So a retreat is a manoeuvre with a clock on it: it is allowed to break
+    // contact and let the walk re-aim, and when it has run for `retreatMs`
+    // without the player's health coming back above `lowHealth`, the walk takes
+    // the lead again -- still firing, still choosing the same target. Dying is
+    // affordable here (an attempt is a life and there are twenty-four of them);
+    // standing still is not, because a run that never advances can never
+    // finish.
+    const hurtNow = finite(health) && health <= options.lowHealth;
+    if (hurtNow) { if (this.retreatSince === null) this.retreatSince = tickStart; }
+    else this.retreatSince = null;
+    const retreatSpent = this.retreatSince !== null && tickStart - this.retreatSince >= options.retreatMs;
 
     if (dead) {
       await this.#release();
       this.deaths += 1;
+      // The life is over: close its accounting before `#handleDeath` reloads
+      // the level, because the reload is what revives the monsters and reuses
+      // their entity numbers (see `#endAttempt`).
+      this.#endAttempt("the player died");
       return this.#handleDeath(read, tickStart);
     }
 
@@ -817,6 +893,7 @@ export class PlayLoop {
       monsterCount: monsters.length,
       recover: stuck,
       retreatBearing,
+      retreatSpent,
     };
     const decision = decide(percept, options);
     this.states[decision.mode] = (this.states[decision.mode] || 0) + 1;
@@ -986,6 +1063,57 @@ export class PlayLoop {
         this.note("the game says " + record.classname + " (#" + monster.number + ") is DEAD: its own health is " + health);
       }
     }
+  }
+
+  // The owner's two numbers, read off the record `#metAndKilled` keeps. One
+  // function so the per-attempt report and the run's own summary cannot drift
+  // apart on what "killed" means.
+  #enemiesNow() {
+    const records = [...this.met.values()];
+    const damage = this.healthDamage - this.attemptDamageBase.damage;
+    const damageEvents = this.healthDamageEvents - this.attemptDamageBase.events;
+    return {
+      attempt: this.attempt,
+      wallClockMs: Date.now() - this.attemptStartedAt,
+      met: records.length,
+      killed: records.filter((record) => record.killed).length,
+      stillStanding: records.filter((record) => !record.killed).length,
+      unreadableHealth: records.filter((record) => record.healthFirst === null).length,
+      healthDamage: damage,
+      healthDamageEvents: damageEvents,
+      list: records.map((record) => ({
+        number: record.number,
+        classname: record.classname,
+        metAt: record.distanceWhenMet,
+        healthFirst: record.healthFirst,
+        healthLowest: record.healthLowest,
+        hits: record.hits,
+        killed: record.killed,
+        killedBy: record.killedBy,
+        samples: record.samples,
+      })),
+    };
+  }
+
+  // Close the attempt that is ending, and start the next one's accounting.
+  //
+  // Called from exactly one place -- the tick that reads the engine's death
+  // camera -- because that is the event on this level that reloads it and
+  // revives its monsters. Everything the attempt accumulated is kept under its
+  // own number; the live accounting starts again empty, which is the only
+  // reading that is true of the level the player is handed next.
+  #endAttempt(endedBy) {
+    const snapshot = this.#enemiesNow();
+    this.attempts.push({ ...snapshot, endedBy });
+    this.met = new Map();
+    this.attemptStartedAt = Date.now();
+    this.attemptDamageBase = { damage: this.healthDamage, events: this.healthDamageEvents };
+    // The per-entity history goes with it: a level restart reuses the entity
+    // numbers, so a frame, a velocity or a "stopped being sent" verdict read
+    // before the restart belongs to a monster that no longer exists. The map
+    // repopulates from the first tick of the next attempt.
+    this.targets = new Map();
+    this.attempt += 1;
   }
 
   // ---- perception helpers -------------------------------------------------
@@ -1293,14 +1421,37 @@ export class PlayLoop {
       return { point: this.goal, distance: this.goal ? Math.hypot(this.goal.x - player.x, this.goal.y - player.y) : 0, offRoute: 0 };
     }
     const feet = { x: player.x, y: player.y, z: player.z - EYE_ABOVE_FEET };
-    // Where the player is on the plan: the nearest point, which is also what
-    // "how far off the plan am I" means. The index only ever moves forward and
-    // never by more than a few points in one tick -- a route that passes near
-    // itself later would otherwise teleport the walk to the far side of it.
+    // Where the player is on the plan: the nearest point ON THE PLAYER'S OWN
+    // FLOOR, which is also what "how far off the plan am I" means. The index
+    // only ever moves forward and never by more than a few points in one tick
+    // -- a route that passes near itself later would otherwise teleport the
+    // walk to the far side of it.
+    //
+    // The height is part of that answer, and leaving it out is what stopped
+    // this walk at the exit. The way out of demo1 doubles back over itself: the
+    // plan climbs a ramp at y 1728 from z -32 up to z 96 and then comes back
+    // along a catwalk directly ABOVE the ground it has already covered. An
+    // x/y-only "nearest point" picks the catwalk -- 76 units away in x/y and 96
+    // units up -- hands the walk a bearing into the wall underneath it, and
+    // holds it there. Measured, on the 5640-tick run of 2026-10-04: the player
+    // pressed against the exit room's east face at -1648 1540 for the whole
+    // run, mode `engage`, 128 units from the exit, while the plan's own next
+    // point was on the ramp it never turned towards, and it died there 25
+    // times.
+    //
+    // So a point more than a step above or below the feet is scored far behind
+    // every point that is not. When the player is off the plan entirely and
+    // NOTHING is on their floor, the same term still orders what is left by how
+    // far out of reach it is rather than by x/y alone, so a player who has been
+    // knocked off the plan can still find their way back to it.
+    const climb = finite(this.options.maxStepUp) ? this.options.maxStepUp : 45;
     let closest = null;
     for (let index = 0; index < points.length; index++) {
-      const distance = Math.hypot(points[index].x - player.x, points[index].y - player.y);
-      if (!closest || distance < closest.distance) closest = { index, distance };
+      const point = points[index];
+      const height = Math.abs((finite(point.z) ? point.z : feet.z) - feet.z);
+      const distance = Math.hypot(point.x - player.x, point.y - player.y);
+      const score = height <= climb ? distance : distance + height * 4 + 1000;
+      if (!closest || score < closest.score) closest = { index, distance, score };
     }
     if (closest && closest.index > this.routeIndex) {
       this.routeIndex = Math.min(closest.index, this.routeIndex + 6);
@@ -1412,7 +1563,17 @@ export class PlayLoop {
       if (button) {
         this.note("the walk stopped beside " + button.classname + "; shooting it", { distance: Math.round(button.distance), stage: stuck.stage });
         const aim = bearingTo(player, button.position);
-        return { bearing: heading, aim, fire: true, reason: "STUCK_BUTTON" };
+        // Both axes, or the shot goes into the wall below the button. A Quake 2
+        // button is usually on a wall at eye height, which is why this was a
+        // bearing and nothing else -- but the one on demo1's exit is `func_button
+        // *34` at (-1843.5 1536 136), and the player shooting at it stands ~195
+        // units away at an eye height of about 15. That is 121 units of climb
+        // over 195 of ground: a level shot passes 121 units under it and hits
+        // the wall. The pitch is carried here the same way `decide()` carries a
+        // target's, and is `null` when the axis is off so that `pitchAim: false`
+        // still gives exactly the old behaviour.
+        const pitch = this.options.pitchAim === false ? null : aimPitch(player, button.position);
+        return { bearing: heading, aim, pitch, fire: true, reason: "STUCK_BUTTON" };
       }
     }
     if (stuck.stage >= 4) {
@@ -1431,14 +1592,37 @@ export class PlayLoop {
     return { bearing: side, reason: "STUCK_SIDESTEP" };
   }
 
+  // The closest `func_button` to the player, if one is within reach.
+  //
+  // This used to scan `map.waypoints("*")`, and on this build that list holds
+  // NO buttons at all: demo1's `func_button *13` and `*34` are brush entities,
+  // and a brush model carries no `origin`, so the waypoint list -- which drops
+  // every entity with neither an origin nor a kind -- never described them.
+  // Measured on the live map: `waypoints("*")` is 638 entities and **zero** of
+  // them are `func_button`; the two buttons are in `barriers()`, which reads
+  // the brush models and their `modelBounds` instead. The check found nothing,
+  // every time, on every run -- which is why the loop's own log has never once
+  // said "the walk stopped beside func_button", only "stepping sideways", and
+  // why the first rung of the recovery ladder was dead code on the one level it
+  // was written for.
+  //
+  // The position is the brush's own centre, the same reading `exitPoint()`
+  // takes the exit volume from; the button is a 9x32x32 box on a wall and its
+  // `origin` is (0,0,0) just like every other brush model here.
   #nearestButton(player) {
-    if (!this.map || typeof this.map.waypoints !== "function") return null;
+    if (!this.map) return null;
     let best = null;
-    for (const entity of this.map.waypoints("*")) {
-      if (!entity.position) continue;
-      if (!/^func_button$/.test(entity.classname)) continue;
-      const distance = Math.hypot(entity.position.x - player.x, entity.position.y - player.y);
-      if (!best || distance < best.distance) best = { classname: entity.classname, position: entity.position, distance };
+    const consider = (classname, position) => {
+      if (!/^func_button$/.test(String(classname || ""))) return;
+      if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) return;
+      const distance = Math.hypot(position.x - player.x, position.y - player.y);
+      if (!best || distance < best.distance) best = { classname, position, distance };
+    };
+    if (typeof this.map.barriers === "function") {
+      for (const barrier of this.map.barriers()) consider(barrier.classname, barrier.centre);
+    }
+    if (typeof this.map.waypoints === "function") {
+      for (const entity of this.map.waypoints("*")) consider(entity.classname, entity.position);
     }
     return best && best.distance <= 320 ? best : null;
   }
@@ -1515,6 +1699,19 @@ export class PlayLoop {
     const aimError = decision.aim === null || decision.aim === undefined ? null : Math.abs(shortestTurn(decision.aim - aimNow));
     const pitchReady = !(this.options.pitchAim !== false && pitchError !== null) || Math.abs(decision.pitch - pitchNow) <= this.options.pitchTolerance;
     const wantFire = decision.fire === true && aimError !== null && aimError <= this.options.aimTolerance && pitchReady;
+    // Counted here, on the tick's own corrected aim, so a run that never asks
+    // for the per-tick trace still carries the measurement the second axis is
+    // judged by. `ticks` is every tick with a target in front of the player.
+    if (percept && percept.target) {
+      const yawIn = aimError !== null && aimError <= this.options.aimTolerance;
+      this.gate.ticks += 1;
+      if (yawIn) this.gate.yawInside += 1;
+      if (pitchReady) this.gate.pitchInside += 1;
+      if (yawIn && pitchReady) this.gate.bothInside += 1;
+      if (wantFire) this.gate.fire += 1;
+      if (aimError !== null) { this.gate.aimErrorSum += aimError; this.gate.aimErrorCount += 1; }
+      if (this.options.pitchAim !== false && pitchError !== null) { this.gate.pitchErrorSum += Math.abs(pitchError); this.gate.pitchErrorCount += 1; }
+    }
     // How long the trigger was down, counted between ticks rather than from the
     // press: counting from the press adds the whole engagement on every tick it
     // stays down, which reported 349 seconds of trigger-down inside a 270
@@ -1584,6 +1781,8 @@ export class PlayLoop {
     if (!alive) return { stop: true, reason: "NOT_RESPAWNED" };
     const player = alive.position;
     this.stuck = { since: null, from: null, stage: 0, nudges: 0 };
+    // A new life gets its own retreat allowance.
+    this.retreatSince = null;
     this.waypoint = null;
     this.focusNumber = null;
     const replanned = this.#planFrom(player);
@@ -1645,6 +1844,9 @@ export class PlayLoop {
       lastFrame: record.frame,
     }));
     const healths = this.healthSeries.map((entry) => entry.health).filter(finite);
+    // Read once, so the numbers in `enemies` and the per-attempt ones beside
+    // them are the same reading rather than two taken a tick apart.
+    const enemies = this.#enemiesNow();
     return {
       reason,
       ticks,
@@ -1667,30 +1869,21 @@ export class PlayLoop {
       // frame-moved proxy that the passes before this one used is reported
       // separately as `damageEvents` and is not what any of these numbers is
       // built on.
-      enemies: {
-        met: this.met.size,
-        killed: [...this.met.values()].filter((record) => record.killed).length,
-        // Met and still standing is the number the owner's condition turns on:
-        // a finish with a soldier still standing is not success.
-        stillStanding: [...this.met.values()].filter((record) => !record.killed).length,
-        unreadableHealth: [...this.met.values()].filter((record) => record.healthFirst === null).length,
-        list: [...this.met.values()].map((record) => ({
-          number: record.number,
-          classname: record.classname,
-          metAt: record.distanceWhenMet,
-          healthFirst: record.healthFirst,
-          healthLowest: record.healthLowest,
-          hits: record.hits,
-          killed: record.killed,
-          killedBy: record.killedBy,
-          samples: record.samples,
-        })),
-      },
+      //
+      // These are the LAST attempt's numbers -- the trip that either reached
+      // the exit or ran out of road -- because a death reloads the level and
+      // revives its monsters, so an earlier life's kills are not this life's.
+      // Every attempt's own numbers are in `attempts` beside them.
+      enemies,
+      attempts: this.attempts,
       killedEvents: this.killEvents,
       // Health the game itself says was taken off monsters, and how many times
       // its number fell -- the direct replacement for the frame-moved proxy.
-      healthDamage: this.healthDamage,
-      healthDamageEvents: this.healthDamageEvents,
+      // This attempt's, with the run's own totals next to them.
+      healthDamage: enemies.healthDamage,
+      healthDamageEvents: enemies.healthDamageEvents,
+      healthDamageTotal: this.healthDamage,
+      healthDamageEventsTotal: this.healthDamageEvents,
       edictRead: {
         ...this.edictRead,
         playerEdict: this.playerEdictNumber,
@@ -1752,6 +1945,13 @@ export class PlayLoop {
         scale: Math.round(this.pitchScale * 1000) / 1000,
         samples: this.pitchSamples,
         failures: this.pitchFailures,
+      },
+      // The gate, per tick with a target: the measurement the aim in both axes
+      // is judged by, and the one that replaced "did the turn land".
+      gate: {
+        ...this.gate,
+        aimErrorMean: this.gate.aimErrorCount ? Math.round((this.gate.aimErrorSum / this.gate.aimErrorCount) * 100) / 100 : null,
+        pitchErrorMean: this.gate.pitchErrorCount ? Math.round((this.gate.pitchErrorSum / this.gate.pitchErrorCount) * 100) / 100 : null,
       },
       trace: this.trace,
       entityIntegrity: this.entityIntegrity,
