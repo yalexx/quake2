@@ -2467,6 +2467,265 @@ The save slots say the same thing. `save1` is a demo1 save whose player stood at
 `-928 855 5`, on that corridor; `current` and `save0` are level-start autosaves
 whose client state is zeroed, and they record no position at all.
 
+### The play loop: `control/loop.mjs`
+
+Everything above walks demo1 as a *plan*. `walker.mjs` and `combat.mjs` cut the
+route into legs, and a leg is one decision: one soldier chosen, one bearing
+set, the trigger held from the top of the leg to the bottom of it. Three things
+about that shape were measured to be wrong, and they are the three this pass
+replaces:
+
+* **the bearing is set once per leg.** A soldier that walks out of the aim while
+  the leg runs is a soldier the leg goes on shooting past. `face()` converges in
+  two rounds, and then nothing re-aims at the soldier for the rest of the leg.
+* **the soldier is a point on a map.** `threats()` and `CombatWalker` aim at
+  `map.waypoints("enemy")` -- the origins the level's *author* wrote into the
+  BSP's entity lump. Those positions are correct exactly once, at the start of
+  the level, and a monster that has walked anywhere at all is not there.
+* **the decision is taken every 0.5 to 0.8 seconds**, and the trigger is one
+  press for the whole of it.
+
+`control/loop.mjs` replaces the leg with a control loop that runs at roughly
+12 Hz and does all four of perceive, decide, aim and verify on every tick.
+
+```
+node scripts/demo1-run.mjs play        # the loop, from a fresh demo1 spawn
+node scripts/demo1-run.mjs finish      # the same thing (see below)
+QUAKE2_LEGACY=1 node scripts/demo1-run.mjs finish   # the leg script it replaced
+```
+
+#### 1. Perceive: the monsters come out of the engine's own memory
+
+The client keeps an array of the entities the server has sent for the current
+frame -- `cl_entities`, 1024 records of 276 bytes, static in the image -- and
+each record opens with the `entity_state_t` the server sent. It is the same
+place `cl.refdef` is read from, one array over, and `control/bridge.mjs` reads
+it in the *same round trip* as the player's own state (`live()`), because a loop
+that read the player and the monsters in two evaluates would be deciding on two
+different frames.
+
+| Field | Offset | How it was checked |
+|---|---|---|
+| `number` | `+0x00` | the record one stride after the one naming itself 283 names itself 284 |
+| `origin` | `+0x04` | record 283 holds `-856 584 -24`, which is `monster_soldier_light`'s own origin in the level's entity lump |
+| `angles` | `+0x10` | the same record holds yaw `-90`, which is the angle the lump gives that monster |
+| `old_origin` | `+0x1c` | holds the same origin until the entity moves, then the previous one |
+| `modelindex` | `+0x28` | 44 for every soldier, 65 for the infantry, 46 for a stimpack, 0 for the world |
+| `frame` | `+0x38` | advances with the animation and freezes on a corpse |
+| `solid` | `+0x48` | 8290 for every `monster_*`, 0 for every item, 31 for a brush model |
+
+Two things the reading needs that are not obvious:
+
+* **a record holds the entity's state three times.** `entity_state_t` is 84
+  bytes on this build and a `centity_t` carries `current`, `prev` and
+  `baseline`; most slots name themselves in the first copy, and the client's
+  **own player** does not -- its current copy reads zero while its previous one
+  carries the live position. The reader takes whichever copy names itself.
+* **the monster's model index is not the bolt's.** They are 44 and 45, two
+  apart, and the first version of this loop assumed one of them. It counted
+  bolts looking for modelindex 44 and found none, which reads exactly like "the
+  trigger never fired" -- and did, for two runs. Measured by holding the trigger
+  and watching what appeared: the bolt is modelindex **45** with `EF_BLASTER`
+  (effects bit 0x8) and `solid` 0.
+
+The read is checked rather than trusted. `verifyEntityRead()` looks for an
+entity whose x/y is the player's own x/y -- the view offset that separates the
+eye from the feet is vertical, so the two agree exactly in the ground plane --
+and the run reports how often that held and the worst disagreement it saw. If it
+stops holding, the loop says so and falls back to the level's static list
+(`staticMonsters()`) rather than aiming at whatever is at those addresses now.
+
+#### 2. Decide: a state machine, not a plan
+
+One pure function of one reading (`decide()`), so the whole thing is testable
+without a browser -- `scripts/route-test.mjs` pins all of it:
+
+| Reading | Mode | What it does |
+|---|---|---|
+| the death camera is up | `dead` | release everything, press fire, wait, re-plan from wherever the autosave left the player |
+| standing in the exit volume | `arrived` | stop |
+| health at or under `lowHealth` with something in range | `retreat` | back away from the nearest monster and keep firing |
+| a monster is reachable and within range | `engage` | hold the aim on it, fire when the aim has landed |
+| the walk has stopped | `recover` | shoot the `func_button` nearby, then step to one side, then plan again from where the player is |
+| nothing | `advance` | walk the route, and face it, at the speed the engine allows |
+
+Two of those are worth their own note.
+
+**"Reachable" is part of choosing a target, and it was measured.** The first
+version aimed at the nearest monster whatever floor it stood on; on demo1's
+spawn the two nearest are 40 and 80 units *below* the player's floor. The run
+spent all of its ticks "engaging", correctly never fired -- `levelShotReaches()`
+says a level shot cannot cross that -- and never walked either. What is
+reachable gets the aim and the trigger; what is nearest gets the retreat
+bearing.
+
+**The aim is held, and so is the waypoint.** Re-choosing the farthest visible
+route point every tick is choosing a *different* point every tick, and the view
+chases the jump: measured, yaw 152, 102, 89, 61, 97, 77, 22 within twenty ticks
+of plain walking. The same for targets. So both are sticky -- held until they
+are reached, or until the walkable line to them closes, or until the monster is
+gone.
+
+#### 3. Aim: one proportional correction every tick, with the lead
+
+Every tick, from the player's current position to the target's current position
+with the bolt's travel led out:
+
+```
+aim   = bearing(player.now, target.now + target.velocity * (distance / boltSpeed))
+turn  = clamp(shortestTurn(aim - yaw) * turnGain, ±maxTurnPerTick) * turnScale
+fire  = aimError <= 1.6°  AND  levelShotReaches(map, eye, target)
+```
+
+The target's velocity is its own two consecutive live positions over the time
+between them -- a live reading, not a table -- and the bolt's speed is measured
+the same way, from bolts actually in flight (the run reports how many it saw;
+none seen, the loop keeps the documented 1000 and says so).
+
+`turnScale` exists because the mouse on this box is not the mouse the bridge
+documents. The bridge's default is 0.066 degrees per mouse count; measured here,
+three 20-degree requests produced **0, 39.4 and 39.4 degrees** -- the real
+figure is about 0.13, twice the default. The loop therefore measures what its
+last turn actually achieved and folds it back in, which is also why the run
+prints the scale it settled on (0.51 in every run of this pass).
+
+The fire gate is two conditions and both matter: the aim has landed, *and* the
+level's own geometry says a level shot from the eye reaches the target's body.
+A trigger held at a wall is a trigger held at a wall, and the second condition
+is the one that stops a leg shooting at a soldier on the floor above.
+
+#### 4. Verify: shots, bolts, and what a hit can honestly be called
+
+The run counts what the sensors can actually see:
+
+* **trigger presses and milliseconds with the trigger down** -- the loop's own
+  record of what it asked for;
+* **bolts in the live entity array** -- the direct evidence that asking worked,
+  and the reading that caught the model-index fault above (0 bolts in 1,000
+  ticks is not a firing rate, it is a broken sensor);
+* **damage events** -- a live monster whose animation frame *moved* while the
+  trigger was down, which is the pain animation. This is a good signal on this
+  build for a measured reason: an idle monster does not animate at all. A
+  hundred samples over twenty seconds of demo1 standing still, for all eighteen
+  monsters, gave **one** distinct animation frame and **one** distinct position
+  each;
+* **flinches** -- the subset of those where the frame ran *backwards*, which is
+  the pain animation restarting;
+* **monsters that stopped being monsters** -- a monster is an entity carrying a
+  monster's model index and a monster's 8290 box, and something that stops
+  carrying them is a kill.
+
+**A monster's health is not readable, and this pass did not read it.** The
+client's entity state is the network state and carries no health field; the
+game DLL's own edict array was not recovered either, and neither structure that
+*was* recovered -- the client's frame ring and its entity array -- carries a
+health field. So no number in the run is "health removed from a monster", and
+the run says so on its own line:
+
+> a monster's own HEALTH is not in the client's entity state ... so nothing here
+> says how much health was removed. What is counted is the one damage signal the
+> state does carry ... A landed turn is not counted as a hit.
+
+**And no kill was observed.** Every monster the loop watched for the whole of
+every run kept its 8290 box, its zero effects and its entity number, so
+"stopped being a monster" never fired. The run reports that as the gap it is:
+the loop cannot tell a corpse from a monster with these fields, one of the two
+readings below says nothing died and the other says nothing was detected dying,
+and this pass cannot tell those apart. It is the honest limit of the sensor,
+and it is written down rather than filled in.
+
+The same gap applies to the **player's** health, which had already been left
+unread by every pass before this one. The loop takes it off the status bar
+(`control/hud.mjs`, the project's own reader) at a bounded rate -- one read a
+second by default -- and caches it in between, so the 68 ms a read costs is paid
+once a second rather than inside every firing leg. The series it produces is
+real and it is what drives `retreat`: measured this pass, `100, 94, 65, 23, 9`
+on the run that died in the corridor, and a retreat that fired back all the way
+out.
+
+#### What this pass measured
+
+Every run below is `node scripts/demo1-run.mjs play` against the live game, from
+a fresh `demo1` spawn with `cheats 0`.
+
+**The loop reaches the exit room's own floor.** The best run of this pass
+reached
+
+```
+-1586 1544 -1       190 units from the exit's aim point
+```
+
+and the engine still answered `"mapname" is "demo1"` -- **not finished**. For
+scale: the exit trigger's volume is `x -1840..-1712, y 1448..1640`, so that run
+stood 126 units east of the volume's own edge. The passes before this one
+reached 213, 275, 1,343, 1,355 and 1,650 units short on their best runs; the one
+run that ever finished reached 80 units and the trigger.
+
+| run | ticks | wall clock | deepest reading | units short | level restarts | trigger presses |
+|---|---|---|---|---|---|---|
+| 1 | 1,400 | 170 s | `-1586 1544 -1` | **190** | 4 | 29 |
+| 2 | 2,000 | 270 s | `-952 1544 -2` | 824 | 7 | 59 |
+| 3 | 2,000 | 267 s | `-952 1544 -2` | 824 | 7 | 44 |
+
+The loop's own numbers, measured rather than intended:
+
+| Measured | Value |
+|---|---|
+| loop rate | a tick of **80 to 90 ms** -- 9 to 10 ms for the live read, 71 to 73 ms for the acting, and the rest the loop's own sleep. Over a whole 2,000-tick run with seven deaths in it, **7.5 Hz** wall clock |
+| live entity read | **2,000 of 2,000 checks agreed** with the engine's own player position; worst disagreement 37 units (the `prev`-copy lag) |
+| mouse scale it learned | **0.51** in every run (the bridge's documented default is wrong by 2×) |
+| player's lowest health read | 2 (the move to `retreat` is what kept it alive at 2, not luck) |
+| level restarts lived through | 4 and 7 -- the respawn ladder worked every time it was asked |
+| bolts in the live entity array | **875 of 2,000 ticks had at least one in the air**, 6 at most at once |
+
+**The one thing it did not do is hit.** Over the 2,000-tick run the trigger was
+down for 23.8 seconds, bolts were in the air for 875 ticks, and **no monster's
+animation frame ever moved while the trigger was down** -- zero damage events.
+An idle monster's frame does not move at all on this build (measured, 100
+samples over 20 s: one distinct frame and one distinct position for all
+eighteen), so a frame that moves is a hit and the absence of one is the absence
+of a hit. This pass therefore reports **no confirmed hit**, and it says so
+instead of counting the turns that landed.
+
+**And no kill could be detected at all.** Every monster the loop watched, in
+every run, kept its 8290 box, its zero `effects` and its entity number for the
+whole run: "stopped being a monster" never fired. One of two things is true --
+nothing died, or a corpse keeps the same entity state as a monster and this
+sensor cannot see the difference -- and this pass cannot tell them apart. The
+run reports the gap rather than filling it, which is why `kills` is 0 and says
+0 rather than being quietly dropped from the report.
+
+**Why it fires but does not connect, as far as this pass measured.** The trace
+answers the first half of that with a number: of 268 engagement ticks in one
+traced run, **66 had the aim inside the 1.6-degree gate** -- a quarter. The
+errors converge in about eight ticks and then have to converge again, because
+the target changes, or because the player is walking while aiming and Quake 2
+moves a player along the view. The second half -- where the bolts that *were*
+fired went -- this pass did not pin down: `levelShotReaches()` sampled every 24
+units says the line is clear, the geometry says the eye is inside the target's
+own box, and no bolt was observed to reach one. That is the next thing to
+measure, and it is written here as open rather than closed.
+
+**What did move.** The loop travels the corridor *reliably and quickly*: 1,213
+ticks of plain advancing and 660 of engaging in the 2,000-tick run, from the
+spawn to the exit room's floor, with the route re-planned from wherever each
+death left the player. The previous passes' runs took minutes of standing still
+to cover the same ground. What has not moved is the fight, and the loop is
+honest about which half of it is missing.
+
+#### Trying it
+
+```
+node scripts/demo1-run.mjs play                    # the loop, and its report
+QUAKE2_TRACE=1 node scripts/demo1-run.mjs play     # one line per tick
+QUAKE2_LEGACY=1 node scripts/demo1-run.mjs finish  # the leg script it replaced
+QUAKE2_MAX_TICKS / QUAKE2_TICK_MS / QUAKE2_DEATHS  # budgets
+QUAKE2_ENGAGE_RANGE / QUAKE2_AIM_TOLERANCE / QUAKE2_LOW_HEALTH   # the levers
+QUAKE2_HEALTH_READ_MS                             # how often the status bar is read
+QUAKE2_NO_SUPPLY / QUAKE2_NO_TOPUP                 # turn the errands off
+```
+
+
 ### The HTTP API
 
 `node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`, or

@@ -13,6 +13,7 @@ import { RouteWalker, deepestReading } from "../control/walker.mjs";
 import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
 import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
+import { bearingTo, shortestTurn, leadPoint, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -891,6 +892,108 @@ let stubbornThrew = null;
 try { await stubborn.face(90, { tolerance: 2, rounds: 6, turn: "mouse" }); } catch (error) { stubbornThrew = error; }
 check("the dead mouse gets two rounds before the keys are tried",
   stubborn.moves === 2 && stubbornThrew !== null, { mouseTurnsSent: stubborn.moves, then: stubbornThrew && stubbornThrew.name });
+
+// ---------------------------------------------------------------------------
+// The play loop's own arithmetic and decisions.
+//
+// Everything the loop decides is decided by a pure function of one reading --
+// control/loop.mjs's `decide()` takes a percept and returns a mode, a bearing
+// and a trigger -- so the whole state machine can be pinned here, without a
+// browser and without a game. What the loop does with the answer (send a turn,
+// hold a key, pull a trigger) is the part that needs a level.
+console.log("");
+console.log("the play loop's compass matches the fight's");
+check("bearingTo and combat.mjs's own compass agree",
+  Math.round(bearingTo({ x: 0, y: 0 }, { x: 10, y: 0 })) === 0 &&
+  Math.round(bearingTo({ x: 0, y: 0 }, { x: 0, y: 10 })) === 90 &&
+  Math.round(bearingTo({ x: 0, y: 0 }, { x: -10, y: 0 })) === 180, {
+    east: bearingTo({ x: 0, y: 0 }, { x: 10, y: 0 }), north: bearingTo({ x: 0, y: 0 }, { x: 0, y: 10 }),
+  });
+check("shortestTurn takes the short way round",
+  shortestTurn(350) === -10 && shortestTurn(-350) === 10 && shortestTurn(190) === -170,
+  { a: shortestTurn(350), b: shortestTurn(-350), c: shortestTurn(190) });
+
+console.log("the lead is the bolt's travel, and it is bounded");
+const still = leadPoint({ x: 0, y: 0, z: 0 }, { x: 300, y: 0, z: 0 }, null, { boltSpeed: 1000 });
+check("a target standing still is aimed at where it stands",
+  Math.round(still.x) === 300 && Math.round(still.y) === 0, still);
+// 100 units a second across the line, a bolt that covers 1000 a second, a gap
+// of 300: the bolt takes 0.3 s and the target moves 30.
+const walking = leadPoint({ x: 0, y: 0, z: 0 }, { x: 300, y: 0, z: 0 }, { x: 0, y: 100, z: 0 }, { boltSpeed: 1000 });
+check("a walking target is led by its own speed over the bolt's flight",
+  Math.round(walking.y) > 25 && Math.round(walking.y) < 40, { y: Math.round(walking.y) });
+const wild = leadPoint({ x: 0, y: 0, z: 0 }, { x: 300, y: 0, z: 0 }, { x: 0, y: 100000, z: 0 }, { boltSpeed: 1000, maxLead: 96 });
+check("a bad velocity reading cannot throw the aim across the room",
+  Math.abs(wild.y - 0) <= 96 + 1, { y: Math.round(wild.y) });
+
+console.log("what is a monster is decided by the entity, not by the map");
+const entities = [
+  { number: 1, position: { x: 0, y: 0, z: 0 }, modelindex: 255, solid: 8290 },
+  { number: 7, position: { x: 400, y: 200, z: -32 }, modelindex: MONSTER_MODELS[0], solid: MONSTER_SOLID },
+  { number: 8, position: { x: 300, y: -100, z: -64 }, modelindex: MONSTER_MODELS[1], solid: MONSTER_SOLID },
+  { number: 11, position: { x: -158, y: 1424, z: -128 }, modelindex: 46, solid: 0 },
+  { number: 12, position: { x: 0, y: 0, z: 0 }, modelindex: 31, solid: 31 },
+];
+const live = readMonsters(entities);
+check("a monster model with a monster's box is a monster", live.length === 2 && live.every((m) => m.source === "live-memory"), live.map((m) => m.number));
+check("an item and a brush model are not", live.every((m) => m.modelindex !== 46 && m.modelindex !== 31));
+// The bolt carries the same model index as a soldier on this build -- that is
+// the whole reason the box is part of the test.
+const withBolt = readMonsters([...entities, { number: 99, position: { x: 100, y: 100, z: 40 }, modelindex: MONSTER_MODELS[0], solid: 16 }]);
+check("the bolt that shares a monster's model index is not a monster", withBolt.length === 2, withBolt.map((m) => m.number));
+// The fallback the loop takes when the live read stops agreeing gives every
+// monster `number: null`, and the loop keys its per-monster record on the
+// number. What makes that safe is that each of these also carries its own
+// `index`, which is what the loop keys on instead -- so this is the property
+// that fix depends on, and it is checked rather than assumed.
+const statics = staticMonsters(map);
+check("the static fallback gives every monster an index of its own, so none is keyed on the same null twice",
+  statics.length > 0 && new Set(statics.map((m) => m.index)).size === statics.length &&
+  statics.every((m) => m.number === null && m.source === "map-entity-lump"),
+  { monsters: statics.length, distinctIndexes: new Set(statics.map((m) => m.index)).size });
+
+console.log("the target ranking is distance and off-course, and the close override");
+const from = { x: 0, y: 0, z: 0 };
+const crowd = [
+  { number: 1, position: { x: 300, y: 0, z: 0 }, modelindex: MONSTER_MODELS[0], solid: MONSTER_SOLID },
+  { number: 2, position: { x: 0, y: 300, z: 0 }, modelindex: MONSTER_MODELS[0], solid: MONSTER_SOLID },
+  { number: 3, position: { x: 900, y: 0, z: 0 }, modelindex: MONSTER_MODELS[0], solid: MONSTER_SOLID },
+];
+const ahead = rankTargets(crowd, from, { heading: 0 });
+check("a soldier on the way forward beats one to the side",
+  ahead[0].number === 1 && ahead[0].off === 0, ahead.map((t) => t.number + "@" + Math.round(t.off)));
+check("nothing beyond engageRange is a target at all",
+  rankTargets(crowd, from, { heading: 0, engageRange: 400 }).every((t) => t.distance <= 400));
+// The override: inside answerRange a soldier is answered whatever angle it
+// stands at, because it can shoot the player from where it stands.
+// Behind the player is past the arc, which is what answerRange overrides.
+const behind = [{ number: 4, position: { x: -300, y: 0, z: 0 }, modelindex: MONSTER_MODELS[0], solid: MONSTER_SOLID }];
+check("a soldier behind the walk is a target inside answerRange and not outside it",
+  rankTargets(behind, from, { heading: 0, answerRange: 400 }).some((t) => t.number === 4) &&
+  !rankTargets(behind, from, { heading: 0, answerRange: 100 }).some((t) => t.number === 4),
+  { inside: rankTargets(behind, from, { heading: 0, answerRange: 400 }).length, outside: rankTargets(behind, from, { heading: 0, answerRange: 100 }).length });
+
+console.log("the state machine takes its decisions from one reading");
+const base = { dead: false, health: 100, target: null, targetClear: true, routeBearing: 45, routeDistance: 300, offRoute: 5, arrived: false, recover: null, retreatBearing: 225 };
+check("nothing to shoot: walk the route", decide(base).mode === "advance" && decide(base).move === 45, decide(base));
+check("the way forward is also where the view goes when nothing is in range", decide(base).aim === 45, decide(base).aim);
+const armed = { ...base, target: { number: 7, bearing: 50, distance: 300, off: 5 } };
+check("a reachable monster is engaged, and it is what the view holds", decide(armed).mode === "engage" && decide(armed).aim === 50 && decide(armed).fire === true, decide(armed));
+check("a monster whose line is blocked is not fired at", decide({ ...armed, targetClear: false }).fire === false, decide({ ...armed, targetClear: false }));
+check("the walk still goes on while the trigger is down", decide(armed).move === 45, decide(armed).move);
+check("hurt, with something shooting: back out, still firing",
+  decide({ ...armed, health: PLAY_DEFAULTS.lowHealth - 1 }).mode === "retreat" &&
+  decide({ ...armed, health: PLAY_DEFAULTS.lowHealth - 1 }).move === 225 &&
+  decide({ ...armed, health: PLAY_DEFAULTS.lowHealth - 1 }).fire === true, decide({ ...armed, health: 20 }));
+check("healthy, the same reading engages", decide({ ...armed, health: 100 }).mode === "engage");
+check("a corpse is not a target and not a reason to stand still",
+  decide({ ...base, target: null }).mode === "advance");
+check("the death camera outranks everything", decide({ ...armed, dead: true }).mode === "dead" && decide({ ...armed, dead: true }).fire === false);
+check("standing in the exit volume stops the loop", decide({ ...base, arrived: true }).mode === "arrived");
+check("a walk that has stopped is recovered, not advanced",
+  decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).mode === "recover" &&
+  decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).aim === 90);
+check("no reading at all is not a reason to fire", decide(null).fire === false);
 
 console.log("errors are named, never empty");
 let threw = null;

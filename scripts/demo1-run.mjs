@@ -22,6 +22,7 @@ import { QuakeControl } from "../control/bridge.mjs";
 import { loadMap } from "../control/route.mjs";
 import { RouteWalker } from "../control/walker.mjs";
 import { CombatWalker } from "../control/combat.mjs";
+import { PlayLoop } from "../control/loop.mjs";
 
 const CDP = process.env.QUAKE2_CDP_URL || "http://127.0.0.1:18801";
 const game = new QuakeControl({ cdpUrl: CDP, timeoutMs: 20000 });
@@ -511,14 +512,222 @@ async function finish() {
   report("result", after.name === "demo2" ? "FINISHED -- the engine loaded demo2" : "NOT finished -- the engine is still on " + after.name);
 }
 
+// Play the level with the reactive loop instead of the leg script.
+//
+// `finish` above walks the route one leg at a time: each leg picks a soldier
+// once, sets the bearing once, and holds the trigger from the top of the leg to
+// the bottom. This does the same job at 12 Hz -- perceive, decide, aim, verify,
+// every tick -- and aims at where the monsters ARE, read live out of the
+// client's own entity array rather than out of the entity lump the level's
+// author wrote years ago. See control/loop.mjs for the loop and README.md for
+// what it measures.
+//
+// Nothing about the level's plan changes: the route, the exit volume and the
+// level's own gun are the same offline facts, read the same way.
+async function play() {
+  report("starting", "fresh demo1 with cheats 0, played by control/loop.mjs");
+  const map = await loadMap("demo1");
+  const exit = map.exitPoint();
+  const walk = { maxStepUp: 45, maxDrop: 300, maxJump: 160, cell: 24 };
+  const plan = map.path(map.playerStart().position, exit.aim, walk);
+  report("route plan", plan.points.length ? plan.points.length + " points, " + Math.round(plan.distance) + " units" : plan.reason);
+  // The errands, in the loop's own terms: the level's gun and its ammunition
+  // (see supplyCalls) and the health boxes the plan already passes (built
+  // below). The loop runs them when they are owed and reachable, which is
+  // a decision taken every tick rather than a waypoint inserted into a plan.
+  const errands = [];
+  if (!process.env.QUAKE2_NO_SUPPLY) {
+    for (const call of supplyCalls(map, map.playerStart().position)) {
+      errands.push({
+        classname: call.classname,
+        call: call.call,
+        position: { x: call.x, y: call.y, z: call.z },
+        tap: call.tap || null,
+        walkDistance: call.walkDistance,
+      });
+    }
+  }
+  if (!process.env.QUAKE2_NO_TOPUP) {
+    // The level's own health and armour boxes that already stand on the plan,
+    // as errands the loop may detour for when the player is hurt enough (see
+    // PlayLoop's `#activeErrand`).
+    //
+    // Built here rather than borrowed, and that is a merge decision worth
+    // naming: the base's `finish()` used to get this list from a `topUpCalls()`,
+    // and PR #10 removed that function along with the walker's own errand list
+    // -- its pickups are handled by routing the *plan* over them instead
+    // (CombatWalker's `snapPickups`). This loop has no walker and does not
+    // re-route the plan, so its equivalent is an errand list, and this is where
+    // its list comes from. A call to the removed `topUpCalls()` is a call to
+    // nothing, which is what the rebase produced before this was written.
+    //
+    // Only boxes the plan already passes are taken (`NEAR`), because the
+    // measurement behind that limit still holds: the walk that swept up every
+    // health box it could see reached 2,053 units short and fired no shots at
+    // all.
+    const NEAR = 96;
+    const offPlan = (x, y) => {
+      let best = { distance: Infinity, index: 0 };
+      for (let index = 0; index < plan.points.length; index++) {
+        const a = plan.points[index];
+        const b = plan.points[Math.min(index + 1, plan.points.length - 1)];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const length = dx * dx + dy * dy;
+        const t = length === 0 ? 0 : Math.max(0, Math.min(1, ((x - a.x) * dx + (y - a.y) * dy) / length));
+        const distance = Math.hypot(x - (a.x + t * dx), y - (a.y + t * dy));
+        if (distance < best.distance) best = { distance, index };
+      }
+      return best;
+    };
+    const boxes = [];
+    const already = new Set();
+    for (const item of map.waypoints("*")) {
+      if (!item.position || !/^item_(health|armor)/.test(item.classname)) continue;
+      const near = offPlan(item.position.x, item.position.y);
+      if (near.distance > NEAR) continue;
+      const key = item.classname + Math.round(item.position.x) + "," + Math.round(item.position.y);
+      if (already.has(key)) continue;
+      already.add(key);
+      boxes.push({ item, near });
+    }
+    boxes.sort((a, b) => a.near.index - b.near.index);
+    for (const { item, near } of boxes) {
+      errands.push({ classname: item.classname, call: "health", position: { x: item.position.x, y: item.position.y, z: item.position.z }, walkDistance: Math.round(near.distance) });
+    }
+  }
+  report("errands the loop carries", errands.length
+    ? errands.map((errand) => errand.call + " " + errand.classname + " at " + Math.round(errand.position.x) + " " + Math.round(errand.position.y) + " " + Math.round(errand.position.z) + (errand.tap ? " press " + errand.tap : ""))
+    : "none the level offers within reach");
+  // Read the weapon binding before the level starts, like `finish` does, so the
+  // gun is in hand the moment the errand is run rather than a round trip later.
+  const armed = errands.find((errand) => errand.call === "weapon");
+  if (armed) {
+    const WEAPON_LABEL = { supershotgun: "Super Shotgun", shotgun: "Shotgun", machinegun: "Machinegun", chaingun: "Chaingun", grenadelauncher: "Grenade Launcher", rocketlauncher: "Rocket Launcher", hyperblaster: "HyperBlaster", railgun: "Railgun", bfg10k: "BFG10K" };
+    const short = armed.classname.replace(/^weapon_/, "");
+    const binding = typeof game.weaponKey === "function" ? await game.weaponKey(WEAPON_LABEL[short] || short) : { found: false };
+    armed.tap = binding && binding.key ? binding.key : null;
+    armed.label = WEAPON_LABEL[short] || short;
+  }
+  const tickMs = askedFor("QUAKE2_TICK_MS");
+  const deathBudget = askedFor("QUAKE2_DEATHS");
+  const loop = new PlayLoop(game, map, {
+    errands,
+    ...(tickMs === null ? {} : { tickMs: Math.max(20, tickMs) }),
+    ...(deathBudget === null ? {} : { deaths: Math.max(0, deathBudget) }),
+    ...(process.env.QUAKE2_ENGAGE_RANGE ? { engageRange: Number(process.env.QUAKE2_ENGAGE_RANGE) } : {}),
+    ...(process.env.QUAKE2_AIM_TOLERANCE ? { aimTolerance: Number(process.env.QUAKE2_AIM_TOLERANCE) } : {}),
+    ...(process.env.QUAKE2_LOW_HEALTH ? { lowHealth: Number(process.env.QUAKE2_LOW_HEALTH) } : {}),
+    ...(process.env.QUAKE2_MAX_TICKS ? { maxTicks: Math.max(1, Number(process.env.QUAKE2_MAX_TICKS)) } : {}),
+    ...(process.env.QUAKE2_HEALTH_READ_MS ? { healthReadMs: Math.max(0, Number(process.env.QUAKE2_HEALTH_READ_MS)) } : {}),
+    trace: process.env.QUAKE2_TRACE === "1",
+  });
+  loop.plan = plan;
+  report("loop levers", {
+    tickMs: loop.options.tickMs,
+    engageRange: loop.options.engageRange,
+    answerRange: loop.options.answerRange,
+    aimTolerance: loop.options.aimTolerance,
+    lowHealth: loop.options.lowHealth,
+    boltSpeed: loop.options.boltSpeed,
+    deaths: loop.options.deaths,
+  });
+  const fresh = await freshDemo1();
+  report("map after reset", fresh.map);
+  report("player at", fresh.position);
+  report("cheats line", fresh.cheatsAnswer.filter((line) => /cheats/.test(line)));
+  if (fresh.map !== "demo1") {
+    report("result", "could not start demo1; stopping rather than playing an unknown level");
+    process.exitCode = 1;
+    return;
+  }
+  if (armed && armed.tap) await game.tap(armed.tap).catch(() => {});
+  const started = Date.now();
+  const result = await loop.run(exit.aim, { tolerance: 96, level: "demo1" });
+  report("loop reason", result.reason);
+  report("engine's answer while playing", result.levelChanged ? result.levelChanged.name : "demo1");
+  if (result.deepest) {
+    report("deepest reading", {
+      x: Math.round(result.deepest.x), y: Math.round(result.deepest.y), z: Math.round(result.deepest.z),
+      short: Math.round(result.deepest.distance), mode: result.deepest.mode,
+    });
+  }
+  report("ticks", result.ticks + " in " + Math.round(result.durationMs / 1000) + "s");
+  report("the loop's own rate", result.timing);
+  report("decisions taken (mode, ticks)", result.states);
+  report("monsters seen in one frame at most", result.monstersSeen);
+  report("shots fired", result.shots + " trigger presses, " + result.triggerMs + "ms with the trigger down");
+  report("monsters driven off the engine's entity list", result.killsCount);
+  if (result.kills.length) {
+    for (const kill of result.kills) report("  " + kill.classname + " #" + kill.number + "  after " + kill.samples + " live readings, " + kill.flinches + " flinches");
+  }
+  report("damage events (a live monster's animation frame moved with the trigger down)", result.damageEvents);
+  report("  of those, flinches (the frame ran backwards)", result.flinches);
+  if (result.hitRate) {
+    report("hit accounting", {
+      damageEventsPerTriggerPress: Math.round(result.hitRate.damageEventsPerPress * 1000) / 1000,
+      damageEventsPerSecondWithTheTriggerDown: result.hitRate.damageEventsPerSecondOfTrigger === null ? null : Math.round(result.hitRate.damageEventsPerSecondOfTrigger * 1000) / 1000,
+      killsPerTriggerPress: Math.round(result.hitRate.killsPerPress * 1000) / 1000,
+    });
+    report("note", "a monster's own HEALTH is not in the client's entity state (the network state carries no health field, and this pass did not recover the game DLL's edict array), so nothing here says how much health was removed. What is counted is the one damage signal the state does carry: an idle monster's animation frame does not move at all -- measured, 100 samples over 20 s, one distinct frame and one distinct position for all 18 monsters -- so a frame that moves while the trigger is down is the pain animation, not idle animation. A landed turn is not counted as a hit.");
+  }
+  report("health series (status bar)", result.healthSeries.map((entry) => entry.health).join(", ") || "none read");
+  report("lowest health read", result.lowestHealth);
+  report("level restarts the loop lived through", result.deaths);
+  report("bolt speed used for the lead", result.boltSpeed);
+  // The bolts are the only direct evidence that the trigger did anything: a
+  // bolt is an entity of its own and the live array is where it is.
+  report("bolts seen in the live entity array", result.bolts);
+  if (result.targets && result.targets.length) {
+    report("monsters the loop watched (entity, name, readings, flinches, killed, distinct solid values, distinct effects, last frame)");
+    for (const target of result.targets) {
+      report("  #" + target.number + " " + target.classname + "  readings " + target.seen + "  damage events " + (target.damageEvents || 0) + "  flinches " + target.flinches +
+        "  stopped being a monster " + (target.killed ? "yes" : "no") + "  solid [" + (target.solids || []).join(",") + "]" +
+        "  effects [" + (target.effects || []).join(",") + "]  frame " + target.lastFrame);
+    }
+  }
+  report("live entity read (checks, agreements, worst disagreement)", result.entityIntegrity);
+  report("errand record", result.errands);
+  if (result.trace && result.trace.length) {
+    report("per-tick trace (tick, decision, yaw, aim, aim error, line clear, trigger, target, monsters, at, turn scale)");
+    for (const entry of result.trace) {
+      report("  " + String(entry.tick).padStart(4, " ") + " " + entry.mode.padEnd(7) + " " + (entry.said || "").padEnd(24) +
+        " yaw " + String(entry.yaw).padStart(7, " ") + " aim " + String(entry.aim).padStart(7, " ") +
+        " err " + String(entry.aimError).padStart(6, " ") + " clear " + (entry.clear ? "yes" : "no ") +
+        " fire " + (entry.fire ? "yes" : "no ") +
+        " target " + (entry.target ? "#" + entry.target.n + " d" + entry.target.d + " off" + entry.target.off : "-") +
+        " monsters " + entry.monsters + " at " + entry.at.join(" ") + " scale " + entry.scale);
+    }
+  }
+  if (result.trail.length) {
+    report("last positions the engine reported (x y z, monsters in frame, decision)");
+    for (const point of result.trail.slice(-12)) {
+      report("  " + point.x + " " + point.y + " " + point.z + "  monsters " + point.monsterCount + "  " + point.mode);
+    }
+  }
+  report("last loop notes", result.log.slice(-12).map((entry) => entry.message + (entry.detail ? " " + JSON.stringify(entry.detail) : "")));
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  const after = await readMapName();
+  report("engine says the map is", after.name);
+  report("proof", after.lines.filter((line) => /"mapname" is "/.test(line)));
+  report("result", after.name === "demo2" ? "FINISHED -- the engine loaded demo2" : "NOT finished -- the engine is still on " + after.name);
+  report("wall clock", Math.round((Date.now() - started) / 1000) + "s");
+}
+
 const [command, argument] = process.argv.slice(2);
 try {
   if (command === "plan") await plan();
   else if (command === "walk") await walk(argument);
-  else if (command === "finish") await finish();
-  else console.log("usage: node scripts/demo1-run.mjs plan|walk X,Y,Z|finish");
+  else if (command === "play") await play();
+  // `finish` is the same walk the level has always been measured with, run two
+  // ways. The loop is the default now -- it is the change this pass is about --
+  // and QUAKE2_LEGACY=1 hands the job back to the leg script, which is how a
+  // change can be measured against the thing it replaced.
+  else if (command === "finish") await (process.env.QUAKE2_LEGACY === "1" ? finish() : play());
+  else console.log("usage: node scripts/demo1-run.mjs plan|walk X,Y,Z|finish|play");
 } catch (error) {
   console.error("ERROR " + (error.code ? error.code + ": " : "") + error.message);
+  if (process.env.QUAKE2_DEBUG === "1" && error.stack) console.error(error.stack);
   process.exitCode = 1;
 } finally {
   // The trigger comes up before the bridge goes away, whatever happened above.
@@ -529,5 +738,13 @@ try {
     if (typeof game.mouseHold === "function") await game.mouseHold("left", false).catch(() => {});
     else await game.attackHold(false).catch(() => {});
   }
+  // And the movement keys, for the same reason one order of magnitude louder:
+  // fire left down shoots at nothing, but `+forward` left down *walks the
+  // player*, and a run that ends on an exception with a key held hands the
+  // level a player who keeps walking after the harness has gone. Measured: a
+  // smoke run that threw on its first tick left `w` down, and the next run's
+  // reset found the player 600 units from the spawn the engine had just given
+  // them.
+  if (typeof game.hold === "function") await game.hold([]).catch(() => {});
   await game.close().catch(() => {});
 }
