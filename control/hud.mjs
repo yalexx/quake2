@@ -763,9 +763,14 @@ export function readBar(lum, width, height, options = {}) {
   // The number that *ends* on the health field's own right edge, read where the
   // bar draws it instead of found and then filtered.
   //
-  // This is the second reading of the health number and the one that is right
-  // when the first one is not, and the fault it fixes was measured on this box
-  // rather than argued. The general scan above finds every number on the bar and
+  // This is the second reading of the health number: the one that does not care
+  // what else the bar scored well, and so is right on the bars where the scan
+  // above cannot place the number at all. It does not read a number the scan
+  // merely mis-liked -- see the floors below -- and on the strip that started
+  // this it is still a miss, which is said plainly here rather than implied.
+  //
+  // The fault it is for was measured on this box rather than argued. The general
+  // scan above finds every number on the bar and
   // takes the most confident cell as an anchor, so a number the bar's *art*
   // scores well on can be anchored first and grown across the health digits --
   // the status bar's own health icon (a bright cross at strip x 576, 3 units
@@ -775,21 +780,36 @@ export function readBar(lum, width, height, options = {}) {
   // 26 rows): the first reads `100`, the second finds only a `0` at x 541 that
   // ends on 557 and is rejected by the field rule, so the player's health comes
   // back as no reading at all. 45 of 98 firing legs in one `finish` run and 52
-  // of 98 in another were that same miss.
+  // of 98 in another were that same miss. That second strip is still a miss at
+  // the floors below -- its leading `1` scores 0.50, and a cell of background
+  // scores 0.50 too, so it cannot be told from scenery -- and the miss is the
+  // honest answer there.
   //
   // Q2 right-aligns the number in its field, so the cells it is drawn in are
   // known before the digits are: for a one-, two- or three-digit number they
   // start at the field edge less one cell each. Scoring those few positions
-  // instead of the whole row removes the anchor competition entirely, and the
-  // field edge is a prior strong enough to read a cell the general scan's floor
-  // refuses (see `fieldCellScore`).
+  // instead of the whole row removes the anchor competition entirely.
+  //
+  // The floors stay where the rest of this file keeps them, and that is a
+  // measurement rather than a preference. Lowering them to 0.4 and 0.5 -- which
+  // the field edge, as a prior, looks strong enough to allow -- was measured
+  // over 464 saved strips of five `finish` runs and is wrong: it *changes* 14
+  // readings the old rule already had, and by widening rather than by
+  // correcting them (`8` becomes `78`, `6` becomes `76`, `23` becomes `423`),
+  // on a vision pass of one of those strips reading it as a two-digit number.
+  // The reason is in the scores: a real two-digit number's weakest cell scores
+  // 0.80 or better, the faint leading digit that starts a miss scores about
+  // 0.50, and so does a cell of background -- there is no floor that separates
+  // those two. At the floors below, the field read gains readings and changes
+  // none (measured: 53 to 55, 46 to 47, 42 to 46, 58 to 62 and 42 to 43 over the
+  // five runs, with no strip disagreeing with the old rule on any of them).
   const fieldFraction = options.healthFieldRight === undefined ? HEALTH_FIELD_RIGHT : options.healthFieldRight;
   let field = null;
   if (fieldFraction !== null && fieldFraction !== undefined) {
     const edge = Math.round(width * fieldFraction);
     const y = Math.max(0, height - cellHeight);
-    const cellFloor = options.fieldCellScore === undefined ? 0.4 : options.fieldCellScore;
-    const floor = options.fieldNumberScore === undefined ? 0.5 : options.fieldNumberScore;
+    const cellFloor = options.fieldCellScore === undefined ? minScore : options.fieldCellScore;
+    const floor = options.fieldNumberScore === undefined ? (options.numberScore === undefined ? 0.65 : options.numberScore) : options.fieldNumberScore;
     for (let digits = 3; digits >= 1; digits--) {
       const x0 = edge - digits * cellWidth;
       if (x0 < 0) continue;

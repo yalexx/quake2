@@ -841,9 +841,9 @@ export class CombatWalker extends RouteWalker {
       // long step out to the gun is a step the walk *skips*, and the gun is left
       // standing while the walk cuts the corner it was inserted to remove. The
       // way out to it is therefore inserted as short steps of its own, and a
-      // last step stands 64 units *past* the item: a pickup is taken by
-      // walking over it, and a leg aimed exactly at an item stops inside its own
-      // arrival radius and never touches it.
+      // last step stands `gearOvershoot` units *past* the item: a pickup is
+      // taken by walking over it, and a leg aimed exactly at an item stops
+      // inside its own arrival radius and never touches it.
       const waypoints = [via];
       if (pickup.gear) {
         const dx = detour.x - via.x;
