@@ -862,11 +862,6 @@ export class CombatWalker extends RouteWalker {
     return spent + 1;
   }
 
-  // How many of the level's monsters have a clear level shot to a player
-  // standing on the floor at `at`. This is the level's own answer to "who can
-  // shoot me here" -- the same `levelShotReaches` test the fight uses to decide
-  // what is worth turning for, asked of the ground instead of the monsters.
-  // Monsters past `engageRange` are not counted: they cannot reach.
   // Is there ground to walk on this many units along `bearing` from where the
   // player stands? The same two tests every walk in this file is held to -- a
   // floor `floorNear` finds that `standable` accepts, reached by a line
@@ -887,6 +882,11 @@ export class CombatWalker extends RouteWalker {
     );
   }
 
+  // How many of the level's monsters have a clear level shot to a player
+  // standing on the floor at `at`. This is the level's own answer to "who can
+  // shoot me here" -- the same `levelShotReaches` test the fight uses to decide
+  // what is worth turning for, asked of the ground instead of the monsters.
+  // Monsters past `engageRange` are not counted: they cannot reach.
   #seers(at) {
     const eye = { x: at.x, y: at.y, z: at.z + EYE_ABOVE_FEET };
     let count = 0;
@@ -1312,7 +1312,8 @@ export class CombatWalker extends RouteWalker {
     // distance to the soldier this leg is actually fighting, which only the leg
     // knows (see `kiteRange`).
     const wanted = this.#fireMode();
-    let mode = wanted === "kite"
+    const kiting = wanted === "kite";
+    let mode = kiting
       ? (target.enemy && target.enemy.distance < numberOr(this.engage.kiteRange, 150) ? "retreat" : "advance")
       : wanted;
     // A retreat a body cannot walk is not a retreat, it is a second spent
@@ -1324,7 +1325,15 @@ export class CombatWalker extends RouteWalker {
     // itself into the arena's own geometry and stopped there. So the direction
     // is only walked if there is ground to walk it on, and otherwise the leg
     // keeps going the way it was going.
-    if (mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
+    //
+    // Guarded by `kiting`, and deliberately: `fireWhile: "retreat"` is a lever
+    // of its own and one the runs before this one were measured with, so it goes
+    // on meaning exactly what it meant. This rule belongs to the kite, and a
+    // guard that also rewrote "retreat" would quietly invalidate that
+    // measurement -- and on a map with no floor to ask (`floorNear` answers null
+    // for a stub with no `standable`) it would rewrite *every* retreat into an
+    // advance, which is not a retreat guarded, it is a retreat deleted.
+    if (kiting && mode === "retreat" && !this.#canStep(before.position, walkBearing + 180)) mode = "advance";
     const walk = mode === "retreat" ? walkBearing + 180 : walkBearing;
     let keys = mode === "hold" ? [] : movementKeys(facing, walk);
     let heldMs = 0;
