@@ -699,14 +699,23 @@ function paintBar(text, options = {}) {
       rgba[at + 3] = 255;
     }
   }
-  let ox = 20;
+  // Where the number starts. Q2 right-aligns a number in its field, so the
+  // field's own reading is checked by painting one where the engine draws it:
+  // the field's right edge less one 16-wide cell per digit. See the check for it
+  // below.
+  let ox = options.offsetX === undefined ? 20 : options.offsetX;
+  // ...and where it sits vertically. A real status bar draws its digits in the
+  // canvas's bottom 24 rows, which is the row the field's own reading looks at
+  // (see `field` in control/hud.mjs), so a bar painted at 0 has its number above
+  // the row that read is about.
+  const oy = options.offsetY === undefined ? 8 : options.offsetY;
   for (const character of text) {
     const glyph = digitGlyphs[options.family || "num"][Number(character)];
     for (let y = 0; y < glyph.height; y++) {
       for (let x = 0; x < glyph.width; x++) {
         if (!glyph.mask[y * glyph.width + x]) continue;
         const px = ox + x;
-        const py = 8 + y;
+        const py = oy + y;
         if (px >= width || py >= height) continue;
         lum[py * width + px] = ink;
         const at = (py * width + px) * 4;
@@ -748,6 +757,29 @@ check("an armour number is read as armour, not as health",
   armourStatus.numbers.map((n) => n.value + ":" + n.family));
 check("and a health number is read as health",
   readPainted("100").leftmost.family === "num", readPainted("100").leftmost.family);
+
+// The number in the health *field*, read where the field is.
+//
+// A real status bar puts the health number right-aligned on a fixed column and
+// the level's own health icon (a bright cross) three units to the right of it,
+// and the general scan's "most confident cell first" can anchor on the icon and
+// grow a number across the digits -- measured on this box, on two strips of the
+// same legible 100 a second apart (`hud-probe` in the run's evidence): one read
+// 100 and the other found only a `0` that ends on 557, so the player's health
+// came back as nothing at all. Both readings are taken here: the field's own
+// read has to find the 100 in the field, and a painted bar whose number is
+// right-aligned there is what that is checked against.
+const fieldEdge = Math.round(1366 * (573 / 1366));
+const fieldBar = paintBar("100", { width: 1366, offsetY: 16, offsetX: fieldEdge - 3 * 16 });
+const fieldStatus = readBar(fieldBar.lum, fieldBar.width, fieldBar.height, { searchBottom: fieldBar.height - 1, rgba: fieldBar.rgba, healthFieldRight: 573 / 1366 });
+check("the health field is read from the field the engine draws it in",
+  fieldStatus.field && fieldStatus.field.value === 100, fieldStatus.field && fieldStatus.field.value);
+check("...and a number that is not in the field is not reported as being in it",
+  (() => {
+    const elsewhere = paintBar("100", { width: 1366, offsetX: 20 });
+    const read = readBar(elsewhere.lum, elsewhere.width, elsewhere.height, { searchBottom: elsewhere.height - 1, rgba: elsewhere.rgba, healthFieldRight: 573 / 1366 });
+    return !read.field || read.field.value !== 100;
+  })(), "a bar with its number at the far left has nothing in the health field");
 
 // The reader's other half is the decoder, and it had no check at all: every
 // case above hands `readBar` a luminance plane, so the PNG chunk walk, the

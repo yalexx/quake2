@@ -760,7 +760,65 @@ export function readBar(lum, width, height, options = {}) {
       number.family = number.tint >= (options.tintThreshold === undefined ? 20 : options.tintThreshold) ? "anum" : "num";
     }
   }
-  return { numbers: accepted, width, height, scale: options.scale || 1 };
+  // The number that *ends* on the health field's own right edge, read where the
+  // bar draws it instead of found and then filtered.
+  //
+  // This is the second reading of the health number and the one that is right
+  // when the first one is not, and the fault it fixes was measured on this box
+  // rather than argued. The general scan above finds every number on the bar and
+  // takes the most confident cell as an anchor, so a number the bar's *art*
+  // scores well on can be anchored first and grown across the health digits --
+  // the status bar's own health icon (a bright cross at strip x 576, 3 units
+  // right of the field) does exactly this. Measured on two strips of the same
+  // legible **100** a second apart (`hud-probe`: `arm-at-spawn.png` and
+  // `arm-at-the-gun.png`, whose digit columns differ by at most 6 luminance over
+  // 26 rows): the first reads `100`, the second finds only a `0` at x 541 that
+  // ends on 557 and is rejected by the field rule, so the player's health comes
+  // back as no reading at all. 45 of 98 firing legs in one `finish` run and 52
+  // of 98 in another were that same miss.
+  //
+  // Q2 right-aligns the number in its field, so the cells it is drawn in are
+  // known before the digits are: for a one-, two- or three-digit number they
+  // start at the field edge less one cell each. Scoring those few positions
+  // instead of the whole row removes the anchor competition entirely, and the
+  // field edge is a prior strong enough to read a cell the general scan's floor
+  // refuses (see `fieldCellScore`).
+  const fieldFraction = options.healthFieldRight === undefined ? HEALTH_FIELD_RIGHT : options.healthFieldRight;
+  let field = null;
+  if (fieldFraction !== null && fieldFraction !== undefined) {
+    const edge = Math.round(width * fieldFraction);
+    const y = Math.max(0, height - cellHeight);
+    const cellFloor = options.fieldCellScore === undefined ? 0.4 : options.fieldCellScore;
+    const floor = options.fieldNumberScore === undefined ? 0.5 : options.fieldNumberScore;
+    for (let digits = 3; digits >= 1; digits--) {
+      const x0 = edge - digits * cellWidth;
+      if (x0 < 0) continue;
+      const cells = [];
+      let worst = Infinity;
+      let worstMargin = Infinity;
+      for (let k = 0; k < digits; k++) {
+        const cell = readCell(templates, lum, width, x0 + k * cellWidth, y);
+        cells.push({ ...cell, x: x0 + k * cellWidth, y });
+        worst = Math.min(worst, cell.score);
+        worstMargin = Math.min(worstMargin, cell.margin);
+      }
+      if (worst < cellFloor || worst < floor) continue;
+      const value = Number(cells.map((cell) => cell.digit).join(""));
+      if (!(value > 0 && value <= 999)) continue;
+      // The *widest* number whose every cell is confident enough is the reading,
+      // not the one with the best score: Q2 right-aligns the number in its
+      // field, so a three-digit `82` read as two cells is a `2` and a hundred
+      // read as two is a `0`. Measured on the saved crops of a `finish` run: on
+      // the same strips the old scan read 82, 77, 47 and 28, a best-score rule
+      // over the field read 2, 7, 7 and 8, and widest-first reads them all back.
+      // A cell of background to the left of a short number does not survive the
+      // floors -- it is scenery, and correlation against a digit's own shape
+      // scores scenery nowhere near a digit.
+      field = { value, digits: cells.map((cell) => cell.digit), x: x0, y, score: worst, margin: worstMargin, cells, family, field: true };
+      break;
+    }
+  }
+  return { numbers: accepted, field, width, height, scale: options.scale || 1 };
 }
 
 // Where the bar's own layout puts the health number's right edge.
@@ -853,7 +911,10 @@ export function readHealth(pngBuffer, options = {}) {
   // high enough to drop a phantom also splits a real number whose weakest glyph
   // is faint -- measured, `100` read as `10`. See the note there.
   const floor = options.numberScore === undefined ? 0.65 : options.numberScore;
-  const number = candidate && candidate.score >= floor ? candidate : null;
+  // The field's own reading first: it is the number the bar draws in the health
+  // field, taken where the field is, and the number found above is what a bar
+  // the field cannot be located on gets (see the note on `field` in `readBar`).
+  const number = status.field || (candidate && candidate.score >= floor ? candidate : null);
   return {
     ...status,
     health: number ? number.value : null,
