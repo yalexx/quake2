@@ -3057,6 +3057,136 @@ units from the exit aim point -- the closest any recorded run has been, against
 the second success condition is further off than the first: 9 of the 15 soldiers
 the walk met were still standing at the end.
 
+### The pass that found the corner: 128 units, four times, and a wall
+
+Four complete `finish` runs were made on 2026-10-04, each at normal speed with
+`cheats 0`, each with a 24-death budget. **All four stopped at the same place.**
+
+| run | attempts | ticks | wall clock | deepest reading | met / killed (last attempt) | the engine said |
+|---|---|---|---|---|---|---|
+| 1 | 25 | 5640 | 774 s | `-1648 1540 14` **128 short** | 15 / 7 (accumulated) | `"mapname" is "demo1"` |
+| 2 | 26 | 5957 | 649 s | `-1648 1543 14` **128 short** | 15 / 0 | `"mapname" is "demo1"` |
+| 3 | 9 | 12000 | 1125 s | `-1648 1538 15` **128 short** | 15 / 6 | `"mapname" is "demo1"` |
+| 4 | 26 | 6213 | 916 s | `-1648 1536 14` **128 short** | 15 / 0 | `"mapname" is "demo1"` |
+
+The same 128 units, four times, is not variance. It is a wall, and it is where
+the second half of the error is.
+
+**The exit room is sealed at ground level.** The trigger volume is
+`x -1840..-1712, y 1448..1640, z -24..32`; walking west along the exit corridor
+the floor is continuous at `z 0.8` right up to `x -1720`, and then the columns
+`x -1710..-1670` are **solid from `z -80` to `z 70` at every `y` in the volume's
+own range**. The player's box stops at `-1648` because that is where their
+32-wide footprint meets that wall. The way in is not through it: the planner's
+own 37-point route climbs a **ramp at `y 1728` from `z -32` to `z 96`**, walks a
+catwalk around the room, and drops `176` units in at `(-1776 1536)` -- through
+the trigger volume on the way down, which is what fires it.
+
+So the finish is a three-stage climb the loop never made. Its own deepest
+reading is the *corner under the catwalk*.
+
+#### What was actually wrong, and what was fixed
+
+* **The route search ignored height, and the way out doubles back over itself.**
+  `#routePoint()` looked for "the nearest point on the plan" in x/y alone. The
+  plan climbs the ramp at `y 1728` to `z 96` and then comes back along a catwalk
+  **directly above the ground it has already covered**, so from `-1648 1540` the
+  nearest point in x/y is the catwalk: 76 units away and 96 units up. The walk
+  was handed a bearing into the wall *underneath* it and held it there for the
+  rest of the run. Height is now part of the answer; a point more than a step
+  above or below the feet is scored far behind every point that is not. The
+  deepest reading had been `-1648 … 128 short` on every run for three passes
+  before this was found, and the plan's own next point was 190 units north on
+  the ramp it never turned towards.
+
+* **The loop's only door-opening lever had never once fired.** `#nearestButton()`
+  -- the first rung of the recovery ladder, "shoot the button that opens it" --
+  scanned `map.waypoints("*")`. On this build that list is 638 entities and
+  **zero of them are `func_button`**: demo1's two buttons are brush entities,
+  and a brush model has no `origin`, so the waypoint list (which drops every
+  entity with neither an origin nor a kind) never described them. Measured, the
+  loop's log never once said *"the walk stopped beside func_button"* -- only
+  *"stepping sideways"*. It now reads `barriers()` and `modelBounds`, the same
+  reading `exitPoint()` takes the exit volume from. Measured after the fix:
+  `the walk stopped beside func_button; shooting it {"distance":222,"stage":1}`,
+  four times in one run.
+
+* **The button shot was a level shot at a button 121 units above the eye.** The
+  recovery aimed with a bearing and nothing else, so the trigger was held on a
+  level line -- well under `func_button *34` at `(-1843.5 1536 136)`.
+  The recovery now carries a pitch to the button's own z, and `pitchAim: false`
+  still gives back the old yaw-only behaviour.
+
+* **A retreat that never ended.** Measured on run 3: the loop spent **9904 of
+  its 12000 ticks in `retreat`**, parked in that corner with all fifteen
+  soldiers in frame, firing for fifteen minutes and never taking another step
+  towards the exit. Its health never came back, because this level does not let
+  a stopped player heal. A retreat is now a manoeuvre with a clock on it
+  (`retreatMs`, 4 s): past it the walk takes the lead back, still firing, still
+  on the same target. Dying is affordable here -- an attempt is a life and there
+  are twenty-four of them; standing still is not, because a run that never
+  advances can never finish.
+
+#### The aim in both axes, measured rather than inferred
+
+The two axes are now measured on every run, not left to a trace that has to be
+switched on: for every tick with a target, how often the yaw and the pitch are
+each inside the 1.6-degree gate *after that tick's own corrections were sent*,
+and how often both are -- the only state the trigger is allowed down in.
+
+| run | ticks with a target | yaw inside | pitch inside | both inside | mean yaw error | mean pitch error | yaw scale | pitch scale |
+|---|---|---|---|---|---|---|---|---|
+| 1 (no counters yet, trace off) | -- | -- | -- | -- | -- | -- | -- | 8 (clamped) |
+| 2 | 1202 | 342 (28%) | 902 (75%) | 318 (26%) | 17.96 deg | 2.83 deg | -- | 8 (clamped) |
+| 3 | 11133 | 8694 (78%) | 9502 (85%) | 8663 (78%) | 3.59 deg | 2.58 deg | 0.506 | 0.472 |
+| 4 | 2535 | 704 (28%) | 1693 (67%) | 644 (25%) | 28.12 deg | 3.76 deg | 0.510 | 5.535 |
+
+**The two axes behave differently and the runs say so.** The yaw's scale settles
+at **0.506 to 0.510** every time -- the same number this file has recorded for
+three passes -- and its gate is crossed 78% of the time on a run long enough to
+calibrate (run 3). Its mean error is 3.59 degrees there and 18 to 28 degrees on
+runs made of twenty-six forty-second attempts, which is a fact about *short
+attempts*, not about the controller: the fold-back needs the corrections to
+land before it can measure them, and a run that dies every forty seconds spends
+most of its ticks with a controller that is still learning.
+
+The pitch scale is **not** settled, and it is worse than that: it came back
+`8` (the clamp) on runs 1 and 2, `0.472` on run 3 and `5.535` on run 4. The
+clamp means the fold-back wanted *more* than eight times the correction it was
+asking for. The pitch gate still crossed 75 to 85% of the time, so the axis
+works, but its scale is not a number this pass can stand behind, and it is
+written here rather than quoted as settled.
+
+**Hits are real and they are counted from the game's own state.** Across run 4's
+twenty-six attempts the game DLL's own edicts record **1817 points of health
+taken off monsters over 169 drops**, and **41 kills**. Run 3's single 966-second
+attempt alone took **303 points over 35 drops** and **6 kills of the 15 met**.
+The animation-frame proxy that every earlier pass had to use measured **zero**
+on all four runs, which is the last word on that sensor.
+
+#### What is still not met, and it is both conditions
+
+* **The level is not finished.** Four runs, 86 attempts, and the engine answered
+  `"mapname" is "demo1"` every time. The blocker is named above and it is not
+  the fight: it is that the walk has never once climbed the ramp the planner
+  found. The fixes in this pass removed two real reasons it could not (a route
+  search that pointed into the wall under the catwalk, and a recovery ladder
+  whose first rung was dead code), and the deepest reading did not move -- which
+  says the next thing to measure is the ramp itself, not the fight.
+* **The second condition is not met.** Best of the four: met 15, killed 7 (run
+  1, accumulated over its lives; 6 of 15 on run 3's single long attempt). Every
+  run's numbers are now reported **per attempt** as well as for the run, because
+  a death reloads the level and revives its monsters: an earlier life's kills are
+  not this life's, and a single accumulated total hides that. Attempts that met
+  the same eight monsters and reported three killed with **zero** health drops
+  are the reading that made this visible -- those three were killed in a
+  previous life, and the per-attempt split says so.
+* **`cheats 0` is now the engine's own answer, not the script's promise.** Every
+  run reads `cheats` and `timescale` back off the console before and after the
+  walk and reports them: `{"cheats":"0","timescale":"1"}` before and after, on
+  all four. The echo of `cheats 0` came back empty on every run -- the console
+  drops that line -- which is exactly why the read-back matters.
+
 ### The HTTP API
 
 `node control/server.mjs` (or `CONTROL_PORT=… node control/server.mjs`, or
