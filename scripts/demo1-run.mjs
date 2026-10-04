@@ -265,9 +265,10 @@ async function finish() {
       ...(process.env.QUAKE2_AVOID_RANGE ? { avoidRange: Number(process.env.QUAKE2_AVOID_RANGE) } : {}),
     },
   });
-  // The three levers this line adds are reported with the rest, so a finished
-  // run says which targeting and which lane search it was actually fought with.
-  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
+  // The fight options are reported *after* the weapon lookup below, not here:
+  // the errand may set `engage.weapon` from the level's own gun, and a report
+  // that says `weapon: null` for a run that fought with the super shotgun is
+  // the record disagreeing with the run. See `calls before the exit`.
   const plan = map.path(map.playerStart().position, exit.aim, walker.options);
   report("route plan", plan.points.length ? plan.points.length + " points" : plan.reason);
   // The errands: the level's own weapon and the shells that are near the spawn.
@@ -361,6 +362,9 @@ async function finish() {
   report("calls before the exit", calls.length ? calls.map((call) =>
     call.call + " " + call.classname + " at " + Math.round(call.x) + " " + Math.round(call.y) + " " + Math.round(call.z) +
     " (" + call.walkDistance + " units' walk)" + (call.tap ? " press " + call.tap : "")) : "none the level offers within reach");
+  // The levers this run was actually fought with, weapon included: the errand
+  // may have named one, and `#ensureWeapon` asks for it once per life.
+  report("fight options", { weapon: walker.engage.weapon, fireWhile: walker.engage.fireWhile, pickupRange: walker.engage.pickupRange, coverLane: walker.engage.coverLane, forwardArc: walker.engage.forwardArc, avoidRange: walker.engage.avoidRange });
   const result = await walker.follow(exit.aim, { attempts, deaths, tolerance: 96, via: calls });
   report("walker reached the exit volume", result.reached);
   report("walker reason", result.reason);
