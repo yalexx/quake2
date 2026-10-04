@@ -183,7 +183,20 @@ export function healthOf(monsters, edicts, options = {}) {
   let disagreed = 0;
   for (const monster of Array.isArray(monsters) ? monsters : []) {
     const edict = index.get(monster.number);
-    if (!edict) { unmatched += 1; out.push({ ...monster, health: null, maxHealth: null, dead: null, source: "no-edict" }); continue; }
+    // `entitySource` is the caller's own name for where the monster came from,
+    // kept because "no edict" does not mean the same thing for both kinds of
+    // caller. A monster read from the LIVE entity array is keyed by its entity
+    // number, so no edict behind it means the game does not have that entity.
+    // A monster from the level's static list (`staticMonsters` in
+    // control/loop.mjs) is keyed by its place in that list, which was never an
+    // entity number at all -- so a caller cannot use "no edict" to decide
+    // anything about those without throwing the whole fallback away. See
+    // `#withHealth`.
+    if (!edict) {
+      unmatched += 1;
+      out.push({ ...monster, health: null, maxHealth: null, dead: null, source: "no-edict", entitySource: monster.source || null });
+      continue;
+    }
     // A monster the caller handed over with no position at all: `staticMonsters`
     // in control/loop.mjs passes the level's own `enemy.position` straight
     // through, and an entity lump whose origin will not parse gives `undefined`.
@@ -203,6 +216,12 @@ export function healthOf(monsters, edicts, options = {}) {
       dead: live.dead,
       source: agreed ? "game-edict" : "game-edict-origin-disagrees",
       originError: measured,
+      // Where the GAME says the monster is, carried beside the client's own
+      // reading so a caller can choose. It is the same pair `originError` is the
+      // distance between, and it is here because the two are not equally true:
+      // see the note on `#withHealth` in control/loop.mjs for the measurement
+      // that settled which of them a player should aim at.
+      edictPosition: { x: edict.x, y: edict.y, z: edict.z },
     });
   }
   return { monsters: out, unmatched, disagreed, edicts: index.size };

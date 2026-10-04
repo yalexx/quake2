@@ -2583,9 +2583,11 @@ the same way, from bolts actually in flight (the run reports how many it saw;
 none seen, the loop keeps the documented 1000 and says so).
 
 `turnScale` exists because the mouse on this box is not the mouse the bridge
-documents. The bridge's default is 0.066 degrees per mouse count; measured here,
-three 20-degree requests produced **0, 39.4 and 39.4 degrees** -- the real
-figure is about 0.13, twice the default. The loop therefore measures what its
+documents. The bridge's default was 0.066 degrees per mouse count when this was
+written (it is the measured 0.1302 now -- see [the pass that finished
+demo1](#the-pass-that-finished-demo1)); measured here, three 20-degree requests
+produced **0, 39.4 and 39.4 degrees** -- the real figure is about 0.13, twice
+the default. The loop therefore measures what its
 last turn actually achieved and folds it back in, which is also why the run
 prints the scale it settled on (0.51 in every run of this pass).
 
@@ -2952,8 +2954,11 @@ yaw's is.
 The pitch is calibrated exactly as the yaw is -- ask for a correction, read what
 the pitch actually did, fold the ratio back in -- because `m_pitch` and `m_yaw`
 are two cvars and this box's two axes need not agree. Measured this pass, the
-pitch scale settled at **0.53** (the yaw's is 0.51, and the bridge's documented
-default is 0.066).
+pitch scale settled at **0.53** (the yaw's is 0.51, and the bridge's default was
+0.066 at the time). Those two numbers are 1/1.973: they were the bridge's error
+being cancelled, not a property of the box -- see [the pass that finished
+demo1](#the-pass-that-finished-demo1), where the default was measured and both
+scales went to 1.0.
 
 With the axis on, the shot gate becomes `beamReaches()` -- the same test in three
 dimensions, down the actual segment from the eye to the target's own origin --
@@ -3288,6 +3293,315 @@ Two things not to "fix" later:
   That server *is* reachable through the ClawBox proxy, so putting `/control/*`
   there would publish the game's keyboard to the network. The two processes stay
   separate, and the API never serves game files.
+
+### The pass that finished demo1
+
+**The walk finished the level.** Every complete run before this one had ended
+with the engine still answering `"mapname" is "demo1"` -- the four in the table
+above, and the runs of the pass that found the corner all stopped at the same
+`-1648 1540`. On 2026-10-04 the loop walked the whole route, climbed
+the ramp, crossed the catwalk, dropped 176 units through the exit trigger, and
+the engine's own console answered:
+
+```
+engine says the map is: demo2
+proof: ["\"mapname\" is \"demo2\""]
+cheats and timescale, the engine's own answer after the walk: {"cheats":"0","timescale":"1"}
+wall clock: 206s (normal speed)
+this run was: NORMAL SPEED, cheats 0 -- the mode every finish proof has to be made in.
+```
+
+Normal speed, no cheat, one attempt of 1776 ticks: 1186 ticks walking, 508
+engaging, 48 recovering, 26 retreating. The deepest reading is
+`-1785 1547 143`, nine units from the exit aim point in x/y and 139 above it --
+the catwalk, which is where 128-units-short came from all along.
+
+Every `finish` run of this pass, in the order they were made. The last row is
+the code as it ships; the row above it is the variant of the hunt that was
+measured and thrown away (see below).
+
+| run | ticks | wall clock | deepest reading | met / killed | the engine said |
+|---|---|---|---|---|---|
+| every run before this pass | -- | 649-1125 s | `-1648 1540` **128 short** | 15 / 0-7 | `"mapname" is "demo1"` |
+| 1 -- the finish, and nothing else yet | 1776 | 206 s | 9 short | 15 / 1 | `"mapname" is "demo2"` |
+| 3 -- after the aim, the corpses and the ghosts | 1744 | 173 s | 5 short | 15 / 7 | `"mapname" is "demo2"` |
+| 6 -- after the hunt | 539 | 51 s | 7 short | 14 / 9 | `"mapname" is "demo2"` |
+| 7 | 675 | 63 s | 6 short | 14 / 9 | `"mapname" is "demo2"` |
+| 9 -- the code in this commit | 5252 | 474 s | 6 short | 14 / 7 | `"mapname" is "demo2"` |
+| 8 -- the hunt variant that was dropped | 7000 | 635 s | 192 short | 14 / 7 | `"mapname" is "demo1"` |
+
+Every one of those was run at normal speed with `cheats 0` and read back
+`{"cheats":"0","timescale":"1"}` after the walk, which is the engine's own
+answer and not the script's promise.
+
+Five defects had to go for that, and each was measured against the live game
+before it was changed. The second success condition -- kill everything met -- is
+**not** met yet; what this pass measured about it is at the end.
+
+#### The mouse: 0.1302 degrees per count, on both axes
+
+The bridge's `DEFAULT_DEGREES_PER_MOUSE_UNIT` was 0.066, read off Quake 2's own
+defaults (`sensitivity 3` against `m_yaw 0.022`). The live engine says **0.1302,
+and the same on both axes**: one delta per trial against a standing player,
+requesting +/-3, 6, 10 and 20 degrees produced 0.1298 to 0.1306 degrees per
+count on the pitch and -0.1294 to -0.1302 on the yaw, linear over that range,
+with no smoothing and no lag -- a 152-count request read back as 19.797 degrees
+in the very next reading.
+
+So every turn the loop asked for was **1.973 times the one it meant**. The yaw
+had been absorbing that in its own fold-back -- the 0.506 to 0.510 this file has
+recorded for three passes is 1/1.973, which is the bridge's error being
+cancelled rather than a property of the box. The constant is now the measured
+one, and the loop's two scales now settle at **1.0**: across the six complete
+runs of this pass the yaw landed between **0.998 and 1.016** and the pitch
+between **0.921 and 1.300** (the two smoke runs of 400 and 700 ticks read 1.000
+and 0.981 for the yaw, 0.996 and 0.671 for the pitch), where before the change
+the same fold-back spent the first seconds of every short life discovering a
+factor of two. The pitch's spread is the honest number -- it is a short sample
+per run (3 to 67 readings, against 1267 on the one long run) and is not as tight
+as the yaw's, which is why the range is written here and not a single value.
+
+#### The pitch scale, settled
+
+The pitch scale had come back 8 (the old clamp), 0.472 and 5.535 on three runs
+of the same loop against the same mouse. The axis was never the problem -- the
+probe above shows it linear and consistent -- the **fold-back** was:
+
+- The step was `scale * (0.5 + 0.5/ratio)`, which is unbounded: a ratio of 0.06
+  moved the scale 8.8x in one tick, and the clamp at 8 is where it ended up.
+- The ratio window (`ratio > 0.05`) accepted readings that were not about the
+  mouse at all. Measured, immediately after `map demo1`: a 45-count pitch request
+  read back as **0 degrees**, and the yaw read on the same tick as 0. The mouse
+  event had not reached the engine; the old window folded that in anyway.
+- A tick whose player is dead has a view the mouse does not drive at all -- the
+  death camera holds it -- and those ticks were learned from too.
+
+`#foldScale` now requires the ratio to be inside [0.25, 4], moves the scale by
+at most a factor of two per measurement, and is skipped entirely when the tick's
+own reading says the player is dead. Measured after: pitch scale **0.996** with
+3 samples and yaw **0.981** with 71, on the same run, both where they belong.
+
+#### The player's health was the status bar's, and the status bar is wrong
+
+The loop had read the player's own health out of the game DLL's edicts for two
+passes -- and then let the status bar overwrite it, once a second, whenever a
+digit could be read. The bar is a photograph of a number the engine draws, and
+it is wrong: a crop kept from a run reads **100** where the game's own edict has
+the player at **4**. `decide()` retreats on `health <= lowHealth`, so a bar stuck
+at 100 is a loop that never retreats and a bar stuck at 0 is a loop that retreats
+forever -- and this file already carries both shapes, the 9904-tick retreat and
+the runs that never retreated at all.
+
+The edict is now the only source. The bar is still photographed at its bounded
+rate, and is still the independent reader: over one complete run the two agreed
+**128 times and disagreed 3, worst 70** -- which is the number to quote when
+asked whether the edict's health field is the right one.
+
+#### The 128 units: a height test that was in one place and not the other
+
+Four runs in a row stopped at exactly `-1648 1540`, 128 units from the exit, and
+the previous pass's fix (a height term in the route-point search) did not move
+it. The reason is that `#routePoint()` chooses the walk's waypoint in **two**
+places, and only one of them had the test:
+
+- the nearest-point pass, which scores a point more than a step above the feet
+  far behind every point that is not -- this is the pass the previous fix
+  changed; and
+- the lookahead scan, which walks the plan from `routeIndex + 16` downwards and
+  takes the first point with a clear line -- **and no height test at all**.
+
+Replaying the function offline from the corner every run stopped at (feet at
+`z -32`), the scan handed the walk index 33: the catwalk at `(-1632 1416 z 96)`,
+125 units away in x/y and **128 units above the player's feet**. `clearWalk` has
+no reason to refuse it -- the column between the corridor and the catwalk is open
+air -- so the walk held a bearing into the sealed east face of the exit room for
+the rest of the run. With the same test applied in both places, the identical
+replay settles on index 18 at `(-1608 1704 z -48)`, bearing 76: north, at the
+ramp.
+
+The arrival test was the second half of the same mistake. It measured x/y only,
+and the player who has walked the catwalk is within **91 units** in x/y of the
+aim point while standing 139 units above the trigger volume (`z -24..32`). The
+loop answered "you are there" on the one ledge the level is built to make you
+leave -- and both the decision and the run loop turned on that answer. `atGoal()`
+is that test in three dimensions now.
+
+#### A gun on the floor is not a gun in hand
+
+The errand that walks the player to the level's super shotgun was working: the
+run's own errand record shows it called four times. **Nothing ever pressed the
+key that equips it.** The only weapon press in the whole harness happens before
+the walk, when the player does not own the gun.
+
+The proof is the game's own damage. Every drop in a monster's health over 203
+seconds was a blaster bolt's **10** (and 2 to 5 where the sample landed
+mid-burst), 314 points over 48 drops: the loop fought the level with the spawn's
+blaster while the level's super shotgun sat in its pack.
+
+Two things were wrong, and the second is why fixing the first alone did nothing:
+
+- **the key was never pressed.** `#equip()` presses the key the engine's own
+  config binds to that gun (`weaponKey("Super Shotgun")` answers `3`,
+  `pressable: true`), and presses it again a few times over the next second.
+- **the gun was never picked up.** The errand was called at `touchRadius` of 56
+  units, and the engine picks an item up when the two boxes **meet**, which is
+  32. The loop was turning for the route with 24 units still to go. Errands now
+  have to be walked onto (`pickupRadius` 24) before they count as run, with a
+  1.6-second clock so an item wedged where the player cannot stand does not
+  become a circle. Measured after: `{"classname":"weapon_supershotgun",
+  "walkedOn":true,"distance":21}`.
+
+The loop also stops leading a hitscan weapon's shots (`HITSCAN_WEAPONS`): a
+shotgun pellet is at the target in the frame the trigger falls, and the bolt
+speed of 1000 that is right for the blaster displaced the aim by the target's own
+walk over a third of a second -- up to 30 units against a soldier 32 wide.
+
+#### Where the monster really is: the client's array freezes
+
+The aim was also being asked about phantoms. The client's entity array is the
+NETWORK state: it carries the last position the server **sent** for that entity
+number, and a monster outside the player's view is not sent. Its record is not
+cleared either, so it keeps the position it had when it was last seen.
+
+Measured against the live game, the loop's own reader on both arrays at once: 15
+monsters, **7 of them more than 96 units apart**, and the disagreement is
+one-sided. `monster_soldier_light #272` read `(-904 972)` in the client array on
+four reads 700 ms apart -- frozen -- while its edict read `(-1146 1307)` and then
+`(-1146 1355)`: 48 units of movement in 0.7 seconds. Two of the fifteen were more
+than 800 units out.
+
+A record that does not move while the game moves the monster is a record about
+where the monster was. The edicts are the game's own state, and they are also the
+only position the engine's own hit detection can use, because a shot is resolved
+on the server against the server's entities. Where the two disagree, the loop now
+aims at the edict's origin and keeps the client's beside it.
+
+#### The gun the level does not have
+
+That fix exposed a second one, and it took the console to settle.
+
+The errand that fetches the level's own gun is built from demo1's entity lump.
+Its target is the super shotgun at `(200 64 16)`, 414 units from the spawn, and
+every run since the errand was written has walked the player there and recorded
+it as *"called at the level's own weapon_supershotgun"*. The gun that fires in
+those runs is the spawn's blaster: over one complete run, **all 43 drops in
+monsters' health were exactly 10** -- a blaster bolt -- and never once a
+shotgun's pellet.
+
+The reason is that the item is not in the level. Measured against the live game,
+comparing every one of demo1's sixty `weapon_`/`ammo_`/`item_` entities with the
+game DLL's own edicts:
+
+```
+item_health_small      at 1184 -96 -40   nearest edict 261 (model 46) at 1 units
+ammo_shells            at -1644 1624 -16 nearest edict 143 (model 53) at 1 units
+weapon_shotgun         at 800 -96 -168   nearest edict 265           at 9 units
+weapon_supershotgun    at 200 64 16      nearest edict 310 (a BARREL) at 70 units
+```
+
+Every ammo box and every health box is where the lump puts it; the super shotgun
+has nothing. The engine agrees in its own words: `use Super Shotgun` answers
+**"Out of item: Super Shotgun"**, and `use Blaster` answers nothing at all.
+
+So the errand was a 414-unit detour, at the start of every life, to an empty
+patch of corridor. Errands are now checked against the game's own state before
+they are walked (`#itemPresent`, and a pickup is `collected` only when the
+item's own record has gone), and the loop only equips a gun it has actually
+taken: **"a gun on the floor is not a gun in hand" needed a second half, "and a
+gun the level never spawned is not on the floor"**.
+
+The blaster is not a bad weapon for this loop and the level gives it for free:
+10 damage a bolt at about ten bolts a second, against a soldier's 20 to 40.
+
+#### Firing at bodies, and at phantoms
+
+With the aim fixed, the loop spent one whole run -- eleven thousand ticks, 781
+seconds with the trigger down -- pinned at `-992 940` in the corridor, taking
+**200 points** off the level's monsters. Three things were wrong, and all three
+are the same mistake in different places: the loop's idea of "a monster" came
+from the client's array and never from the game.
+
+* **A corpse is not a monster.** The client's array carries a dead monster's
+  model index, solid box and entity number exactly as it carried them when the
+  soldier was alive, and `#isAlive` decided "alive" from *when the record was
+  last seen* -- which for a corpse is every tick. All fifteen of demo1's
+  monsters were "watched" on all twelve thousand ticks, including the ones the
+  run had already killed. It is now the game's own `health <= 0`.
+* **A record with no edict behind it is not a monster either.** 22,906 of
+  157,094 monster readings in that run had no edict at all -- a leftover in the
+  client's array for an entity the game has finished with. They were targets,
+  they were counted as met, and they could be fired at for as long as the loop
+  liked. The same count on a run that kept moving was **0**. They are dropped.
+* **A monster standing on the player was not a target.** `minimumRange` was 40
+  units, and the recovery ladder spent the run stepping sideways off the one
+  thing in the way. It is 16 now; a blaster kills a soldier in three bolts.
+
+With those three fixed, the same walk killed **7 of the 15 it met in a single
+life** -- against 1 or 2 before -- and finished the level in 173 seconds.
+
+#### Kill everything met, and the part that is still missing
+
+Seven killed is not fifteen, and the trace says exactly what the remaining gap
+is. Of fifteen soldiers met, the walk **engaged eight and killed seven of
+those**. Better than nine in ten of what it engaged -- and the other seven were
+never once a target. Four were met at more than a thousand units and never came
+closer; one was met at 222 units and was never engaged at all.
+
+A walk that fires at whatever crosses its beam is not clearing a level, it is
+walking through one. So the loop now goes to them: a monster it has met, that
+the game says is alive, and that the level's own geometry says it can walk to
+(`clearWalk` down the straight line) becomes the walk's destination until it is
+dead. The detour has a clock (`huntGiveUpMs`, 8 s), the clock runs from the last
+time the target's own health fell -- the same rule the stand-and-kill hold uses
+-- and a monster the walk could not reach is left and not turned back for again
+in that life.
+
+The first version of the hunt trusted `clearWalk` alone, and it cost a run:
+`clearWalk` is asked again every tick and answers about the *line*, not about
+where the walk ends up. A monster that wanders into a side room takes the walk
+off the corridor and into a pocket the route does not enter, and the run then
+spends eleven thousand ticks at `-428 678`, 1282 units from the exit, with the
+walk "recovering" once a second and never leaving. Two guards close it, and
+both are measured rather than defensive:
+
+* **near the plan** (`huntNearPlan`, 250 units). A monster a hunt would take the
+  walk off the way out for is a monster the walk comes back from with nothing to
+  show but the walk it took to get there.
+* **making progress** (`huntProgressMs`, 2.5 s; `huntProgressUnits`, 24). A walk
+  that is not closing the distance to its target is a walk pressed against
+  something, and that is the one case a straight-line test cannot see. The clock
+  only runs while the walk is walking: standing still to shoot is not a failure
+  to make progress.
+
+**And a third version was built, measured, and thrown away.** Judging that
+progress clock on ground covered instead of on the gap to the monster sounds
+more generous and is worse: every hunt then runs its full eight seconds, and one
+run started fourteen of them and spent **5387 of its 7000 ticks in `advance`**
+wandering with the exit 192 units away. That run did not finish, and it killed
+fewer soldiers than the two runs before it -- **seven against nine**. A detour
+measured to cost the finish and buy nothing is not kept, and the numbers are
+here so the next pass does not have to build it again to find out.
+
+Every run with the hunt in its kept form finished the level -- three of three --
+and killed **7 to 9** of the 14 or 15 soldiers it met, the best two killing 9.
+The same loop without the hunt, earlier in the pass, killed 7 and finished. So
+the hunt is kept because it finishes, not because it is proven to buy kills: the
+runs that used it are not distinguishable from the run that did not, and saying
+otherwise would be reading a difference of one or two soldiers out of a sample
+of one.
+
+The second condition is still short, and the shape of what is missing has not
+changed since the trace that found it: the soldiers that survive are the ones
+the walk never engages at all -- **zero hits** on every one of them, in every
+run of this pass that reports a per-monster table. Making those five engageable
+is the next thing to measure, and it is not a matter of aim or of weapon.
+
+What the loop does engage, it mostly kills, and here is the one run where that
+can be counted exactly rather than estimated: the traced run of this pass
+engaged **eight** distinct soldiers (`#2 #243 #272 #280 #293 #294 #308 #309`,
+counted from its own per-tick trace) and killed **seven** of them. The eighth,
+`#243`, was engaged and survived. That is the shape of the whole fight: the
+losses are in the soldiers never engaged, not in the ones that are.
 
 ### The MCP server
 

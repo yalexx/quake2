@@ -801,10 +801,24 @@ const FACE_TOLERANCE_DEGREES = 4;
 // than many, because a method that is really gone should not keep costing a
 // round of every turn for the whole run.
 const TURN_MISSES_BEFORE_RETIRING = 3;
-// Quake 2's own defaults: sensitivity 3 against m_yaw 0.022 is about a
-// fifteenth of a degree per mouse count. Only ever a starting guess -- face()
-// measures the real ratio on its first successful turn and uses that instead.
-const DEFAULT_DEGREES_PER_MOUSE_UNIT = 0.066;
+// How many degrees one mouse count turns the view on THIS box, for BOTH axes.
+// Still only a starting guess -- face() measures the real ratio on its first
+// successful turn and uses that instead, and control/loop.mjs folds every
+// correction back into its own scale -- but the guess was wrong by a factor of
+// two and that cost the aim loop the first seconds of every short life.
+//
+// Measured this pass, against the live engine, one delta per trial, a live
+// player standing still: requesting +/-3, 6, 10 and 20 degrees produced
+// 0.1298 to 0.1306 degrees per count on the pitch and -0.1294 to -0.1302 on the
+// yaw, linear over that whole range and identical on both axes. The delta lands
+// in the very next reading (a 152-count request read back as 19.797 degrees
+// immediately), so there is no smoothing to wait out and no lag to allow for.
+//
+// The old 0.066 was `sensitivity 3` against `m_yaw 0.022` read off the config,
+// which is 0.066 on paper and 0.1302 in the engine. A loop that asked for 0.066
+// degrees got 0.13, so every correction it sent was 1.973 times the one it
+// meant, and its fold-back spent the run discovering that instead of aiming.
+const DEFAULT_DEGREES_PER_MOUSE_UNIT = 0.1302;
 // cl_yawspeed, degrees per second, for the +left/+right keys.
 const DEFAULT_YAW_SPEED_DEGREES_PER_SECOND = 140;
 // The gap between a map's floor and the position the engine reports for the
