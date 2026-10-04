@@ -49,7 +49,8 @@
 // is labelled with which of the two it came from. A landed turn is not a hit,
 // and this module never counts one as one.
 
-import { movementKeys, levelShotReaches, clearWalk, floorNear } from "./combat.mjs";
+import { movementKeys, levelShotReaches, beamReaches, clearWalk, floorNear } from "./combat.mjs";
+import { healthOf, liveOf } from "./edicts.mjs";
 
 // The player's eye sits this far above the floor (walker.mjs and combat.mjs use
 // the same number for the same reason).
@@ -141,6 +142,11 @@ export const PLAY_DEFAULTS = {
   engageArc: 100,
   answerRange: 340,
   minimumRange: 40,
+  // How close a monster has to come to count as "met". The owner's second
+  // success condition is "kill everything you meet", so what "meet" means has
+  // to be a number and not a feeling: the same range at which a soldier is
+  // worth answering, which is where the level's own soldiers open fire.
+  metRange: 1100,
   // The aim has to be inside this before the trigger goes down. At 300 units a
   // 1.6-degree miss passes a 32-unit-wide soldier by well under its own body.
   aimTolerance: 1.6,
@@ -161,6 +167,36 @@ export const PLAY_DEFAULTS = {
   // the tolerance however far the default is from the box.
   turnGain: 0.5,
   turnScale: 1,
+  // ---- the second axis: pitch -------------------------------------------
+  //
+  // The loop used to be yaw-only. It could not look up or down, so it aimed a
+  // level shot at whatever the target's x/y was and ignored its z -- fine for a
+  // soldier on the player's own floor (the eye sits inside that soldier's box,
+  // see control/combat.mjs) and wrong for anything else. This axis aims at the
+  // target's own z, which is what the entity array carries.
+  //
+  // Quake 2's pitch is the mouse's other axis: like yaw it is degrees per mouse
+  // count (governed by `m_pitch` rather than `m_yaw`), and like yaw its real
+  // value on this box is not the one the config suggests. So it is calibrated
+  // the same way and by the same trick -- ask for a correction, measure what the
+  // pitch actually did, fold the ratio back in.
+  //
+  // Sign convention, from the engine's own angles: `cl.refdef.viewangles[PITCH]`
+  // is NEGATIVE when looking up and positive when looking down, and a positive
+  // mouse dy (the pointer moving down the screen) raises it. The aim angle
+  // computed below is therefore `-atan2(dz, distance)`, and the mouse delta it
+  // produces is positive to look further down.
+  pitchGain: 0.5,
+  maxPitchPerTick: 30,
+  pitchScale: 1,
+  // How far the pitch is allowed to be off before the trigger goes down. Same
+  // value as the yaw's and for the same reason: at 300 units a 1.6-degree miss
+  // passes a 32-unit-wide soldier by well under its own body.
+  pitchTolerance: 1.6,
+  // Whether the pitch axis is driven at all. On by default; a run that wants to
+  // reproduce the old yaw-only aim sets this to false and gets exactly the old
+  // behaviour, which is how the change is measured against the thing it replaced.
+  pitchAim: true,
   // How far a bolt travels per second, for the lead. Quake 2's blaster bolt.
   // `measureBoltSpeed()` replaces it with the live reading when bolts are seen.
   boltSpeed: 1000,
@@ -263,6 +299,26 @@ export function leadPoint(from, target, velocity, options = {}) {
   return { x: at.x + leadX, y: at.y + leadY, z: at.z };
 }
 
+// The PITCH that points the view at a target's own height, in Quake 2's own
+// sense: NEGATIVE when the target is above the eye, positive when it is below,
+// because that is the sign `cl.refdef.viewangles[PITCH]` carries. Zero when the
+// two are level.
+//
+// The eye is the live read's own position (it is `cl.refdef.vieworg`), and the
+// target's z is the entity's own origin -- the centre of the box a bolt has to
+// cross, not the top of it. `span` is the ground-plane distance and not the
+// straight-line one: the angle is measured from the horizontal, which is what
+// the engine's pitch is.
+export function aimPitch(eye, target) {
+  const from = point3(eye);
+  const at = point3(target);
+  if (!from || !at) return null;
+  const span = Math.hypot(at.x - from.x, at.y - from.y);
+  const rise = at.z - from.z;
+  if (span < 0.001 && Math.abs(rise) < 0.001) return null;
+  return -(Math.atan2(rise, span) * 180) / Math.PI;
+}
+
 // Which live entity is which monster.
 //
 // An entity is a monster when it carries a monster's model index AND a
@@ -362,29 +418,41 @@ export function rankTargets(monsters, from, options = {}) {
 //   fire  -- whether the trigger should be down
 export function decide(percept, options = {}) {
   const lowHealth = finite(options.lowHealth) ? options.lowHealth : PLAY_DEFAULTS.lowHealth;
-  if (!percept) return { mode: "advance", move: null, aim: null, fire: false, reason: "NO_READING" };
-  if (percept.dead) return { mode: "dead", move: null, aim: null, fire: false, reason: "PLAYER_DEAD" };
-  if (percept.arrived) return { mode: "arrived", move: null, aim: null, fire: false, reason: "AT_THE_EXIT" };
+  // The pitch the walk itself wants: level, so a walk that never fires does not
+  // drift its view up or down the corridor. A target overrides it.
+  //
+  // With the axis off the decision carries NO pitch at all -- not a level one,
+  // not the target's. That is what makes `pitchAim: false` the control for the
+  // change: the decision is then exactly the old yaw-only decision, and the
+  // caller driving the mouse has nothing to drive on the second axis.
+  const axisOff = options.pitchAim === false;
+  const level = axisOff ? null : 0;
+  if (!percept) return { mode: "advance", move: null, aim: null, pitch: level, fire: false, reason: "NO_READING" };
+  if (percept.dead) return { mode: "dead", move: null, aim: null, pitch: null, fire: false, reason: "PLAYER_DEAD" };
+  if (percept.arrived) return { mode: "arrived", move: null, aim: null, pitch: null, fire: false, reason: "AT_THE_EXIT" };
   if (percept.recover) {
-    return { mode: "recover", move: percept.recover.bearing, aim: percept.recover.aim || null, fire: percept.recover.fire === true, reason: percept.recover.reason || "STUCK" };
+    return { mode: "recover", move: percept.recover.bearing, aim: percept.recover.aim || null, pitch: level, fire: percept.recover.fire === true, reason: percept.recover.reason || "STUCK" };
   }
   const target = percept.target || null;
+  // The pitch that points at the target's own z, carried on the target by the
+  // driver (it is the only part of the aim that needs the eye's height).
+  const atTarget = axisOff ? null : (target && finite(target.pitch) ? target.pitch : level);
   // Retreat is a health decision, not a fight one: the player is hurt, and the
   // level's own corridor is the thing that is killing them. It still shoots --
   // this level punishes a player who stops.
   const hurt = finite(percept.health) && percept.health <= lowHealth;
   if (hurt && target && percept.retreatBearing !== null && percept.retreatBearing !== undefined) {
-    return { mode: "retreat", move: percept.retreatBearing, aim: target.bearing, fire: true, reason: "LOW_HEALTH" };
+    return { mode: "retreat", move: percept.retreatBearing, aim: target.bearing, pitch: atTarget, fire: true, reason: "LOW_HEALTH" };
   }
   if (target) {
-    return { mode: "engage", move: percept.routeBearing, aim: target.bearing, fire: percept.targetClear !== false, reason: "MONSTER_IN_RANGE" };
+    return { mode: "engage", move: percept.routeBearing, aim: target.bearing, pitch: atTarget, fire: percept.targetClear !== false, reason: "MONSTER_IN_RANGE" };
   }
   // Nothing to shoot: face the way the walk is going. Quake 2 moves a player
   // along the view, so a walk that never turns is a walk that steers entirely
   // with the strafe keys -- which works, at 45-degree steps, and it is what the
   // first version of this loop did. Turning with the route is the same walk
   // with `+forward` doing the work.
-  return { mode: "advance", move: percept.routeBearing, aim: percept.routeBearing, fire: false, reason: "WAY_CLEAR" };
+  return { mode: "advance", move: percept.routeBearing, aim: percept.routeBearing, pitch: level, fire: false, reason: "WAY_CLEAR" };
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +504,29 @@ export class PlayLoop {
     this.turnScale = finite(options.turnScale) ? options.turnScale : this.options.turnScale;
     this.turnSamples = 0;
     this.pendingTurn = null;
+    // The same for the pitch axis, which is a second mouse delta with a scale of
+    // its own.
+    this.pitchScale = finite(options.pitchScale) ? options.pitchScale : this.options.pitchScale;
+    this.pitchSamples = 0;
+    this.pitchFailures = 0;
+    this.pendingPitch = null;
+    // ---- enemies met, and enemies killed ----------------------------------
+    //
+    // The owner's second success condition: the walk has to kill what it meets,
+    // not slip past it. "Met" is defined here and nowhere else, so the number is
+    // reproducible: a monster the loop has seen within `metRange` of the player
+    // on a tick where the player was alive. "Killed" is the GAME's own answer --
+    // its edict's health at or below zero -- and never a landed turn, a frame
+    // that moved, or the loop's own opinion.
+    this.met = new Map();
+    this.healthDamage = 0;
+    this.healthDamageEvents = 0;
+    this.killEvents = [];
+    this.edictRead = { ticks: 0, withHealth: 0, unmatched: 0, originDisagreed: 0, source: null, reason: null };
+    this.playerEdictNumber = null;
+    this.playerEdictFromEdict = null;
+    this.healthCrossCheck = { agreed: 0, disagreed: 0, worst: null };
+    this.edictHealth = [];
     // The waypoint being walked to and the monster being shot at, held between
     // ticks so that neither the heading nor the aim re-picks itself every tick.
     this.waypoint = null;
@@ -540,8 +631,11 @@ export class PlayLoop {
     const options = this.options;
     const player = read.position;
     // Fold what the last tick's turn actually achieved into the mouse's own
-    // scale, before this tick decides the next correction.
+    // scale, before this tick decides the next correction. Both axes: they are
+    // two mouse deltas and this box's two per-count angles are not the same
+    // number.
     this.#learnTurn(read.angles.yaw);
+    this.#learnPitch(read.angles.pitch);
 
     // ---- 1. PERCEIVE ------------------------------------------------------
     const liveEntities = Array.isArray(live.entities) ? live.entities : null;
@@ -571,11 +665,37 @@ export class PlayLoop {
     this.lastView.monsters = monsters;
     this.lastView.tick += 1;
 
+    // ---- 1a. the game DLL's own edicts: health, and who is dead -----------
+    //
+    // Attached to the monster list before anything decides on it, so the fight
+    // is fought on the same reading it is judged by. A monster the edict array
+    // does not vouch for keeps `health: null` and says so; nothing here invents
+    // one. `#metAndKilled` is the owner's second success condition: what the
+    // walk met, and what the GAME says it killed.
+    monsters = this.#withHealth(monsters, live, player);
+    this.#metAndKilled(monsters, player, read.dead === true);
+
     // ---- 1b. health, from the status bar ----------------------------------
-    // The one reading the engine cannot be asked for out of memory (see the
-    // module comment), so it is read off the status bar at a bounded rate and
-    // cached in between. The HUD read is the project's own (control/hud.mjs).
+    // The player's own health: the edict array has it now (the game DLL's own
+    // `g_edicts`, the same array the monsters come from), so it is taken from
+    // there every tick for nothing, and the status bar -- which costs a frame
+    // capture and an image decode -- is kept at its bounded rate as the
+    // independent cross-check it has always been.
     let health = this.lastView.health;
+    const fromEdict = this.#playerHealth(live, player);
+    if (fromEdict !== null) {
+      health = fromEdict;
+      this.lastView.health = health;
+      this.lastView.healthSource = "game-edict";
+      // Recorded when it CHANGES, not every tick: the series exists to show what
+      // the player's health did, and 12.5 identical readings a second is 12.5
+      // times the report for none of the information.
+      const last = this.edictHealth[this.edictHealth.length - 1];
+      if (!last || last.health !== fromEdict) {
+        this.edictHealth.push({ at: Date.now(), health: fromEdict, tick: this.lastView.tick });
+        if (this.edictHealth.length > 4000) this.edictHealth.shift();
+      }
+    }
     if (tickStart - this.healthReadAt >= options.healthReadMs && !read.dead) {
       this.healthReadAt = tickStart;
       try {
@@ -586,6 +706,21 @@ export class PlayLoop {
           health = reading.health;
           this.lastView.health = health;
           this.healthSeries.push({ at: Date.now(), health, armour: reading.armour, tick: this.lastView.tick });
+          // The status bar is the independent reader: it is the number the
+          // engine DRAWS, and it owes nothing to the offset the edict array was
+          // read from. One outside the other is a fault in this pass's sensor and
+          // is counted rather than averaged away.
+          if (fromEdict !== null) {
+            const gap = Math.abs(fromEdict - reading.health);
+            if (gap <= 1) this.healthCrossCheck.agreed += 1;
+            else {
+              this.healthCrossCheck.disagreed += 1;
+              this.healthCrossCheck.worst = this.healthCrossCheck.worst === null ? gap : Math.max(this.healthCrossCheck.worst, gap);
+              if (this.healthCrossCheck.disagreed === 1) {
+                this.note("the status bar and the game's own edict disagree about the player's health: bar " + reading.health + ", edict " + fromEdict);
+              }
+            }
+          }
         } else if (read.dead) {
           health = null;
         }
@@ -653,6 +788,11 @@ export class PlayLoop {
       ? {
           ...chosen,
           bearing: bearingTo(player, this.#lead(player, chosen)),
+          // The second axis: the pitch that points the view at the target's own
+          // z, led out the same way the bearing is (the lead point carries the
+          // target's z through unchanged, so this is the target's own height at
+          // the moment it is read).
+          pitch: aimPitch(player, this.#lead(player, chosen)),
         }
       : null;
     const stuck = this.#stuckNow(player, tickStart);
@@ -709,13 +849,21 @@ export class PlayLoop {
   // One line per tick, for a run that is not doing what it says it is.
   #traceTick(read, decision, clear, target, player) {
     if (!this.options.trace) return;
+    // The errors are the ones `#act` actually gated the trigger on -- measured
+    // against the aim its own turn had just achieved, not against the reading
+    // from before it. A trace that printed the stale number would show an aim
+    // that never converged next to a trigger that was down.
+    const last = this.lastDecision || {};
     this.trace.push({
       tick: this.lastView.tick,
       mode: decision.mode,
       said: decision.reason,
       yaw: Math.round(read.angles.yaw * 10) / 10,
       aim: decision.aim === null || decision.aim === undefined ? null : Math.round(decision.aim * 10) / 10,
-      aimError: decision.aim === null || decision.aim === undefined ? null : Math.round(Math.abs(shortestTurn(decision.aim - read.angles.yaw)) * 10) / 10,
+      aimError: last.aimError === null || last.aimError === undefined ? null : Math.round(last.aimError * 10) / 10,
+      pitch: Math.round(read.angles.pitch * 10) / 10,
+      pitchAim: decision.pitch === null || decision.pitch === undefined ? null : Math.round(decision.pitch * 10) / 10,
+      pitchError: last.pitchError === null || last.pitchError === undefined ? null : Math.round(Math.abs(last.pitchError) * 10) / 10,
       clear: clear === true,
       fire: this.triggerDown === true,
       target: target ? { n: target.number, d: Math.round(target.distance), off: Math.round(target.off) } : null,
@@ -724,6 +872,120 @@ export class PlayLoop {
       scale: Math.round(this.turnScale * 100) / 100,
     });
     if (this.trace.length > 800) this.trace.shift();
+  }
+
+  // ---- the game DLL's own edicts (see control/edicts.mjs) ------------------
+
+  // Attach every monster's health, from the game DLL's `g_edicts`. Returns a
+  // NEW list; a monster the edict array does not carry, or carries at an origin
+  // that disagrees with the client's, keeps `health: null` and a `source` that
+  // says which of the two happened. Nothing here invents a health.
+  #withHealth(monsters, live, player) {
+    const edicts = Array.isArray(live.edicts) ? live.edicts : null;
+    this.edictRead.ticks += 1;
+    this.edictRead.source = live.edictsSource || null;
+    this.edictRead.reason = live.edictReason || null;
+    if (!edicts) return monsters.map((monster) => ({ ...monster, health: null, maxHealth: null, dead: null, source: "no-edict-array" }));
+    const answer = healthOf(monsters, edicts);
+    this.edictRead.unmatched += answer.unmatched;
+    this.edictRead.originDisagreed += answer.disagreed;
+    this.edictRead.withHealth += answer.monsters.filter((monster) => monster.health !== null).length;
+    return answer.monsters;
+  }
+
+  // The player's own health, out of the same edict array.
+  //
+  // The client's entity array carries the player's own record and its x/y are
+  // the eye's x/y (the eye/feet gap is vertical), which is how the player's
+  // entity number is found the first time. The number is then held: a server
+  // keeps an entity's number for the level's lifetime. If the held number stops
+  // leading to an edict standing where the player stands -- a level restart
+  // moves the player and can renumber -- it is looked for again rather than
+  // silently read from the wrong record.
+  #playerHealth(live, player) {
+    const edicts = Array.isArray(live.edicts) ? live.edicts : null;
+    if (!edicts) return null;
+    const near = (edict) => edict && Number.isFinite(edict.x) &&
+      Math.hypot(edict.x - player.x, edict.y - player.y) <= 64;
+    let edict = this.playerEdictNumber === null ? null : edicts.find((entry) => entry.number === this.playerEdictNumber);
+    if (!near(edict)) {
+      let best = null;
+      for (const entry of edicts) {
+        if (!near(entry)) continue;
+        const z = Math.abs(entry.z - player.z);
+        if (!best || z < best.z) best = { entry, z };
+      }
+      edict = best ? best.entry : null;
+      this.playerEdictNumber = edict ? edict.number : null;
+      if (!edict) return null;
+    }
+    const live_ = liveOf(edict);
+    return live_ && live_.health !== null ? live_.health : null;
+  }
+
+  // The owner's second success condition, kept as three numbers: what the walk
+  // MET, what the GAME says it KILLED, and what is still standing.
+  //
+  // "Met" is this loop's own definition and is written down here so the number
+  // is reproducible: a monster seen within `metRange` of the player while the
+  // player was alive. "Killed" is never the loop's opinion -- it is the game
+  // DLL's own `health <= 0`, or the engine having stopped sending the entity,
+  // and every kill records which of the two said so.
+  #metAndKilled(monsters, player, dead) {
+    const range = finite(this.options.metRange) ? this.options.metRange : this.options.engageRange;
+    for (const monster of monsters) {
+      const key = this.#key(monster);
+      const distance = Math.hypot(monster.position.x - player.x, monster.position.y - player.y);
+      let record = this.met.get(key);
+      if (!record) {
+        if (dead || distance > range) continue;
+        record = {
+          number: monster.number,
+          classname: this.#nameFor(monster),
+          modelindex: monster.modelindex,
+          firstMet: Date.now(),
+          distanceWhenMet: Math.round(distance),
+          samples: 0,
+          healthFirst: monster.health === null ? null : monster.health,
+          healthLowest: monster.health === null ? null : monster.health,
+          lastHealth: monster.health === null ? null : monster.health,
+          hits: 0,
+          killed: false,
+          killedBy: null,
+          at: null,
+        };
+        this.met.set(key, record);
+        this.note("met " + record.classname + " (#" + monster.number + ") at " + record.distanceWhenMet + " units, health " +
+          (record.healthFirst === null ? "unreadable" : record.healthFirst));
+      }
+      record.samples += 1;
+      record.lastSeen = Date.now();
+      if (monster.position) record.lastPosition = { x: Math.round(monster.position.x), y: Math.round(monster.position.y), z: Math.round(monster.position.z) };
+      const health = monster.health;
+      if (health === null || health === undefined) continue;
+      // A health that DROPPED is the game's own answer that a shot connected --
+      // this is the real hit signal, and it replaces the animation-frame proxy
+      // the passes before this one had to use and measured zero with.
+      if (record.lastHealth !== null && health < record.lastHealth) {
+        record.hits += 1;
+        record.lastDrop = record.lastHealth - health;
+        this.healthDamage += record.lastDrop;
+        this.healthDamageEvents += 1;
+        if (record.samples <= 3 || record.hits <= 3) {
+          this.note("the game's own health for " + record.classname + " (#" + monster.number + ") fell by " + record.lastDrop +
+            ", to " + health + " of " + monster.maxHealth, { hit: record.hits, triggerDown: this.triggerDown === true });
+        }
+      }
+      if (record.healthLowest === null || health < record.healthLowest) record.healthLowest = health;
+      record.lastHealth = health;
+      if (health <= 0 && !record.killed) {
+        record.killed = true;
+        record.killedBy = "game-edict-health-below-zero";
+        record.at = Date.now();
+        this.killEvents.push({ number: monster.number, classname: record.classname, by: record.killedBy, hits: record.hits, health: health });
+        this.note("the game says " + record.classname + " (#" + monster.number + ") is DEAD: its own health is " + health);
+      }
+    }
   }
 
   // ---- perception helpers -------------------------------------------------
@@ -771,6 +1033,25 @@ export class PlayLoop {
     if (!(ratio > 0.05 && ratio < 20)) return;
     this.turnScale = Math.max(0.1, Math.min(8, this.turnScale * (0.5 + 0.5 / ratio)));
     this.turnSamples += 1;
+  }
+
+  // The same fold-back for the pitch axis, and for the same reason: `m_pitch`
+  // is 0.022 on this box's config and the number of degrees a mouse count
+  // actually moves the view is not that -- it is whatever the engine's
+  // sensitivity works out to, and this build will not report it. Pitch is
+  // measured exactly as yaw is: ask for a correction, read what the pitch did,
+  // fold the ratio in. The error is a plain difference and not a `shortestTurn`
+  // -- the pitch is clamped to +/-90 and does not wrap.
+  #learnPitch(pitch) {
+    const pending = this.pendingPitch;
+    this.pendingPitch = null;
+    if (!pending || Math.abs(pending.requested) < 3) return;
+    const achieved = pitch - pending.pitch;
+    if (Math.abs(achieved) < 0.5) return;
+    const ratio = achieved / pending.requested;
+    if (!(ratio > 0.05 && ratio < 20)) return;
+    this.pitchScale = Math.max(0.1, Math.min(8, this.pitchScale * (0.5 + 0.5 / ratio)));
+    this.pitchSamples += 1;
   }
 
   // What identifies a monster in the records this loop keeps.
@@ -862,12 +1143,26 @@ export class PlayLoop {
   #measureBolts(entities) {
     const now = Date.now();
     const inTheAir = [];
+    let modelOnly = 0;
     for (const entity of entities) {
       if (!entity) continue;
       if (entity.modelindex !== this.options.boltModel) continue;
       if (entity.solid === MONSTER_SOLID) continue; // a monster, not a bolt
+      // ...and the EFFECT, which the model index alone does not carry. This is
+      // the third condition of the definition above and it was missing, and its
+      // absence was measured: demo1 has twelve static entities carrying model
+      // index 45 with `effects` 0 at fixed positions -- the level's own props,
+      // not one bolt -- so "a bolt in the air" was true on 700 of 700 ticks and
+      // the bolt's speed, which needs the same entity seen moving on two
+      // consecutive ticks, was never once measured. A reading that is true on
+      // every frame is not a firing rate; it is a mis-identification, and the
+      // count of what was rejected is reported next to the count of what was
+      // kept so the two can never be confused again.
+      if (!((entity.effects & EF_BLASTER) === EF_BLASTER)) { modelOnly += 1; continue; }
       inTheAir.push(entity);
     }
+    this.boltModelOnly = Math.max(this.boltModelOnly || 0, modelOnly);
+    this.boltModelOnlyTotal = (this.boltModelOnlyTotal || 0) + modelOnly;
     // How many bolts are in the air at once, which is the only direct evidence
     // that pulling the trigger did anything: a bolt is an entity of its own,
     // and the live array is where it is.
@@ -933,11 +1228,18 @@ export class PlayLoop {
     return null;
   }
 
-  // A shot is only worth taking when the level's own geometry says a level shot
-  // from the player's eye reaches the target's body. The box the target's own
-  // live origin implies -- not the one the map placed.
+  // A shot is only worth taking when the level's own geometry says a shot from
+  // the player's eye reaches the target's body. The box the target's own live
+  // origin implies -- not the one the map placed.
+  //
+  // With the pitch axis on, the shot is the 3D segment from the eye to the
+  // target's own origin and the test is the same test in three dimensions
+  // (`beamReaches`); with it off, the shot is a level line at eye height and
+  // the original `levelShotReaches` is what answers, so `pitchAim: false` gives
+  // back exactly the old behaviour.
   #shotReaches(player, monster) {
-    return levelShotReaches(this.map, player, monster.position, {});
+    if (this.options.pitchAim === false) return levelShotReaches(this.map, player, monster.position, {});
+    return beamReaches(this.map, player, monster.position, {});
   }
 
   #isAlive(monster) {
@@ -1145,6 +1447,11 @@ export class PlayLoop {
 
   async #act(decision, percept, read) {
     const yaw = read.angles.yaw;
+    // What this tick's own corrections actually ask for, in degrees. The fire
+    // gate below is checked against these and not against a re-read, because
+    // the turns have already been sent by then and a second read would be
+    // another round trip inside the tick.
+    let appliedYaw = 0;
     // The turn: one mouse delta proportional to the error, clamped so the
     // controller cannot overshoot the target within a tick.
     if (decision.aim !== null && decision.aim !== undefined) {
@@ -1154,9 +1461,32 @@ export class PlayLoop {
         this.pendingTurn = { requested: step, yaw };
         try {
           await this.game.look(step * this.turnScale);
+          appliedYaw = step;
         } catch (error) {
           this.pendingTurn = null;
           this.note("the turn failed: " + error.message);
+        }
+      }
+    }
+    // The pitch: the same proportional correction on the mouse's other axis,
+    // driving the view at the target's own height. Without it the loop aimed a
+    // level shot and a target whose z it could not reach was a target it fired
+    // at anyway.
+    const pitch = read.angles.pitch;
+    let appliedPitch = 0;
+    let pitchError = null;
+    if (this.options.pitchAim !== false && decision.pitch !== null && decision.pitch !== undefined && typeof this.game.lookPitch === "function") {
+      pitchError = decision.pitch - pitch;
+      const step = Math.max(-this.options.maxPitchPerTick, Math.min(this.options.maxPitchPerTick, pitchError * this.options.pitchGain));
+      if (Math.abs(step) >= 0.05) {
+        this.pendingPitch = { requested: step, pitch };
+        try {
+          await this.game.lookPitch(step * this.pitchScale);
+          appliedPitch = step;
+        } catch (error) {
+          this.pendingPitch = null;
+          if (this.pitchFailures === 0) this.note("the pitch turn failed: " + error.message);
+          this.pitchFailures += 1;
         }
       }
     }
@@ -1166,11 +1496,25 @@ export class PlayLoop {
     let keys = [];
     if (decision.move !== null && decision.move !== undefined) keys = movementKeys(yaw, decision.move);
     await this.#hold(keys);
-    // The trigger: down only when a target is chosen, the aim has converged and
-    // the level says the shot reaches. `decision.fire` already carries the
-    // geometry test.
-    const aimError = decision.aim === null || decision.aim === undefined ? null : Math.abs(shortestTurn(decision.aim - yaw));
-    const wantFire = decision.fire === true && aimError !== null && aimError <= this.options.aimTolerance;
+    // The trigger: down only when a target is chosen, the aim has converged on
+    // BOTH axes and the level says the shot reaches. `decision.fire` already
+    // carries the geometry test.
+    //
+    // The error is measured against the aim the turns ABOVE have just achieved
+    // (`yaw + appliedYaw`), not against the yaw read at the top of the tick.
+    // That is not a nicety, it is the difference between firing and not: the
+    // controller's gain is 0.5, so each tick removes half the error, and a
+    // reading taken before the correction is always about twice the real one.
+    // Measured on the traced run before this fix: of 182 engagement ticks, 28
+    // had the trigger down, and in the ticks around them the aim error sat at
+    // 2.0 to 2.4 degrees -- inside the 1.6-degree gate after the turn that was
+    // already on its way, and outside it in the stale reading the gate was
+    // asked about.
+    const aimNow = yaw + appliedYaw;
+    const pitchNow = pitch + appliedPitch;
+    const aimError = decision.aim === null || decision.aim === undefined ? null : Math.abs(shortestTurn(decision.aim - aimNow));
+    const pitchReady = !(this.options.pitchAim !== false && pitchError !== null) || Math.abs(decision.pitch - pitchNow) <= this.options.pitchTolerance;
+    const wantFire = decision.fire === true && aimError !== null && aimError <= this.options.aimTolerance && pitchReady;
     // How long the trigger was down, counted between ticks rather than from the
     // press: counting from the press adds the whole engagement on every tick it
     // stays down, which reported 349 seconds of trigger-down inside a 270
@@ -1183,7 +1527,7 @@ export class PlayLoop {
       if (wantFire) this.shots += 1;
       if (typeof this.game.mouseHold === "function") await this.game.mouseHold("left", wantFire).catch(() => {});
     }
-    this.lastDecision = { ...decision, aimError };
+    this.lastDecision = { ...decision, aimError, pitchError };
   }
 
   async #hold(keys) {
@@ -1226,7 +1570,13 @@ export class PlayLoop {
       // harness is allowed; it puts the player on the spawn rather than at the
       // end of the corridor, which is a cost, not a cheat.
       this.note("the death camera would not let go; restarting the level", { deaths: this.deaths });
-      await this.game.command(["map " + (this.level || "demo1"), "cheats 0"], { tail: 8 }).catch(() => null);
+      // The cheats line that accompanies the restart is a lever, not a constant:
+      // a normal run restarts with `cheats 0` -- which is the default here and
+      // what every pass before this one sent -- and the iteration-mode run
+      // (control/fast.mjs) restarts with `cheats 1`, so its own restart cannot
+      // be the thing that ends iteration mode half way through. Nothing else
+      // reads the option, so the normal path is unchanged.
+      await this.game.command(["map " + (this.level || "demo1"), this.options.cheatsAfterRestart || "cheats 0"], { tail: 8 }).catch(() => null);
       await this.#sleep(2500);
       const again = await this.game.live().catch(() => null);
       if (again && again.read && again.read.ok && again.read.dead === false) alive = again.read;
@@ -1310,11 +1660,53 @@ export class PlayLoop {
       killsCount: this.kills.length,
       flinches: this.flinches,
       damageEvents: this.damageEvents,
+      // ---- the owner's second success condition --------------------------
+      //
+      // Enemies MET and enemies KILLED, both from the game DLL's own state.
+      // `killed` here is `met.edict.health <= 0`, never a landed turn; the
+      // frame-moved proxy that the passes before this one used is reported
+      // separately as `damageEvents` and is not what any of these numbers is
+      // built on.
+      enemies: {
+        met: this.met.size,
+        killed: [...this.met.values()].filter((record) => record.killed).length,
+        // Met and still standing is the number the owner's condition turns on:
+        // a finish with a soldier still standing is not success.
+        stillStanding: [...this.met.values()].filter((record) => !record.killed).length,
+        unreadableHealth: [...this.met.values()].filter((record) => record.healthFirst === null).length,
+        list: [...this.met.values()].map((record) => ({
+          number: record.number,
+          classname: record.classname,
+          metAt: record.distanceWhenMet,
+          healthFirst: record.healthFirst,
+          healthLowest: record.healthLowest,
+          hits: record.hits,
+          killed: record.killed,
+          killedBy: record.killedBy,
+          samples: record.samples,
+        })),
+      },
+      killedEvents: this.killEvents,
+      // Health the game itself says was taken off monsters, and how many times
+      // its number fell -- the direct replacement for the frame-moved proxy.
+      healthDamage: this.healthDamage,
+      healthDamageEvents: this.healthDamageEvents,
+      edictRead: {
+        ...this.edictRead,
+        playerEdict: this.playerEdictNumber,
+        crossCheck: this.healthCrossCheck,
+      },
+      edictHealth: this.edictHealth,
       hitRate: this.shots > 0
         ? {
             damageEventsPerPress: this.damageEvents / this.shots,
             damageEventsPerSecondOfTrigger: this.triggerMs > 0 ? this.damageEvents / (this.triggerMs / 1000) : null,
             killsPerPress: this.kills.length / this.shots,
+            // The real ones: presses that took health off a monster, and
+            // presses that killed one, both as the GAME reports them.
+            healthDropsPerPress: this.healthDamageEvents / this.shots,
+            gameKillsPerPress: this.killEvents.length / this.shots,
+            healthPerSecondOfTrigger: this.triggerMs > 0 ? this.healthDamage / (this.triggerMs / 1000) : null,
           }
         : null,
       monstersSeen: this.monstersSeen,
@@ -1325,7 +1717,16 @@ export class PlayLoop {
       deaths: this.deaths,
       errands: { asked: this.errands.map((errand) => ({ classname: errand.classname, call: errand.call, taken: errand.taken === true })), run: this.errandsRun },
       boltSpeed: { used: Math.round(this.boltSpeed), samples: this.boltSamples },
-      bolts: { maxInFlight: this.boltsInFlight || 0, framesWithABolt: this.boltFrames || 0 },
+      bolts: {
+        maxInFlight: this.boltsInFlight || 0,
+        framesWithABolt: this.boltFrames || 0,
+        // Model index 45 WITHOUT the blaster effect: the level's own props, at
+        // fixed positions. Kept apart from the bolts so a sensor that has
+        // stopped discriminating cannot read as a trigger that never stops
+        // firing.
+        rejectedModelIndexOnly: this.boltModelOnly || 0,
+        rejectedModelIndexOnlyTotal: this.boltModelOnlyTotal || 0,
+      },
       // Two rates, because they are two different numbers and only one of them
       // is what a reader means by "how fast is the loop".
       //
@@ -1345,6 +1746,13 @@ export class PlayLoop {
         wallClockHz: (Date.now() - started) > 0 ? Math.round((ticks / ((Date.now() - started) / 1000)) * 10) / 10 : null,
       },
       turnScale: { learned: Math.round(this.turnScale * 1000) / 1000, samples: this.turnSamples },
+      // The second axis, its own calibration, and whether the engine took it.
+      pitch: {
+        on: this.options.pitchAim !== false,
+        scale: Math.round(this.pitchScale * 1000) / 1000,
+        samples: this.pitchSamples,
+        failures: this.pitchFailures,
+      },
       trace: this.trace,
       entityIntegrity: this.entityIntegrity,
       levelChanged: this.levelChanged,

@@ -10,10 +10,12 @@
 
 import { loadMap, listMaps, RouteError } from "../control/route.mjs";
 import { RouteWalker, deepestReading } from "../control/walker.mjs";
-import { CombatWalker, threats, levelShotReaches, movementKeys, clearWalk } from "../control/combat.mjs";
+import { CombatWalker, threats, levelShotReaches, beamReaches, movementKeys, clearWalk } from "../control/combat.mjs";
+import { healthOf, liveOf } from "../control/edicts.mjs";
+import { leaveFastMode, fastRequest } from "../control/fast.mjs";
 import { loadDigits, readBar, decodePng } from "../control/hud.mjs";
 import { QuakeControl, turnIsBlocked } from "../control/bridge.mjs";
-import { bearingTo, shortestTurn, leadPoint, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
+import { bearingTo, shortestTurn, leadPoint, aimPitch, readMonsters, staticMonsters, rankTargets, decide, PLAY_DEFAULTS, MONSTER_MODELS, MONSTER_SOLID } from "../control/loop.mjs";
 import fs from "node:fs";
 
 let failures = 0;
@@ -994,6 +996,183 @@ check("a walk that has stopped is recovered, not advanced",
   decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).mode === "recover" &&
   decide({ ...base, recover: { bearing: 90, aim: 90, fire: true, reason: "STUCK_BUTTON" } }).aim === 90);
 check("no reading at all is not a reason to fire", decide(null).fire === false);
+
+// ---------------------------------------------------------------------------
+// The second aim axis, and the game DLL's edicts
+// ---------------------------------------------------------------------------
+// Both groups below are pure: the pitch aim is arithmetic, the beam test is the
+// level's own geometry, and `healthOf` is a mapping from a reading to a reading.
+// No browser and no game, which is why they are pinned here rather than only
+// measured live.
+
+console.log("");
+console.log("the second aim axis: pitch, in Quake 2's own sign");
+{
+  const eye = { x: 0, y: 0, z: 46 };
+  check("a target level with the eye is zero pitch", aimPitch(eye, { x: 100, y: 0, z: 46 }) === 0);
+  check("a target BELOW the eye is a POSITIVE pitch (Quake 2 looks down on positive)",
+    aimPitch(eye, { x: 100, y: 0, z: 0 }) > 0, aimPitch(eye, { x: 100, y: 0, z: 0 }));
+  check("a target ABOVE the eye is a NEGATIVE pitch",
+    aimPitch(eye, { x: 100, y: 0, z: 100 }) < 0, aimPitch(eye, { x: 100, y: 0, z: 100 }));
+  check("45 degrees down is -45 degrees of pitch",
+    Math.abs(aimPitch(eye, { x: 100, y: 0, z: 46 - 100 }) - 45) < 0.001, aimPitch(eye, { x: 100, y: 0, z: -54 }));
+  check("the angle is measured on the ground plane, not the straight line",
+    Math.abs(aimPitch({ x: 0, y: 0, z: 0 }, { x: 30, y: 40, z: 50 }) - (-45)) < 0.001);
+  check("a reading with no position has no pitch", aimPitch(eye, null) === null);
+
+  // The decision carries it, and the geometry control still works: with the
+  // axis off, `pitchAim: false` asks for no pitch at all -- exactly the old
+  // yaw-only behaviour.
+  const armed = { dead: false, health: 100, target: { bearing: 90, pitch: -5 }, targetClear: true, routeBearing: 0, retreatBearing: null, arrived: false, recover: null };
+  check("engaging carries the target's own pitch", decide(armed, {}).pitch === -5);
+  check("with the axis off, no pitch is asked for", decide(armed, { pitchAim: false }).pitch === null);
+  check("walking asks for a LEVEL view, so the walk does not drift up or down",
+    decide({ ...armed, target: null }, {}).pitch === 0);
+}
+
+console.log("");
+console.log("a shot at a point is the level's own geometry in three dimensions");
+{
+  // A stub map: solid only below z = 0, so a beam that goes UNDER the floor is
+  // blocked and one that stays above it is clear. This is the difference from
+  // `levelShotReaches`, which holds z at the eye's own height.
+  const map = { isSolid: (x, y, z) => z < 0 };
+  const eye = { x: 0, y: 0, z: 46 };
+  check("a beam to a point on the eye's own level is clear", beamReaches(map, eye, { x: 100, y: 0, z: 46 }) === true);
+  check("a beam that dives under the floor is blocked", beamReaches(map, eye, { x: 100, y: 0, z: -100 }) === false);
+  check("a beam to a point above the eye is clear", beamReaches(map, eye, { x: 100, y: 0, z: 200 }) === true);
+  check("a map with no geometry to ask has no wall to invent", beamReaches({}, eye, { x: 100, y: 0, z: -100 }) === true);
+  check("and a missing reading is never a reach", beamReaches(map, null, { x: 1, y: 0, z: 0 }) === false);
+}
+
+console.log("");
+console.log("the game DLL's edicts become a health, and never a guess");
+{
+  const monsters = [
+    { number: 2, position: { x: 0, y: 0, z: 0 } },
+    { number: 5, position: { x: 500, y: 0, z: 0 } },
+    { number: 9, position: { x: 900, y: 0, z: 0 } },
+  ];
+  const edicts = [
+    { number: 2, x: 0, y: 0, z: 0, health: 40, maxHealth: 40 },
+    // The same entity number, but standing 300 units from where the client says
+    // it is: a stale slot, and the reading is flagged rather than believed.
+    { number: 5, x: 800, y: 0, z: 0, health: 30, maxHealth: 30 },
+    // 9 is not in the edict array at all.
+  ];
+  const answer = healthOf(monsters, edicts);
+  check("a monster whose edict agrees gets the game's own health",
+    answer.monsters[0].health === 40 && answer.monsters[0].source === "game-edict", answer.monsters[0]);
+  check("a monster whose edict does NOT agree is flagged, not believed",
+    answer.monsters[1].source === "game-edict-origin-disagrees" && answer.monsters[1].originError === 300, answer.monsters[1]);
+  check("the counts say how many disagreed and how many could not be matched",
+    answer.disagreed === 1 && answer.unmatched === 1, answer);
+  check("a monster with no edict has NO health rather than a made-up zero",
+    answer.monsters[2].health === null && answer.monsters[2].source === "no-edict", answer.monsters[2]);
+  // `staticMonsters()` passes the level's own `enemy.position` through, and an
+  // entity lump whose origin will not parse gives `undefined`. This threw
+  // `TypeError: Cannot read properties of undefined (reading 'x')` out of a
+  // function whose whole job is to report what it could not read.
+  {
+    const blind = healthOf([{ number: 2, position: undefined }], [{ number: 2, x: 0, y: 0, z: 0, health: 30, maxHealth: 30 }]);
+    check("a monster handed over with no position at all is flagged, not a crash",
+      blind.monsters[0].source === "game-edict-origin-disagrees" && blind.monsters[0].originError === null && blind.disagreed === 1,
+      blind.monsters[0]);
+  }
+
+  check("health above zero is alive", liveOf({ number: 1, health: 30, maxHealth: 30 }).alive === true);
+  check("health at or below zero is dead -- the game's own state for it",
+    liveOf({ number: 1, health: 0, maxHealth: 30 }).dead === true &&
+    liveOf({ number: 1, health: -5, maxHealth: 30 }).dead === true);
+  check("no edict is not an opinion about whether something is dead", liveOf(null) === null);
+}
+
+// ---------------------------------------------------------------------------
+// Iteration mode leaves the game as it found it
+// ---------------------------------------------------------------------------
+// The one thing this mode must never do is hand the next run a game at the
+// wrong speed or with cheats on. Its restore is a console conversation, so it is
+// checked here against a stub engine rather than against the live one: no
+// browser, no game, and the stub answers exactly what Quake 2 answers.
+
+console.log("");
+console.log("iteration mode puts the engine back, and says so truthfully");
+{
+  // A stub whose `command` records every batch and answers with whatever the
+  // test wants the engine to have said.
+  const stub = (answers) => {
+    const calls = [];
+    return {
+      calls,
+      command: async (commands) => { calls.push(commands); return { output: answers(calls.length, commands), echoFound: true }; },
+    };
+  };
+  const cvarLines = (values) => Object.entries(values).map(([name, value]) => `"${name}" is "${value}"`);
+
+  // 1. The happy path: cheats go off and stay off without a reload.
+  {
+    const game = stub(() => cvarLines({ timescale: "1", cheats: "0", r_shadows: "0" }));
+    const state = { baseline: { r_shadows: "0", timescale: "2" }, cheat: true };
+    const left = await leaveFastMode(game, state, { level: "demo1" });
+    check("the multiplier goes back to 1, never to whatever the baseline read",
+      game.calls[0].includes("timescale 1") && !game.calls[0].includes("timescale 2"), game.calls[0]);
+    check("`cheats 0` is always sent, and read back",
+      game.calls[0].includes("cheats 0") && left.cheats === "0", left);
+    check("no reload is sent when cheats really did go off", game.calls.length === 1, game.calls);
+    check("a restore that worked is not reported as latched", left.latched === false);
+  }
+
+  // 2. The latch: the running game keeps cheats, so the level is reloaded -- and
+  //    the reload is READ BACK before any caller is told it worked. This is the
+  //    path that threw `numberOr is not defined` in the first version of this
+  //    module, before the wait, which is why it is pinned here.
+  {
+    const game = stub((call) => call === 1
+      ? cvarLines({ timescale: "1", cheats: "1" })
+      : cvarLines({ timescale: "1", cheats: "0" }));
+    const left = await leaveFastMode(game, { baseline: { timescale: "1" }, cheat: true }, { level: "demo1", settleMs: 1 });
+    // Three batches: the restore, the reload, and -- the one the first version
+    // of this module never reached, because it threw before the wait -- the
+    // read-back that decides whether the reload worked.
+    check("the latched case reloads the level", game.calls.length === 3 && game.calls[1].includes("map demo1"), game.calls);
+    check("and then READS the reload back, which is what the broken version never did",
+      game.calls.length === 3 && game.calls[2].includes("timescale") && game.calls[2].includes("cheats"), game.calls);
+    check("and the reload is what is reported, not the batch before it",
+      left.latched === true && left.relatched.ok === true && left.cheats === "0", left.relatched);
+  }
+
+  // 3. A reload that cannot be read back must NOT be reported as fixed.
+  {
+    const game = {
+      calls: [],
+      command: async (commands) => {
+        game.calls.push(commands);
+        if (game.calls.length === 1) return { output: cvarLines({ timescale: "1", cheats: "1" }), echoFound: true };
+        throw new Error("the engine went away");
+      },
+    };
+    const left = await leaveFastMode(game, { baseline: { timescale: "1" }, cheat: true }, { level: "demo1", settleMs: 1 });
+    check("a reload that failed is reported as unverified, not as a fix",
+      left.latched === true && left.relatched.ok === false && typeof left.relatched.error === "string", left.relatched);
+    check("and `cheats` is still reported as it was last READ -- 1, not 0",
+      left.cheats === "1", left.cheats);
+  }
+
+  // 4. What the run is allowed to call itself. A render-only iteration run
+  //    touches nothing the engine simulates, so it is a normal-speed walk; a run
+  //    whose simulation was multiplied is not.
+  {
+    check("timescale 1 is not a cheat, so its result counts",
+      fastRequest({ QUAKE2_FAST: "1", QUAKE2_FAST_TIMESCALE: "1" }, []).timescale === 1);
+    const request = fastRequest({}, ["play", "--fast", "--timescale", "5"]);
+    check("`--timescale 5` turns the mode on and asks for 5", request.on === true && request.timescale === 5, request);
+    check("no flag and no env is the normal path", fastRequest({}, ["play"]).on === false);
+    check("`QUAKE2_FAST_TIMESCALE` alone does not turn cheats on",
+      fastRequest({ QUAKE2_FAST_TIMESCALE: "5" }, ["play"]).on === false);
+    check("the render half can be left off on its own",
+      fastRequest({ QUAKE2_FAST: "1", QUAKE2_FAST_RENDER: "0" }, []).render === false);
+  }
+}
 
 console.log("errors are named, never empty");
 let threw = null;
