@@ -208,13 +208,14 @@ export const PLAY_DEFAULTS = {
   //
   // Both are needed. The gain has to be below one or a controller whose
   // correction arrives a tick late oscillates around the target instead of
-  // settling on it. The scale is a measured property of the box: this build's
-  // mouse turns about 0.13 degrees per count where the bridge's documented
-  // default is 0.066, so a loop that asked for the error in degrees got almost
-  // exactly twice the turn it asked for -- measured, three 20-degree requests
-  // produced 0, 39.4 and 39.4 degrees. The loop therefore measures what its
-  // last turn actually achieved and folds it back in, and the aim converges to
-  // the tolerance however far the default is from the box.
+  // settling on it. The scale is a measured property of the box, and it is the
+  // loop's own fold-back that measures it: the bridge's default used to be
+  // 0.066 counts where this build's mouse turns 0.1302, so a loop that asked
+  // for its error in degrees got almost exactly twice the turn it asked for --
+  // measured, three 20-degree requests produced 0, 39.4 and 39.4 degrees -- and
+  // the scale settled at 0.506 to cancel it. The default is now the measured
+  // 0.1302 (see control/bridge.mjs), so the scale settles at 1.0 instead, and
+  // the fold-back is what is left to correct a box that differs.
   turnGain: 0.5,
   turnScale: 1,
   // ---- the second axis: pitch -------------------------------------------
@@ -943,7 +944,14 @@ export class PlayLoop {
         errand.closing = { since: tickStart, closest: distance };
       }
       const walkedOn = distance <= options.pickupRadius;
-      const collected = errand.seenPresent === true && present === false;
+      // "Collected" is the item's own record going away, and the player has to be
+      // where the item is for that to mean a pickup: the edict walk can miss a
+      // slot for one tick on its own (a save, a level transition, the buffer
+      // being re-taken), and a single absent reading must not be read as a gun
+      // taken into the hand. `missing` is the opposite case and is deliberately
+      // NOT gated on distance -- an item the level never spawned has to be
+      // recognised from wherever the walk happens to be standing.
+      const collected = errand.seenPresent === true && present === false && distance <= options.touchRadius;
       const missing = errand.seenPresent !== true && present === false;
       const gaveUp = errand.closing && tickStart - errand.closing.since >= options.errandWalkOnMs;
       if (walkedOn || collected || missing || gaveUp) {
@@ -961,7 +969,6 @@ export class PlayLoop {
         // it as "the gun the walk fetched" is the report claiming a weapon the
         // run did not have.
         if (taken.call === "weapon" && (walkedOn || collected) && !missing) this.#equip(taken);
-        else if (taken.call === "weapon" && missing) this.weaponMissing = (this.weaponMissing || 0) + 1;
         this.note("called at the level's own " + taken.classname, {
           call: taken.call, distance: Math.round(distance),
           touched: missing ? "not in the world: nothing to walk to"
@@ -1266,7 +1273,13 @@ export class PlayLoop {
       // for as long as it liked. The same reading on a run that kept moving was
       // 0 of 26,640. A monster the game DLL does not have is not a monster, and
       // the owner's condition is about monsters.
-      if (monster.source === "no-edict") {
+      // ...and only for a monster that came from the LIVE entity array, where
+      // the number is an entity number. A monster from the level's static list
+      // is numbered by its place in that list, so "no edict" says nothing about
+      // it -- and dropping those would empty the fallback list on the one day
+      // it exists for: the live read failing. See `entitySource` in
+      // control/edicts.mjs.
+      if (monster.source === "no-edict" && monster.entitySource !== "map-entity-lump") {
         this.edictRead.dropped = (this.edictRead.dropped || 0) + 1;
         continue;
       }
@@ -1378,10 +1391,13 @@ export class PlayLoop {
         this.healthDamageEvents += 1;
         // Every drop's own size, kept as a series and not just a total. The
         // size of a hit is the game's own fingerprint of the weapon that dealt
-        // it -- a blaster bolt is a flat 10, a super shotgun's pellets are 6
-        // each -- so this list is what answers "which gun is really in hand"
-        // from the game's own numbers rather than from the loop's belief about
-        // the key it pressed.
+        // it, and it is the only answer to "which gun is really in hand" that
+        // does not rest on the loop's belief about the key it pressed: measured
+        // on a whole run, every drop a blaster bolt landed was a flat 10, and a
+        // gun that fires anything else cannot produce that series. No other
+        // weapon's per-hit number is written down here, because none of them
+        // has been measured on this box -- the level's own super shotgun turned
+        // out not to be in the level at all (see the README).
         this.dropSizes.push(record.lastDrop);
         if (this.dropSizes.length > 4000) this.dropSizes.shift();
         if (record.samples <= 3 || record.hits <= 3) {
@@ -1775,7 +1791,18 @@ export class PlayLoop {
     let current = null;
     if (this.hunt) {
       const held = monsters.find((monster) => this.#key(monster) === this.hunt.key);
-      if (held && held.position && this.#isAlive(held)) {
+      // Why the detour ended, recorded for the log, and it has to be the real
+      // reason. These two arms used to be missing: a hunt whose target was
+      // KILLED -- the outcome the hunt exists for -- left `why` null and the
+      // note fell through to "the detour was over". Measured on the run that
+      // made this worth fixing: two hunts on the same soldier, both recorded
+      // with the same `closest` of 313 units, both labelled that way, and the
+      // soldier was killed in one of them.
+      if (!held || !held.position) {
+        this.hunt.why = "it stopped being sent by the engine";
+      } else if (!this.#isAlive(held)) {
+        this.hunt.why = "killed";
+      } else {
         if (finite(held.health) && finite(this.hunt.health) && held.health < this.hunt.health) {
           this.hunt.since = tickStart;
           this.hunt.health = held.health;
@@ -1810,10 +1837,9 @@ export class PlayLoop {
           this.hunt.progressAt = tickStart;
         }
         const stalled = tickStart - this.hunt.progressAt >= this.options.huntProgressMs;
-        this.hunt.why = !this.#isAlive(held) ? "killed"
-          : distance > range ? "it left the hunt range"
-            : stalled ? "the walk stopped moving (no " + this.options.huntProgressUnits + " units in " + this.options.huntProgressMs + " ms)"
-              : tickStart - this.hunt.since >= this.options.huntGiveUpMs ? "the clock ran out" : null;
+        this.hunt.why = distance > range ? "it left the hunt range"
+          : stalled ? "the walk stopped moving (no " + this.options.huntProgressUnits + " units in " + this.options.huntProgressMs + " ms)"
+            : tickStart - this.hunt.since >= this.options.huntGiveUpMs ? "the clock ran out" : null;
         if (distance <= range && !stalled && tickStart - this.hunt.since < this.options.huntGiveUpMs) current = { ...held, distance };
       }
     }
