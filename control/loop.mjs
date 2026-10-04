@@ -1571,10 +1571,11 @@ export class PlayLoop {
       // end of the corridor, which is a cost, not a cheat.
       this.note("the death camera would not let go; restarting the level", { deaths: this.deaths });
       // The cheats line that accompanies the restart is a lever, not a constant:
-      // a normal run restarts with `cheats 0`, and the iteration-mode run
-      // (control/fast.mjs) restarts with `cheats 1` so the timescale it had
-      // turned on does not get switched off by its own level restart half way
-      // through. Nothing else reads it, so the normal path is unchanged.
+      // a normal run restarts with `cheats 0` -- which is the default here and
+      // what every pass before this one sent -- and the iteration-mode run
+      // (control/fast.mjs) restarts with `cheats 1`, so its own restart cannot
+      // be the thing that ends iteration mode half way through. Nothing else
+      // reads the option, so the normal path is unchanged.
       await this.game.command(["map " + (this.level || "demo1"), this.options.cheatsAfterRestart || "cheats 0"], { tail: 8 }).catch(() => null);
       await this.#sleep(2500);
       const again = await this.game.live().catch(() => null);

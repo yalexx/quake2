@@ -322,9 +322,22 @@ export async function leaveFastMode(game, state = {}, options = {}) {
   let relatched = null;
   if (cheats !== null && cheats !== "0") {
     const level = options.level || state.level || "demo1";
+    // The settle time is computed here rather than through a shared helper:
+    // `numberOr` exists privately in bridge.mjs, combat.mjs and route.mjs and is
+    // exported by none of them, and calling it from this module is exactly what
+    // the first version of this branch did. The failure is worth writing down
+    // because of where it threw -- `numberOr is not defined` was raised while
+    // BUILDING the arguments to `setTimeout`, so the wait never happened, the
+    // read-back that would have caught it never ran, and the catch turned the
+    // whole thing into `latched: true`, which the driver printed as "had to be
+    // latched by reloading demo1". The reload had been sent; nothing had checked
+    // that it worked. scripts/route-test.mjs pins this path against a stub so it
+    // cannot silently break again.
+    const settleMs = Number(options.settleMs);
+    const waitMs = Number.isFinite(settleMs) ? Math.max(0, settleMs) : 2500;
     try {
       await game.command(["cheats 0", "map " + level], { tail: 10 });
-      await new Promise((resolve) => setTimeout(resolve, numberOr(options.settleMs, 2500)));
+      await new Promise((resolve) => setTimeout(resolve, waitMs));
       const again = await game.command(["timescale", "cheats"], { tail: 8 });
       const againLines = again.output || [];
       let t2 = null;
@@ -335,11 +348,13 @@ export async function leaveFastMode(game, state = {}, options = {}) {
         if (match[1] === "timescale") t2 = match[2];
         if (match[1] === "cheats") c2 = match[2];
       }
-      relatched = { level, timescale: t2, cheats: c2, lines: againLines };
+      // `ok` says whether the reload was READ BACK, not merely sent. A caller
+      // must not report a latch as fixed on the strength of having asked.
+      relatched = { level, timescale: t2, cheats: c2, lines: againLines, ok: true };
       timescale = t2 === null ? timescale : t2;
       cheats = c2 === null ? cheats : c2;
     } catch (error) {
-      relatched = { level, error: error.message };
+      relatched = { level, ok: false, error: error.message };
     }
   }
   return { restored: restore, timescale, cheats, timescaleFound: found, latched: relatched !== null, relatched, lines, echoFound: answer.echoFound === true };
