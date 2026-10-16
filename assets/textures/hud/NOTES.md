@@ -116,11 +116,25 @@ generation (`pics_menu_panel.png`) is the one the menu panel uses.
 
 ## A note for whoever runs the final check
 
-`scripts/tex-check.mjs` reports this folder's 15 PNGs as "art no entry claims".
-That is correct and harmless: no manifest entry points here, because these are
-the source art, and the per-entry pictures are in `assets/textures/pics/` and
-`assets/textures/sprites/`. `scripts/texture-pack.mjs` ignores anything that is
-not an entry's own art path, so nothing here is packed. The run summary of record
-is `node scripts/tex-check.mjs`: **101 with art, 0 the wrong size, 0 unreadable**,
-and `node scripts/texture-pack.mjs --dry-run`: **101 packed, 0 identical to the
-original, 0 failed**.
+`scripts/tex-check.mjs` no longer reports this folder's 15 PNGs as "art no entry
+claims", and it should not: no manifest entry points here, because these are the
+source art, and the per-entry pictures derived from them are in
+`assets/textures/pics/` and `assets/textures/sprites/`. A folder of source art is
+declared as such in `scripts/texture-lib.mjs` (`SOURCE_ART_DIRS`, which names this
+one, `assets/textures/map/` and `assets/textures/model/`, each documented by the
+NOTES.md it holds); the checker counts and lists those pictures separately, and
+still reports anything else under the art directory that no entry claims. The
+check was made while writing it: with a stray PNG copied into
+`assets/textures/`, `tex-check.mjs` says `1 unclaimed: assets/textures/zzz-stray-test.png`;
+with it removed, `0 unclaimed, 15 source picture(s)`.
+`scripts/texture-pack.mjs` ignores anything that is not an entry's own art path,
+so nothing here is ever packed.
+
+The wiring itself was re-checked before the final pack:
+`node scripts/hud-art.mjs --dry-run` reports **101 targets, 0 rewritten, 101
+already up to date, 0 failed** -- the 101 shipped HUD, menu and sprite pictures
+are exactly what this folder's sources derive. The archive-wide summary of record
+is `node scripts/tex-check.mjs`: **475 with art, 128 without, 0 the wrong size, 0
+unreadable, 0 unclaimed**, and `node scripts/texture-pack.mjs --dry-run`: **475
+packed, 0 failed, nothing written** (this namespace is 101 of the 475, and 0 of
+the 128).

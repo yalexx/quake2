@@ -151,7 +151,12 @@ function main(argv) {
   let artTargets = 0;
 
   for (const entry of manifest.entries) {
-    if (options.only.length && !options.only.some((text) => entry.name.toLowerCase().includes(text))) continue;
+    if (options.only.length && !options.only.some((text) => entry.name.toLowerCase().includes(text))) {
+      // Not checked this run, but its art is still claimed: an --only run must
+      // not report every other task's pictures as art no entry claims.
+      if (entry.png) claimed.add(path.resolve(artFileFor(entry, options.art)));
+      continue;
+    }
     const type = byType.get(entry.type) ?? { entries: 0, withArt: 0 };
     type.entries++;
     byType.set(entry.type, type);
