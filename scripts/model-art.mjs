@@ -58,6 +58,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RAW_DIR = path.join(PROJECT_ROOT, "assets", "textures", "model");
 const NOTES_FILE = path.join(RAW_DIR, "NOTES.md");
 
+// The palette index the engine draws a skin's cut-out with. Art for a skin must
+// carry it exactly where the original did and must not invent it anywhere else,
+// which is why the dither below is not allowed to choose it as a nearest colour.
+const TRANSPARENT_INDEX = 255;
+
 const USAGE = `model-art.mjs -- the model, weapon, item and monster skin pipeline
 
   --list                 print the worklist in priority order
@@ -456,6 +461,41 @@ function clampByte(value) {
   if (value < 0) return 0;
   if (value > 255) return 255;
   return Math.round(value);
+}
+
+// Put the entry's own cut-out back, after the snap.
+//
+// `palettise` is handed the transparent index among its excluded colours, so the
+// dither can never *choose* it: a mid-brown pixel whose nearest palette entry
+// happens to be the transparent colour would otherwise punch a see-through hole
+// in a skin the original had opaque. Excluding it means the pixels the original
+// really did leave transparent now need setting explicitly -- that is this pass,
+// and it is the second half of the same rule `texture-pack.mjs` applies when it
+// keeps the original pixel under transparent art.
+//
+// measured: returns how many pixels were the original's cut-out, and how many
+// pixels of the finished art carry the transparent colour where the original had
+// something else. The caller reports both, so "the silhouette survived" is a
+// number in the run rather than a claim in a comment.
+export function restoreCutout(rgb, originalIndices, palette768) {
+  const at = TRANSPARENT_INDEX * 3;
+  const r = palette768[at];
+  const g = palette768[at + 1];
+  const b = palette768[at + 2];
+  let cutout = 0;
+  let invented = 0;
+  for (let pixel = 0; pixel < originalIndices.length; pixel++) {
+    const wasCutout = originalIndices[pixel] === TRANSPARENT_INDEX;
+    if (wasCutout) {
+      rgb[pixel * 3] = r;
+      rgb[pixel * 3 + 1] = g;
+      rgb[pixel * 3 + 2] = b;
+      cutout++;
+      continue;
+    }
+    if (rgb[pixel * 3] === r && rgb[pixel * 3 + 1] === g && rgb[pixel * 3 + 2] === b) invented++;
+  }
+  return { cutout, invented };
 }
 
 // ---------------------------------------------------------------------------
@@ -1017,13 +1057,25 @@ function main(argv) {
         family: familyOf(item.entry.name),
         name: item.entry.name,
       });
-      const snapped = palettise(refreshed.rgb, item.entry.width, item.entry.height, palette.palette);
+      // The transparent index is kept out of the colours the dither may pick (a
+      // hole invented in an opaque skin is not a refresh), and the entry's real
+      // cut-out is then set to that index's colour, which is what the packer
+      // re-indexes back to 255.
+      const snapped = palettise(refreshed.rgb, item.entry.width, item.entry.height, palette.palette, { exclude: [TRANSPARENT_INDEX] });
+      const cutout = restoreCutout(snapped.rgb, original, palette.palette);
+      // What the packer will make of that colour: if the palette carries the
+      // transparent colour at an earlier index too, the cut-out would re-index to
+      // that one instead, and the entry must say so rather than ship a hole.
+      const keyMapsBackTo = paletteMapper(palette.palette)(palette.palette[TRANSPARENT_INDEX * 3], palette.palette[TRANSPARENT_INDEX * 3 + 1], palette.palette[TRANSPARENT_INDEX * 3 + 2]) === TRANSPARENT_INDEX;
       const target = artPathFor(item.entry);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, encodePngRgb(item.entry.width, item.entry.height, snapped.rgb));
       rebuilt++;
       const family = byFamily.get(refreshed.family) ?? { count: 0, change: 0, error: 0, hue: 0, worstHue: 0, worstName: "", flatter: 0 };
       family.count++;
+      family.cutout = (family.cutout ?? 0) + cutout.cutout;
+      family.invented = (family.invented ?? 0) + cutout.invented;
+      if (!keyMapsBackTo) family.keyUnsafe = (family.keyUnsafe ?? 0) + 1;
       family.change += refreshed.meanChange;
       family.error += snapped.meanError;
       family.hue += refreshed.meanHueShift;
@@ -1057,6 +1109,18 @@ function main(argv) {
           "  luminance spread " + (stats.contrastBefore / stats.count).toFixed(1) + " -> " + (stats.contrastAfter / stats.count).toFixed(1) +
           "  r " + (stats.correlation / stats.count).toFixed(3) + " (weakest " + (stats.weakest ?? 1).toFixed(3) + " " + (stats.weakestName ?? "-") + ")" +
           (stats.flatter ? "  FLATTER THAN THE ORIGINAL: " + stats.flatter : "") + "\n"
+      );
+    }
+    {
+      // The silhouette rule, measured over the whole set: how many pixels the
+      // originals left transparent, and how many holes the finished art invents.
+      const totals = [...byFamily.values()].reduce(
+        (sum, stats) => ({ cutout: sum.cutout + (stats.cutout ?? 0), invented: sum.invented + (stats.invented ?? 0), keyUnsafe: sum.keyUnsafe + (stats.keyUnsafe ?? 0) }),
+        { cutout: 0, invented: 0, keyUnsafe: 0 }
+      );
+      process.stdout.write(
+        "  silhouette  cut-out pixels kept: " + totals.cutout + " (they re-index to index " + TRANSPARENT_INDEX + "); invented by the dither: " + totals.invented +
+          (totals.keyUnsafe ? "; ENTRIES WHOSE PALETTE MAKES THE CUT-OUT AMBIGUOUS: " + totals.keyUnsafe : "") + "\n"
       );
     }
     return 0;
