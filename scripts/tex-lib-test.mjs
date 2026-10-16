@@ -81,18 +81,28 @@ check("a custom art directory carries the rule with it", isSourceArt(path.join(o
 // The declaration is only worth having if it stays tied to its record: a folder
 // declared here is claiming "this is source art, and here is why", so each one
 // has to be a folder that exists and holds the NOTES.md that says so.
+// Takes the folder's own path: the probe below lives outside the art directory,
+// and path.join does not reset on an absolute second argument (path.resolve
+// does), so a version of this that took a bare name would quietly check
+// <art dir>/<tmp path> and report a folder as undocumented whatever it held.
+const documented = (folderPath) => fs.existsSync(path.join(folderPath, "NOTES.md"));
 check(
   "every declared source folder is there and holds its NOTES.md",
-  SOURCE_ART_DIRS.every((folder) => fs.existsSync(path.join(ART_DIR, folder, "NOTES.md"))),
-  SOURCE_ART_DIRS.filter((folder) => !fs.existsSync(path.join(ART_DIR, folder, "NOTES.md"))).join(", ")
+  SOURCE_ART_DIRS.every((folder) => documented(path.join(ART_DIR, folder))),
+  SOURCE_ART_DIRS.filter((folder) => !documented(path.join(ART_DIR, folder))).join(", ")
 );
-// ...and that the check can fail: a folder of art that documents nothing must not
-// satisfy it, or it is asserting nothing.
-check(
-  "which is a check that can fail",
-  !fs.existsSync(path.join(ART_DIR, "pics", "NOTES.md")) && !fs.existsSync(path.join(ART_DIR, "textures", "NOTES.md")),
-  "an art folder that documents nothing was found"
-);
+// ...and that the check can fail, or it is asserting nothing. Probed on a folder
+// made here for the purpose: naming a real folder of the project that happens to
+// hold no NOTES.md today would make this test fail the day somebody documents it,
+// which is a documentation change and none of this code's business.
+{
+  const undocumented = fs.mkdtempSync(path.join(os.tmpdir(), "tex-lib-notes-"));
+  try {
+    check("which is a check that can fail", !documented(undocumented), undocumented + " counted as documented");
+  } finally {
+    fs.rmSync(undocumented, { recursive: true, force: true });
+  }
+}
 check(
   "and the declaration is the three folders the docs name",
   JSON.stringify([...SOURCE_ART_DIRS].sort()) === JSON.stringify(["hud", "map", "model"]),
