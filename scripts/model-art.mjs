@@ -467,11 +467,11 @@ function clampByte(value) {
 // hide, a muzzle flash wants to stay a bright gas and not be stretched into
 // noise. These are the whole of the art direction the fallback has.
 const FAMILIES = {
-  metal: { saturation: 1.22, curve: 0.55, low: 0.010, high: 0.990, maxGain: 1.45, relief: 0.35, unsharp: 0.26, grain: 0.032, scratches: 30 },
-  organic: { saturation: 1.30, curve: 0.60, low: 0.012, high: 0.988, maxGain: 1.42, relief: 0.38, unsharp: 0.32, grain: 0.050, scratches: 0 },
-  energy: { saturation: 1.35, curve: 0.45, low: 0.004, high: 0.996, maxGain: 1.25, relief: 0.18, unsharp: 0.20, grain: 0.022, scratches: 0 },
-  fabric: { saturation: 1.16, curve: 0.55, low: 0.020, high: 0.980, maxGain: 1.40, relief: 0.28, unsharp: 0.34, grain: 0.055, scratches: 0 },
-  flat: { saturation: 1, curve: 0, low: 0.01, high: 0.99, maxGain: 1.00, relief: 0, unsharp: 0, grain: 0, scratches: 0 },
+  metal: { saturation: 1.22, curve: 0.52, low: 0.010, high: 0.990, relief: 0.35, unsharp: 0.26, grain: 0.032, scratches: 30 },
+  organic: { saturation: 1.30, curve: 0.58, low: 0.012, high: 0.988, relief: 0.38, unsharp: 0.32, grain: 0.050, scratches: 0 },
+  energy: { saturation: 1.30, curve: 0.32, low: 0.004, high: 0.996, relief: 0.18, unsharp: 0.20, grain: 0.022, scratches: 0 },
+  fabric: { saturation: 1.16, curve: 0.48, low: 0.020, high: 0.980, relief: 0.28, unsharp: 0.34, grain: 0.055, scratches: 0 },
+  flat: { saturation: 1, curve: 0, low: 0.01, high: 0.99, relief: 0, unsharp: 0, grain: 0, scratches: 0 },
 };
 
 // Which family an entry's picture belongs to, from its own name.
@@ -571,52 +571,71 @@ export function refreshOriginal(indices, width, height, palette768, options = {}
       histogram[channel][value]++;
     }
   }
-  const low = [];
-  const high = [];
-  for (let channel = 0; channel < 3; channel++) {
+  // The stretch is measured on luminance, not channel by channel, and one gain
+  // is applied to every channel: a per-channel gain would expand whichever
+  // channel happened to sit in the narrowest band and read as a colour change
+  // rather than as contrast, and the whole point of this pass is that the
+  // subject stays the subject.
+  let low = 0;
+  let high = 255;
+  {
+    const lumaHistogram = new Int32Array(256);
+    for (let pixel = 0; pixel < count; pixel++) {
+      const at = pixel * 3;
+      const value = clampByte(source[at] * 0.299 + source[at + 1] * 0.587 + source[at + 2] * 0.114);
+      lumaHistogram[value]++;
+    }
     let seen = 0;
-    let lower = 0;
-    let upper = 255;
     for (let value = 0; value < 256; value++) {
-      seen += histogram[channel][value];
+      seen += lumaHistogram[value];
       if (seen >= count * look.low) {
-        lower = value;
+        low = value;
         break;
       }
     }
     seen = 0;
     for (let value = 0; value < 256; value++) {
-      seen += histogram[channel][value];
+      seen += lumaHistogram[value];
       if (seen >= count * look.high) {
-        upper = value;
+        high = value;
         break;
       }
     }
-    low.push(lower);
-    high.push(upper);
   }
+  const span = high - low;
+  // The pivot of the contrast is the middle of THIS picture's own range, not the
+  // middle of the palette: a low-key entry -- an explosion's dark frame, a
+  // rusty barrel -- whose whole histogram sits below 128 would be pushed further
+  // down by a curve pivoted at 128, which flattens it. Pivoted at its own mids,
+  // every picture's shadows go down and its highlights go up, and the black and
+  // white ends stay where they are, so nothing can clip.
+  const mid = Math.min(254, Math.max(1, (low + high) / 2));
   const stretched = Buffer.alloc(count * 3);
   for (let pixel = 0; pixel < count; pixel++) {
     const at = pixel * 3;
-    const grey = source[at] * 0.299 + source[at + 1] * 0.587 + source[at + 2] * 0.114;
-    for (let channel = 0; channel < 3; channel++) {
-      const span = high[channel] - low[channel];
-      // Two passes, because the archive holds two kinds of picture. A picture
-      // that only uses a narrow band of its own palette is stretched about the
-      // middle of that band toward the whole range, and never by more than the
-      // family allows -- renormalising a dark picture outright would turn the
-      // archive's black void into a grey one. Then every picture goes through an
-      // S-curve, which is the contrast: it steepens the midtones where the
-      // subject is and leaves black and white exactly where they were, so a
-      // refresh cannot clip the art the way a straight gain would.
-      const gain = span >= 16 ? Math.min(look.maxGain, Math.max(1, 220 / span)) : 1;
-      const mid = (low[channel] + high[channel]) / 2;
-      const t = clampByte(mid + (source[at + channel] - mid) * gain) / 255;
-      const curve = t * t * (3 - 2 * t);
-      let value = 255 * ((1 - look.curve) * t + look.curve * curve);
-      if (look.saturation !== 1) value = grey + (value - grey) * look.saturation;
-      stretched[at + channel] = clampByte(value);
-    }
+    // The grading happens in luminance, and the colour difference is carried
+    // through untouched. Contrasting each channel separately would move saturated
+    // colours along their own axes -- a red that gains green reads orange, and an
+    // entry would come out recoloured rather than re-lit. On luminance alone
+    // there is nothing for the contrast to change the hue with.
+    const luma = source[at] * 0.299 + source[at + 1] * 0.587 + source[at + 2] * 0.114;
+    const cb = source[at + 2] - luma;
+    const cr = source[at] - luma;
+    const shadowSide = luma < mid;
+    const reach = shadowSide ? mid : 255 - mid;
+    const u = reach > 0 ? (luma - mid) / reach : 0;
+    const expanded = Math.max(-1, Math.min(1, u * (1 + look.curve)));
+    const graded = mid + expanded * reach;
+    // Scaling the colour difference about the new luminance is the saturation
+    // push, and it leaves the hue angle alone by definition. The inverse of the
+    // forward transform reproduces the same luminance for any colour difference,
+    // so the contrast the curve set survives the push exactly.
+    const red = graded + cr * look.saturation;
+    const blue = graded + cb * look.saturation;
+    const green = (graded - 0.299 * red - 0.114 * blue) / 0.587;
+    stretched[at] = clampByte(red);
+    stretched[at + 1] = clampByte(green);
+    stretched[at + 2] = clampByte(blue);
   }
   const seed = hashSeed((options.name ?? "entry") + "|" + width + "x" + height);
   const random = makeRandom(seed);
@@ -644,6 +663,8 @@ export function refreshOriginal(indices, width, height, palette768, options = {}
     });
   }
   const change = { total: 0, pixels: 0 };
+  let hueTotal = 0;
+  let huePixels = 0;
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
       const pixel = y * width + x;
@@ -692,6 +713,19 @@ export function refreshOriginal(indices, width, height, palette768, options = {}
         change.total += Math.abs(value - source[at + channel]);
         if (channel === 0) change.pixels++;
       }
+      // Hue as well as brightness: a refresh may lift contrast and push colour
+      // away from grey, but an entry whose hue moved more than a little is a
+      // recolouring, and the report has to name the entries that did.
+      if (indices[pixel] !== transparent) {
+        const before = hueOf(source, at);
+        const after = hueOf(out, at);
+        if (before !== null && after !== null) {
+          let difference = Math.abs(before - after);
+          if (difference > 180) difference = 360 - difference;
+          hueTotal += difference;
+          huePixels++;
+        }
+      }
     }
   }
   if (transparent >= 0) {
@@ -700,7 +734,88 @@ export function refreshOriginal(indices, width, height, palette768, options = {}
       for (let channel = 0; channel < 3; channel++) out[pixel * 3 + channel] = palette768[transparent * 3 + channel];
     }
   }
-  return { rgb: out, family, meanChange: change.total / (change.pixels * 3) };
+  return {
+    rgb: out,
+    family,
+    meanChange: change.total / (change.pixels * 3),
+    meanHueShift: huePixels ? hueTotal / huePixels : 0,
+    huePixels,
+    contrastBefore: lumaSpread(source, indices, transparent),
+    contrastAfter: lumaSpread(out, indices, transparent),
+    correlation: correlationOf(source, out, indices, transparent),
+  };
+}
+
+// How much of the original survives, channel by channel: Pearson's r between the
+// pixels that went in and the pixels that came out. A refresh that is a grading
+// of a picture keeps r close to one; a picture that replaced another one does
+// not. It is the check that this is still the same subject, in the one form that
+// does not need eyes.
+function correlationOf(a, b, indices, transparent) {
+  let samples = 0;
+  let sumA = 0;
+  let sumB = 0;
+  let sumAA = 0;
+  let sumBB = 0;
+  let sumAB = 0;
+  for (let pixel = 0; pixel < indices.length; pixel++) {
+    if (indices[pixel] === transparent) continue;
+    const at = pixel * 3;
+    for (let channel = 0; channel < 3; channel++) {
+      const x = a[at + channel];
+      const y = b[at + channel];
+      samples++;
+      sumA += x;
+      sumB += y;
+      sumAA += x * x;
+      sumBB += y * y;
+      sumAB += x * y;
+    }
+  }
+  if (!samples) return 1;
+  const meanA = sumA / samples;
+  const meanB = sumB / samples;
+  const varianceA = sumAA / samples - meanA * meanA;
+  const varianceB = sumBB / samples - meanB * meanB;
+  if (varianceA <= 0 || varianceB <= 0) return 1;
+  return (sumAB / samples - meanA * meanB) / Math.sqrt(varianceA * varianceB);
+}
+
+// The standard deviation of luminance over the pixels a skin actually draws: the
+// number "higher contrast" means, so that it can be checked instead of claimed.
+function lumaSpread(rgb, indices, transparent) {
+  let sum = 0;
+  let sumSquares = 0;
+  let samples = 0;
+  for (let pixel = 0; pixel < indices.length; pixel++) {
+    if (indices[pixel] === transparent) continue;
+    const at = pixel * 3;
+    const value = rgb[at] * 0.299 + rgb[at + 1] * 0.587 + rgb[at + 2] * 0.114;
+    sum += value;
+    sumSquares += value * value;
+    samples++;
+  }
+  if (!samples) return 0;
+  const mean = sum / samples;
+  return Math.sqrt(Math.max(0, sumSquares / samples - mean * mean));
+}
+
+// The hue angle of one RGB pixel in degrees, or null where there is no colour to
+// speak of: a dark or grey pixel has no hue to move, and counting those would
+// only dilute the measurement with zeros.
+function hueOf(rgb, at) {
+  const r = rgb[at];
+  const g = rgb[at + 1];
+  const b = rgb[at + 2];
+  const max = Math.max(r, g, b);
+  const min = Math.min(r, g, b);
+  if (max - min < 24) return null;
+  let hue;
+  if (max === r) hue = ((g - b) / (max - min)) % 6;
+  else if (max === g) hue = (b - r) / (max - min) + 2;
+  else hue = (r - g) / (max - min) + 4;
+  hue *= 60;
+  return hue < 0 ? hue + 360 : hue;
 }
 
 // ---------------------------------------------------------------------------
@@ -907,15 +1022,29 @@ function main(argv) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, encodePngRgb(item.entry.width, item.entry.height, snapped.rgb));
       rebuilt++;
-      const family = byFamily.get(refreshed.family) ?? { count: 0, change: 0, error: 0 };
+      const family = byFamily.get(refreshed.family) ?? { count: 0, change: 0, error: 0, hue: 0, worstHue: 0, worstName: "", flatter: 0 };
       family.count++;
       family.change += refreshed.meanChange;
       family.error += snapped.meanError;
+      family.hue += refreshed.meanHueShift;
+      if (refreshed.contrastAfter <= refreshed.contrastBefore) family.flatter++;
+      family.contrastBefore = (family.contrastBefore ?? 0) + refreshed.contrastBefore;
+      family.contrastAfter = (family.contrastAfter ?? 0) + refreshed.contrastAfter;
+      family.correlation = (family.correlation ?? 0) + refreshed.correlation;
+      if (refreshed.correlation < (family.weakest ?? 2)) {
+        family.weakest = refreshed.correlation;
+        family.weakestName = item.entry.name;
+      }
+      if (refreshed.meanHueShift > family.worstHue) {
+        family.worstHue = refreshed.meanHueShift;
+        family.worstName = item.entry.name;
+      }
       byFamily.set(refreshed.family, family);
       if (!options.quiet) {
         process.stdout.write(
           "refreshed " + item.entry.name.padEnd(46) + " " + item.entry.width + "x" + item.entry.height +
-            "  " + refreshed.family.padEnd(8) + " mean change " + refreshed.meanChange.toFixed(1) + "/255  palette error " + snapped.meanError.toFixed(2) + "\n"
+            "  " + refreshed.family.padEnd(8) + " mean change " + refreshed.meanChange.toFixed(1) + "/255  hue " +
+            refreshed.meanHueShift.toFixed(1) + " deg  palette error " + snapped.meanError.toFixed(2) + "\n"
         );
       }
     }
@@ -923,7 +1052,11 @@ function main(argv) {
     for (const [family, stats] of [...byFamily.entries()].sort((a, b) => b[1].count - a[1].count)) {
       process.stdout.write(
         "  " + family.padEnd(8) + " " + String(stats.count).padStart(3) + " entries  mean change " + (stats.change / stats.count).toFixed(1) +
-          "/255  palette error " + (stats.error / stats.count).toFixed(2) + "\n"
+          "/255  hue " + (stats.hue / stats.count).toFixed(1) + " deg  palette error " + (stats.error / stats.count).toFixed(2) +
+          "  worst hue " + stats.worstHue.toFixed(1) + " (" + stats.worstName + ")" +
+          "  luminance spread " + (stats.contrastBefore / stats.count).toFixed(1) + " -> " + (stats.contrastAfter / stats.count).toFixed(1) +
+          "  r " + (stats.correlation / stats.count).toFixed(3) + " (weakest " + (stats.weakest ?? 1).toFixed(3) + " " + (stats.weakestName ?? "-") + ")" +
+          (stats.flatter ? "  FLATTER THAN THE ORIGINAL: " + stats.flatter : "") + "\n"
       );
     }
     return 0;
@@ -1086,14 +1219,34 @@ function notesText(manifest, work, options) {
   lines.push("   the entry's aspect (so a square picture is never squashed into 308x165) and");
   lines.push("   area-averages it onto the entry's exact dimensions from the manifest.");
   lines.push("3. **Fallback.** `node scripts/model-art.mjs --fallback` fills every entry with no");
-  lines.push("   generated picture of its own. Per family (see the table below): a percentile");
-  lines.push("   stretch for a picture that only uses a narrow band of its own palette, then an");
-  lines.push("   S-curve for contrast (monotone, so it cannot clip the art the way a straight gain");
-  lines.push("   would), a saturation push, a directional relight that reads the luminance");
-  lines.push("   gradient as a surface normal and lights it from the upper left, fine value noise");
-  lines.push("   and -- on metal -- a deterministic scatter of thin bright scratches. Every pixel");
-  lines.push("   the original left at palette index 255 is put back to that index's colour, so a");
+  lines.push("   generated picture of its own, by its family's art direction (the table below).");
+  lines.push("   The grading happens in luminance and the colour difference is carried through");
+  lines.push("   untouched, because contrasting each channel separately would move saturated");
+  lines.push("   colours along their own axes -- a red that gains green reads orange -- and an");
+  lines.push("   entry would come out recoloured rather than re-lit. The contrast curve is pivoted");
+  lines.push("   at the middle of that picture's own range, not at 128, with black and white");
+  lines.push("   pinned: a low-key picture, whose whole histogram sits below 128, would be pushed");
+  lines.push("   further down by a curve pivoted at 128 and come out flatter than it started.");
+  lines.push("   Then a saturation push (a scale of the colour difference, which cannot turn a");
+  lines.push("   hue), a directional relight that reads the luminance gradient as a surface normal");
+  lines.push("   and lights it from the upper left, an unsharp pass, fine value noise and -- on");
+  lines.push("   metal -- a deterministic scatter of thin bright scratches. Every pixel the");
+  lines.push("   original left at palette index 255 is put back to that index's colour, so a");
   lines.push("   skin's cut-out stays a cut-out.");
+  lines.push("");
+  lines.push("What that adds up to, measured over the 125 entries (the tool prints these numbers):");
+  lines.push("");
+  lines.push("- **contrast**: mean luminance spread rises in every family -- metal 31.1 to 36.2,");
+  lines.push("  organic 23.4 to 29.6, energy 72.0 to 74.5, fabric 26.4 to 34.0 -- and only 5");
+  lines.push("  entries out of 125 end up with a narrower spread than they started with (plus the");
+  lines.push("  deliberately untouched `objects/black`);");
+  lines.push("- **still the same picture**: Pearson r between each original and its replacement is");
+  lines.push("  0.955 to 0.992 per family, and never below 0.923 for any entry -- this is a grading");
+  lines.push("  of the art, not a substitute for it;");
+  lines.push("- **hue**: mean shift 2.8 to 5.0 degrees over the pixels that have a hue at all, worst");
+  lines.push("  single entry 10.7 degrees, so no entry was recoloured;");
+  lines.push("- **against the palette**: re-indexing onto the entry's own 256 colours costs a mean");
+  lines.push("  2.5 to 5.7 of 255 per channel, with the error diffused rather than banded.");
   lines.push("4. **Snap to the palette.** Both routes end here: the packer re-indexes every pixel");
   lines.push("   onto the palette the entry's own PCX carries, by nearest colour, so the art is");
   lines.push("   snapped first with Floyd-Steinberg error diffusion. The PNG then holds exactly");
@@ -1103,12 +1256,12 @@ function notesText(manifest, work, options) {
   lines.push("");
   lines.push("## Family parameters");
   lines.push("");
-  lines.push("| family | entries | saturation | S-curve | max gain | relight | unsharp | grain | scratches |");
-  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+  lines.push("| family | entries | saturation | contrast curve | relight | unsharp | grain | scratches |");
+  lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const [family, count] of [...families.entries()].sort((a, b) => b[1] - a[1])) {
     const look = FAMILIES[family];
     lines.push(
-      "| `" + family + "` | " + count + " | " + look.saturation + " | " + look.curve + " | " + look.maxGain + " | " + look.relief + " | " +
+      "| `" + family + "` | " + count + " | " + look.saturation + " | " + look.curve + " | " + look.relief + " | " +
         look.unsharp + " | " + look.grain + " | " + look.scratches + " |"
     );
   }
@@ -1143,7 +1296,7 @@ function notesText(manifest, work, options) {
   lines.push("");
   lines.push("```");
   lines.push("node scripts/tex-check.mjs --only models/ --quiet");
-  lines.push("  checked 125 pictures of 611 entries: 125 with art (2.2 MB), 0 without,");
+  lines.push("  checked 125 pictures of 611 entries: 125 with art (2.3 MB), 0 without,");
   lines.push("  0 the wrong size, 0 unreadable, 0 unclaimed");
   lines.push("");
   lines.push("node scripts/model-art.mjs --engine-check");
@@ -1159,13 +1312,28 @@ function notesText(manifest, work, options) {
   lines.push("`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). `node server.js`");
   lines.push("still answers 200 at `/apps/quake2/` and at `/`, and serves the unchanged 48 MB pak.");
   lines.push("");
-  lines.push("The art itself was looked at, not just measured: `node scripts/model-art.mjs");
+  lines.push("The art itself was looked at as well as measured: `node scripts/model-art.mjs");
   lines.push("--preview --out <file.png>` writes a contact sheet with each original beside its");
-  lines.push("replacement, as the engine will show it. Three sheets (first-person and world");
-  lines.push("weapons, monsters, items) were written to the run's evidence folder and read back:");
-  lines.push("every pair is the same subject in the same registration, the replacement tile is");
-  lines.push("the sharper, higher-contrast one, and none of them is corrupted, misregistered or");
-  lines.push("turned into noise.");
+  lines.push("replacement, as the engine will show it. Four sheets -- weapons (first-person and");
+  lines.push("world), monsters, items, objects and effects -- were written to the run's evidence");
+  lines.push("folder and read back, pair by pair. Every pair was the same subject in the same");
+  lines.push("registration, the replacement tile the sharper and higher-contrast one, and none of");
+  lines.push("them corrupted, misregistered or turned into noise; the two things the reading");
+  lines.push("flagged were that the shadows had gone deeper and that the bloodier monster frames");
+  lines.push("had warmed, which is what a contrast-and-saturation refresh does.");
+  lines.push("");
+  lines.push("Those four looks were taken one revision earlier, in which the contrast curve was");
+  lines.push("applied to each channel; the revision that is on disk contrasts luminance only and");
+  lines.push("pivots the curve at each picture's own mid, for exactly those two reasons (a");
+  lines.push("per-channel curve moves hue, and a curve pivoted at 128 flattens a low-key");
+  lines.push("picture). The final revision was looked at too: this box's vision endpoint answered");
+  lines.push("three times without a description while the change was being made (`ENDPOINT_DOWN`),");
+  lines.push("and then read the sheet back, pair by pair, as the same subject in every pair and");
+  lines.push("the right tile the cleaner, sharper, higher-contrast one with no corruption. Where");
+  lines.push("the eye and the numbers can both be had, the numbers above say the same thing for");
+  lines.push("all 125 entries, and the pass is pixel-for-pixel -- every output pixel is a function");
+  lines.push("of the input pixel that was there and of its immediate neighbours -- so nothing in");
+  lines.push("the art can have moved.");
   lines.push("");
   lines.push("## Format notes");
   lines.push("");

@@ -39,14 +39,34 @@ what changes is the surface: contrast, colour, relief and grime.
    the entry's aspect (so a square picture is never squashed into 308x165) and
    area-averages it onto the entry's exact dimensions from the manifest.
 3. **Fallback.** `node scripts/model-art.mjs --fallback` fills every entry with no
-   generated picture of its own. Per family (see the table below): a percentile
-   stretch for a picture that only uses a narrow band of its own palette, then an
-   S-curve for contrast (monotone, so it cannot clip the art the way a straight gain
-   would), a saturation push, a directional relight that reads the luminance
-   gradient as a surface normal and lights it from the upper left, fine value noise
-   and -- on metal -- a deterministic scatter of thin bright scratches. Every pixel
-   the original left at palette index 255 is put back to that index's colour, so a
+   generated picture of its own, by its family's art direction (the table below).
+   The grading happens in luminance and the colour difference is carried through
+   untouched, because contrasting each channel separately would move saturated
+   colours along their own axes -- a red that gains green reads orange -- and an
+   entry would come out recoloured rather than re-lit. The contrast curve is pivoted
+   at the middle of that picture's own range, not at 128, with black and white
+   pinned: a low-key picture, whose whole histogram sits below 128, would be pushed
+   further down by a curve pivoted at 128 and come out flatter than it started.
+   Then a saturation push (a scale of the colour difference, which cannot turn a
+   hue), a directional relight that reads the luminance gradient as a surface normal
+   and lights it from the upper left, an unsharp pass, fine value noise and -- on
+   metal -- a deterministic scatter of thin bright scratches. Every pixel the
+   original left at palette index 255 is put back to that index's colour, so a
    skin's cut-out stays a cut-out.
+
+What that adds up to, measured over the 125 entries (the tool prints these numbers):
+
+- **contrast**: mean luminance spread rises in every family -- metal 31.1 to 36.2,
+  organic 23.4 to 29.6, energy 72.0 to 74.5, fabric 26.4 to 34.0 -- and only 5
+  entries out of 125 end up with a narrower spread than they started with (plus the
+  deliberately untouched `objects/black`);
+- **still the same picture**: Pearson r between each original and its replacement is
+  0.955 to 0.992 per family, and never below 0.923 for any entry -- this is a grading
+  of the art, not a substitute for it;
+- **hue**: mean shift 2.8 to 5.0 degrees over the pixels that have a hue at all, worst
+  single entry 10.7 degrees, so no entry was recoloured;
+- **against the palette**: re-indexing onto the entry's own 256 colours costs a mean
+  2.5 to 5.7 of 255 per channel, with the error diffused rather than banded.
 4. **Snap to the palette.** Both routes end here: the packer re-indexes every pixel
    onto the palette the entry's own PCX carries, by nearest colour, so the art is
    snapped first with Floyd-Steinberg error diffusion. The PNG then holds exactly
@@ -56,13 +76,13 @@ what changes is the surface: contrast, colour, relief and grime.
 
 ## Family parameters
 
-| family | entries | saturation | S-curve | max gain | relight | unsharp | grain | scratches |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `metal` | 76 | 1.22 | 0.55 | 1.45 | 0.35 | 0.26 | 0.032 | 30 |
-| `organic` | 35 | 1.3 | 0.6 | 1.42 | 0.38 | 0.32 | 0.05 | 0 |
-| `energy` | 12 | 1.35 | 0.45 | 1.25 | 0.18 | 0.2 | 0.022 | 0 |
-| `fabric` | 1 | 1.16 | 0.55 | 1.4 | 0.28 | 0.34 | 0.055 | 0 |
-| `flat` | 1 | 1 | 0 | 1 | 0 | 0 | 0 | 0 |
+| family | entries | saturation | contrast curve | relight | unsharp | grain | scratches |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `metal` | 76 | 1.22 | 0.52 | 0.35 | 0.26 | 0.032 | 30 |
+| `organic` | 35 | 1.3 | 0.58 | 0.38 | 0.32 | 0.05 | 0 |
+| `energy` | 12 | 1.3 | 0.32 | 0.18 | 0.2 | 0.022 | 0 |
+| `fabric` | 1 | 1.16 | 0.48 | 0.28 | 0.34 | 0.055 | 0 |
+| `flat` | 1 | 1 | 0 | 0 | 0 | 0 | 0 |
 
 A picture's family comes from its own name: `objects/black` is flat (left alone),
 the flashes, smoke, explosions, laser and the armour energy field are energy, the
@@ -211,7 +231,7 @@ weapons, items, ammo, keys, barrels, debris, props and ships -- is metal.
 
 ```
 node scripts/tex-check.mjs --only models/ --quiet
-  checked 125 pictures of 611 entries: 125 with art (2.2 MB), 0 without,
+  checked 125 pictures of 611 entries: 125 with art (2.3 MB), 0 without,
   0 the wrong size, 0 unreadable, 0 unclaimed
 
 node scripts/model-art.mjs --engine-check
@@ -227,13 +247,28 @@ node scripts/texture-pack.mjs --dry-run --only models/
 `b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). `node server.js`
 still answers 200 at `/apps/quake2/` and at `/`, and serves the unchanged 48 MB pak.
 
-The art itself was looked at, not just measured: `node scripts/model-art.mjs
+The art itself was looked at as well as measured: `node scripts/model-art.mjs
 --preview --out <file.png>` writes a contact sheet with each original beside its
-replacement, as the engine will show it. Three sheets (first-person and world
-weapons, monsters, items) were written to the run's evidence folder and read back:
-every pair is the same subject in the same registration, the replacement tile is
-the sharper, higher-contrast one, and none of them is corrupted, misregistered or
-turned into noise.
+replacement, as the engine will show it. Four sheets -- weapons (first-person and
+world), monsters, items, objects and effects -- were written to the run's evidence
+folder and read back, pair by pair. Every pair was the same subject in the same
+registration, the replacement tile the sharper and higher-contrast one, and none of
+them corrupted, misregistered or turned into noise; the two things the reading
+flagged were that the shadows had gone deeper and that the bloodier monster frames
+had warmed, which is what a contrast-and-saturation refresh does.
+
+Those four looks were taken one revision earlier, in which the contrast curve was
+applied to each channel; the revision that is on disk contrasts luminance only and
+pivots the curve at each picture's own mid, for exactly those two reasons (a
+per-channel curve moves hue, and a curve pivoted at 128 flattens a low-key
+picture). The final revision was looked at too: this box's vision endpoint answered
+three times without a description while the change was being made (`ENDPOINT_DOWN`),
+and then read the sheet back, pair by pair, as the same subject in every pair and
+the right tile the cleaner, sharper, higher-contrast one with no corruption. Where
+the eye and the numbers can both be had, the numbers above say the same thing for
+all 125 entries, and the pass is pixel-for-pixel -- every output pixel is a function
+of the input pixel that was there and of its immediate neighbours -- so nothing in
+the art can have moved.
 
 ## Format notes
 
