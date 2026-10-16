@@ -122,7 +122,11 @@ function parseArguments(argv) {
       const flag = split === -1 ? argument : argument.slice(0, split);
       if (!takesValue.has(flag)) throw new TextureError("unknown option " + argument + "\n\n" + USAGE, "BAD_ARGUMENT");
       const value = split === -1 ? argv[++index] : argument.slice(split + 1);
-      if (value === undefined) throw new TextureError(flag + " needs a value", "BAD_ARGUMENT");
+      // A flag whose value is another flag is a typo, not a value: saying so
+      // beats "--only swallowed --pak" three lines later.
+      if (value === undefined || (split === -1 && value.startsWith("--"))) {
+        throw new TextureError(flag + " needs a value" + (value === undefined ? "" : " (got " + value + ")"), "BAD_ARGUMENT");
+      }
       if (flag === "--manifest") options.manifest = path.resolve(value);
       else if (flag === "--art") options.art = path.resolve(value);
       else if (flag === "--pak") options.pak = path.resolve(value);
@@ -217,6 +221,10 @@ function main(argv) {
   }
 
   const manifest = readManifest(options.manifest);
+  if (options.only.length && !manifest.entries.some((entry) => options.only.some((text) => entry.name.toLowerCase().includes(text)))) {
+    // A misspelled --only that quietly packs nothing reads like success.
+    throw new TextureError("no entry in the manifest matches --only " + options.only.join(", "), "BAD_ARGUMENT");
+  }
   let pak;
   try {
     pak = fs.readFileSync(options.pak);

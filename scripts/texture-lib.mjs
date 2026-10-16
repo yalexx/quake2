@@ -1236,28 +1236,49 @@ export function writeManifest(manifest, outPath = DEFAULT_MANIFEST) {
 }
 
 // Read a manifest back, checking that it is one of ours before a caller trusts a
-// field from it.
+// field from it. Every way this can go wrong ends in a sentence a person can act
+// on -- which file, what is wrong with it, and the command that rebuilds it --
+// because six tools stand on this file and a bare stack trace out of it says
+// nothing about the texture anyone was trying to replace.
 export function readManifest(file = DEFAULT_MANIFEST) {
+  const remedy = " -- regenerate it with `node scripts/texture-pack.mjs --refresh-manifest`";
   let text;
   try {
     text = fs.readFileSync(file, "utf8");
   } catch (error) {
-    throw new TextureError(
-      "cannot read the manifest at " + file + " (" + error.message + ") -- regenerate it with `node scripts/texture-pack.mjs --refresh-manifest`",
-      "NO_MANIFEST"
-    );
+    throw new TextureError("cannot read the manifest at " + file + " (" + error.message + ")" + remedy, "NO_MANIFEST");
   }
   let manifest;
   try {
     manifest = JSON.parse(text);
   } catch (error) {
-    throw new TextureError("the manifest at " + file + " is not JSON: " + error.message, "BAD_MANIFEST");
+    throw new TextureError("the manifest at " + file + " is not JSON (" + error.message + ")" + remedy, "BAD_MANIFEST");
+  }
+  if (manifest === null || typeof manifest !== "object" || Array.isArray(manifest)) {
+    const what = manifest === null ? "null" : Array.isArray(manifest) ? "an array" : "a " + typeof manifest;
+    throw new TextureError("the manifest at " + file + " is " + what + ", not a manifest object" + remedy, "BAD_MANIFEST");
   }
   if (manifest.schema !== MANIFEST_SCHEMA) {
-    throw new TextureError("the manifest at " + file + " is schema " + manifest.schema + ", not " + MANIFEST_SCHEMA, "BAD_MANIFEST");
+    throw new TextureError(
+      "the manifest at " + file + " says schema " + JSON.stringify(manifest.schema) + ", and this reads schema " + MANIFEST_SCHEMA + remedy,
+      "BAD_MANIFEST"
+    );
   }
-  if (!Array.isArray(manifest.entries)) {
-    throw new TextureError("the manifest at " + file + " has no entries", "BAD_MANIFEST");
+  if (!Array.isArray(manifest.entries) || !manifest.entries.length) {
+    throw new TextureError("the manifest at " + file + " lists no entries" + remedy, "BAD_MANIFEST");
+  }
+  for (const entry of manifest.entries) {
+    const named = entry && typeof entry.name === "string" && entry.name ? '"' + entry.name + '"' : "an entry with no name";
+    if (!entry || !entry.name) throw new TextureError("the manifest at " + file + " has an entry with no name" + remedy, "BAD_MANIFEST");
+    if (!Number.isInteger(entry.width) || !Number.isInteger(entry.height) || entry.width <= 0 || entry.height <= 0) {
+      throw new TextureError(
+        "the manifest entry " + named + " has no usable size (" + JSON.stringify(entry.width) + "x" + JSON.stringify(entry.height) + ")" + remedy,
+        "BAD_MANIFEST"
+      );
+    }
+    if (!("png" in entry) || (entry.png !== null && typeof entry.png !== "string")) {
+      throw new TextureError("the manifest entry " + named + " has no art path (png is " + JSON.stringify(entry.png) + ")" + remedy, "BAD_MANIFEST");
+    }
   }
   return manifest;
 }
