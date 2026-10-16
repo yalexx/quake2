@@ -71,10 +71,33 @@ for (const folder of SOURCE_ART_DIRS) {
   check("a NOTES.md in " + folder + "/ is source art too", isSourceArt(path.join(ART_DIR, folder, "NOTES.md"), ART_DIR));
 }
 check("a folder whose name only starts with a source folder's is not source art", !isSourceArt(path.join(ART_DIR, "hud2", "x.png"), ART_DIR));
+check("only the FIRST path component counts", !isSourceArt(path.join(ART_DIR, "pics", "hud", "x.png"), ART_DIR));
+check("so a source folder's name deeper in the path is not one", !isSourceArt(path.join(ART_DIR, "textures", "e1u1", "hud", "x.png"), ART_DIR));
 check("an entry's own art is not source art", !isSourceArt(path.join(ART_DIR, "pics", "num_0.png"), ART_DIR));
 check("the art directory itself is not source art", !isSourceArt(ART_DIR, ART_DIR));
 check("a path outside the art directory is not source art", !isSourceArt(path.join(os.tmpdir(), "hud", "x.png"), ART_DIR));
 check("a custom art directory carries the rule with it", isSourceArt(path.join(os.tmpdir(), "somewhere", "hud", "x.png"), path.join(os.tmpdir(), "somewhere")));
+
+// The declaration is only worth having if it stays tied to its record: a folder
+// declared here is claiming "this is source art, and here is why", so each one
+// has to be a folder that exists and holds the NOTES.md that says so.
+check(
+  "every declared source folder is there and holds its NOTES.md",
+  SOURCE_ART_DIRS.every((folder) => fs.existsSync(path.join(ART_DIR, folder, "NOTES.md"))),
+  SOURCE_ART_DIRS.filter((folder) => !fs.existsSync(path.join(ART_DIR, folder, "NOTES.md"))).join(", ")
+);
+// ...and that the check can fail: a folder of art that documents nothing must not
+// satisfy it, or it is asserting nothing.
+check(
+  "which is a check that can fail",
+  !fs.existsSync(path.join(ART_DIR, "pics", "NOTES.md")) && !fs.existsSync(path.join(ART_DIR, "textures", "NOTES.md")),
+  "an art folder that documents nothing was found"
+);
+check(
+  "and the declaration is the three folders the docs name",
+  JSON.stringify([...SOURCE_ART_DIRS].sort()) === JSON.stringify(["hud", "map", "model"]),
+  JSON.stringify(SOURCE_ART_DIRS)
+);
 
 process.stdout.write("\nan --only run claims the art it did not check\n");
 {
