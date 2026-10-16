@@ -160,6 +160,14 @@ node scripts/engine-state-test.mjs     # 35 checks
 node scripts/e2e-saves.js              # the real game in headless Chromium: boots, saves, reloads
 ```
 
+The archive is reproducible from this repository alone. `baseq2/pak0.pak` as the
+demo shipped it (`sha1 b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the copy the
+manifest was built from) plus the art committed here, through
+`node scripts/texture-pack.mjs`, produces the archive that is committed here
+byte for byte -- `sha1 9ddbf5276c7f8fbc3b3e719f97b0fc05a3ee51ea`. So nothing in
+it was hand-edited and no step is missing from the pipeline above; re-running it
+from a pristine `baseq2/` reproduces the game exactly.
+
 The archive itself was also parsed by an independent reader written for the run
 (not `scripts/texture-lib.mjs`, so a bug in the reader could not hide in both):
 1106 entries, every one inside the file and non-overlapping, the directory
