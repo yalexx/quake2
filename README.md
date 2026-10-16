@@ -24,7 +24,7 @@ engine files in `engine/` were copied from the project's public site
 | `control/` | `bridge.mjs` (drives the running game over CDP: navigation *and* the fire button), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck), `combat.mjs` (the same walker, shooting back at the level's own monsters) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
 | `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as seven tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake) and `tex-lib-test.mjs` (the checker's own rules), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests). Also the texture art: `texture-lib.mjs` (the shared PAK/WAL/PCX/SP2 contract), `texture-pack.mjs` (art into the archive), `tex-check.mjs` (art against the manifest), and the tools that draw it, `map-art.mjs`, `model-art.mjs` and `hud-art.mjs`, see [Texture art](#texture-art) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), `tex-lib-test.mjs` (the checker's own rules) and `texture-pack-test.mjs` (what the packer refuses), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests). Also the texture art: `texture-lib.mjs` (the shared PAK/WAL/PCX/SP2 contract), `texture-pack.mjs` (art into the archive), `tex-check.mjs` (art against the manifest), and the tools that draw it, `map-art.mjs`, `model-art.mjs` and `hud-art.mjs`, see [Texture art](#texture-art) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -3690,6 +3690,7 @@ node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fa
 node scripts/route-test.mjs       # the route planner, off the archive: exit 0 pass, 1 fail
 node scripts/engine-state-test.mjs # what the reader makes of the memory: exit 0 pass, 1 fail
 node scripts/tex-lib-test.mjs     # the texture checker's own rules: exit 0 pass, 1 fail
+node scripts/texture-pack-test.mjs # what the packer refuses: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
 
@@ -3700,6 +3701,16 @@ claims, at the edges as well as in the middle, and that an `--only` run still cl
 the pictures it was not asked to check while a real stray is still reported and
 named. It runs the checker itself for the second half, and writes only into a
 temporary art directory. See [Texture art](#texture-art).
+
+**`scripts/texture-pack-test.mjs`** pins what the packer refuses and what it
+leaves behind: that `--check` passes on the shipped archive, that a picture of
+the wrong size (and a PNG whose header lies about its own data) fails the run
+with the entry and both sizes named and writes no archive, that `--dry-run`
+writes nothing, that `--out` writes a whole archive to the path it was given and
+leaves its input untouched, and that a bad `--only` or a missing pak is refused
+in a sentence. Every run in it is against a copy of the archive in a temporary
+directory and writes to another file there, and its last check proves the
+shipped `baseq2/pak0.pak` is still byte for byte the archive the commit holds.
 
 **`scripts/route-test.mjs`** needs no browser and no game: it reads
 `baseq2/pak0.pak` and checks what the planner makes of it -- that all 34 inline
