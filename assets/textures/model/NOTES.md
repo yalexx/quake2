@@ -227,6 +227,36 @@ weapons, items, ammo, keys, barrels, debris, props and ships -- is metal.
 | `models/monsters/tank/../ctank/skin.pcx` | 308x194 | `pcx:788ff81a8f08` | `organic` | refreshed in node | a flat UV skin sheet for a heavier Strogg tank walker mech: extra-thick riveted armour plating, hoses and scorch marks, Quake 2 1997 first-person-shooter asset, weathered sci-fi metal and grime, flat studio lighting, centred subject, no text, no watermark, no logo |
 | `models/monsters/tank/../ctank/pain.pcx` | 308x194 | `pcx:788ff81a8f08` | `organic` | refreshed in node | a flat UV skin sheet for a heavier Strogg tank walker mech: extra-thick riveted armour plating, hoses and scorch marks, Quake 2 1997 first-person-shooter asset, weathered sci-fi metal and grime, flat studio lighting, centred subject, no text, no watermark, no logo |
 
+## Second pass: the transparent index out of the dither
+
+The snap to the entry's palette is a nearest-colour search over all 256 of its
+colours, and index 255 -- the one the engine draws a skin's cut-out with -- was in
+that search. A mid-brown pixel whose nearest palette entry happens to be the
+transparent colour therefore came back as 255, which is a see-through hole punched
+in a skin the original had opaque. It is out of the search now (`palettise` is given
+`{ exclude: [TRANSPARENT_INDEX] }`), and the pixels the original really did leave at
+255 are set back to that index's colour afterwards, which is the other half of the
+same rule `scripts/texture-pack.mjs` applies when it keeps the original pixel under
+transparent art (`restoreCutout`).
+
+The tool measures both halves rather than asserting them, and prints the line below
+with its summary: "cut-out pixels kept: 3050 (they re-index to index 255); invented
+by the dither: 0".
+
+Measured on the packed archive against the archive as it arrived, over every one of
+the 475 entries that carry art: **0 silhouette faults of any size** -- no entry lost
+or gained a single pixel of index 255. Before this pass there were 76, of which the
+worst were 1814 pixels of `models/monsters/parasite/tip/base.pcx` and 1076 pixels of
+`models/monsters/infantry/skin.pcx`.
+
+The art in this namespace was derived again in the packing pass, from the untouched
+archive, because what was committed for it was 99.8% off the entries' own palettes
+(2652 of 2657 distinct colours on one skin): the packer then snapped every pixel to
+the nearest colour, which is how those silhouettes were lost. Re-deriving with
+`node scripts/model-art.mjs --fallback` reproduces the art this tool recorded at
+commit `44c1dd4` byte for byte on all 125 entries, so the numbers in this file are
+the numbers on disk again.
+
 ## Checks run on this art
 
 ```
@@ -238,14 +268,18 @@ node scripts/model-art.mjs --engine-check
   pack-simulated 125 entr(y|ies), 0 problem(s)
 
 node scripts/texture-pack.mjs --dry-run --only models/
-  125 packed (0 identical to the original), 0 without art, 0 skipped, 0 failed
-  would write baseq2/pak0.pak: 46.4 MB, 1106 entries, 125 replaced
+  125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed
+  left alone baseq2/pak0.pak: 45.3 MB, 1106 entries, 125 replaced
 ```
 
-`--dry-run` builds the whole archive in memory and writes nothing, so
-`baseq2/pak0.pak` is untouched by this task (sha1
-`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). `node server.js`
-still answers 200 at `/apps/quake2/` and at `/`, and serves the unchanged 48 MB pak.
+`--dry-run` builds the whole archive in memory and writes nothing, so this task's own
+runs left `baseq2/pak0.pak` untouched (sha1
+`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). The packing pass
+that put every namespace's art into the game has since rewritten it; `--dry-run` and
+`--check` over the packed archive now report `125 packed (125 identical to the
+original), ... 0 failed` and `left alone baseq2/pak0.pak`, which is the same
+statement about the art this file records. See `README.md` for the archive's own
+record.
 
 The art itself was looked at as well as measured: `node scripts/model-art.mjs
 --preview --out <file.png>` writes a contact sheet with each original beside its

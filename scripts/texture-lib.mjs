@@ -1063,6 +1063,31 @@ export function artPathInProject(entryName) {
   return path.relative(PROJECT_ROOT, artPathFor(entryName, DEFAULT_ART_DIR)).split(path.sep).join("/");
 }
 
+// The folders under the art directory that hold SOURCE art: the pictures an art
+// script draws a finished entry picture from, which are never an entry's own art
+// and never reach the archive.
+//
+//   hud    the generation sources scripts/hud-art.mjs derives pics/*.pcx and
+//          sprites/*.pcx from (assets/textures/hud/NOTES.md)
+//   map    where scripts/map-art.mjs would look for generated squares
+//          (assets/textures/map/NOTES.md)
+//   model  where scripts/model-art.mjs would look for generated skins
+//          (assets/textures/model/NOTES.md)
+//
+// Each is documented by the NOTES.md it holds. No entry in the archive can name
+// one of these paths -- every entry name starts with textures/, models/, pics/,
+// sprites/ or env/, and artPathFor() keeps the archive path -- so a PNG here is
+// source art by construction and not an orphan. scripts/tex-check.mjs reports
+// them as sources rather than as "art no entry claims".
+export const SOURCE_ART_DIRS = ["hud", "map", "model"];
+
+// Is this a picture built from a source picture rather than from an entry?
+export function isSourceArt(file, artDir = DEFAULT_ART_DIR) {
+  const relative = path.relative(path.resolve(artDir), path.resolve(file));
+  if (relative.startsWith("..") || path.isAbsolute(relative)) return false;
+  return SOURCE_ART_DIRS.includes(relative.split(path.sep)[0]);
+}
+
 // Everything the six art tasks need to know about one archive entry, as one
 // plain object: where it is, what it is, how big it is, which palette its indices
 // mean, and where its new art belongs.

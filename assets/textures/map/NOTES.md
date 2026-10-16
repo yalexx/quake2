@@ -1,11 +1,18 @@
-# New art for the demo1 map textures
+# New art for the map surface textures
 
-105 new pictures: one for every WAL entry that `maps/demo1.bsp` actually draws,
-drawn by `scripts/map-art.mjs`. The surface textures the map puts on its walls,
-floors, ceilings, doors, lights, trim and grates are the ones this covers, most
-used first -- `textures/e1u1/flat1_2.wal` (611 faces) down to the single-face
-decals. The 39 other used-by-nobody map entries, and everything outside the map
-namespace (pics, models, sprites), belong to the other art tasks.
+246 new pictures, one for every WAL entry that any map in the archive actually
+draws, drawn by `scripts/map-art.mjs`. The surface textures the maps put on their
+walls, floors, ceilings, doors, lights, trim and grates are what this covers,
+most used first -- `textures/e1u1/flat1_2.wal` (2410 faces over the three maps)
+down to the single-face decals. The 51 entries no map draws (the `clip`, `hint`
+and `origin` markers, three animated frames, and textures nobody references) and
+everything outside the map namespace (pics, models, sprites) are left alone;
+`assets/textures/model/NOTES.md` and `assets/textures/hud/NOTES.md` are the
+records for those.
+
+The first pass drew 105 of these -- demo1's own surfaces. A later pass
+([below](#second-pass-every-map-and-21-tiles-drawn-again)) extended it to the
+other two levels and drew 21 tiles again that the generated route had flattened.
 
 ## Where the art is, and one deliberate difference from the task text
 
@@ -85,9 +92,12 @@ Three things make the result still look like this level rather than like noise:
   replacement never reads as an untextured surface.
 * **Everything tiles.** The noise lattices wrap at the texture's own size and the
   grid, rib and bar patterns have periods that divide it exactly, so a tile meets
-  itself at the edges; the measured wrap step across the 105 pictures is at most
-  about 3/255, i.e. invisible. A little per-pixel dithering is added before
-  colouring, the way an eight-bit texture dithers a gradient.
+  itself at the edges; the measured wrap step across the 105 pictures of the first
+  pass is at most about 3/255, i.e. invisible. A little per-pixel dithering is
+  added before colouring, the way an eight-bit texture dithers a gradient.
+  Measured again over the 249 pictures shipped from this namespace: the step
+  across a tile's own wrap is 1.14x the step between two neighbouring pixels
+  inside it (worst 2.47x), so the seam is a normal pixel step and not an edge.
 
 Animated textures are handled deliberately. `+0cgrate1_1`, `+0cgrate3_1` and
 `+0btshoot1` are left exactly as they were: the archive also holds their `+1`
@@ -99,11 +109,15 @@ animation reads as a light chasing the pod instead of eight unrelated pictures.
 ## How it was checked
 
 * `node scripts/tex-check.mjs` -- exit 0, `105 with art ... 0 the wrong size, 0
-  unreadable, 0 unclaimed`.
+  unreadable, 0 unclaimed`. (105 was this pass's count; the namespace stands at
+  246 drawn now and the tool's summary line over the whole archive is
+  `475 with art (4.8 MB), 128 without, 0 the wrong size, 0 unreadable, 0
+  unclaimed, 15 source picture(s)`.)
 * `node scripts/texture-pack.mjs --dry-run` -- `105 packed (0 identical to the
   original), ... 0 failed`; the archive's SHA-1 is unchanged
   (`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`) and its mtime untouched, so
-  nothing wrote `baseq2/pak0.pak`.
+  nothing wrote `baseq2/pak0.pak` -- this pass drew art and packed nothing. The
+  packing pass that followed did rewrite it, and its record is in `README.md`.
 * Running `scripts/map-art.mjs` twice produces byte-identical PNGs: the art is
   deterministically redrawable.
 * Each drawn picture is decoded again right after it is written and its
@@ -112,6 +126,56 @@ animation reads as a light chasing the pod instead of eight unrelated pictures.
   `rgbaToIndices`) gives an average of 15.9 distinct palette indices per texture;
   the only picture that collapses to a single colour is `e1u1/black`, which is
   what that texture is for.
+
+## Second pass: every map, and 26 tiles drawn again
+
+`scripts/map-art.mjs` used to work from `manifest.maps[0]` -- demo1's textures.
+It now pools the textures every map in the manifest draws, counting a texture two
+maps share once with the uses summed, so a surface demo2 or demo3 puts on a wall
+is covered too. That is 141 more entries (126 in `e1u1`, 7 `e1u2`, 4 `e1u3`,
+3 `e2u1`, 1 `e2u2`), drawn procedurally: this run cannot reach the box's image
+generator, so the generated-square route had no squares to read.
+
+26 entries already had art from the generated route and were drawn again. The
+reason is arithmetic: cropping a 1024x1024 picture to the entry's aspect and
+box-averaging it down to the entry's own size keeps the picture at 64x64 or
+128x128 and destroys it at 16x16 -- `slowl5_5`, a 16x16 tile, arrived with a
+luminance spread of 2.2 where the texture it replaces is 13.5.
+
+The test is on what SHIPS, not on the art file: the art is mapped through
+`texture-pack.mjs`'s own re-indexing (`paletteMapper` + `rgbaToIndices`, the
+packer's default alpha rule) and the luminance spread of the resulting pixels
+compared with the original entry's. An entry is drawn again when that falls below
+half the original's and the original had real contrast (sd over 8). "Spread" is
+the luminance standard deviation; "luma" the mean:
+
+| entry | size | art sd before | original sd | ships sd now | luma before | luma now |
+| --- | --- | --- | --- | --- | --- | --- |
+| `e1u1/baselt_3` | 32x128 | 37.8 | 90.6 | 41.6 | 95 | 98 |
+| `e1u1/wsupprt1_14` | 32x64 | 38.0 | 87.5 | 42.1 | 93 | 94 |
+| `e1u1/ceil1_4` | 16x16 | 4.0 | 58.5 | 39.5 | 42 | 57 |
+| `e1u1/ceil1_8` | 64x64 | 4.2 | 57.1 | 40.6 | 37 | 57 |
+| `e1u1/baselt_2` | 32x128 | 4.5 | 54.0 | 40.3 | 41 | 51 |
+| `e1u1/sky1` | 32x32 | 3.8 | 50.1 | 42.2 | 35 | 205 |
+| `e1u1/trigger` | 32x32 | 4.4 | 31.2 | 31.0 | 34 | 57 |
+| `e1u1/timpod2` | 32x32 | 10.9 | 29.0 | 20.4 | 48 | 55 |
+| `e1u1/color2_4` | 64x64 | 3.5 | 20.5 | 18.3 | 34 | 35 |
+| `e1u1/metal2_2` | 64x64 | 4.0 | 15.4 | 17.4 | 59 | 26 |
+| `e1u1/baselt_b` | 16x16 | 3.5 | 15.2 | 18.6 | 23 | 29 |
+| `e1u1/box3_1` | 64x64 | 6.8 | 17.2 | 12.8 | 37 | 42 |
+| `e1u1/box3_3` | 64x64 | 6.6 | 14.7 | 12.1 | 31 | 36 |
+
+The other 13 are `color1_2/3/4/6/7`, `metal2_3`, `metal3_6`, `metal5_2`,
+`pipe1_3`, `box3_5`, `grass1_7`, `comp4_2` and `wndow0_3`. The luminance a level
+was lit by comes back with them, `sky1` most of all: it is a bright tile (luma
+201) that had been shipping at 35, which is why the sky read as night.
+
+Two of the 26 have originals with the highest contrast in the set (sd 90.6 and
+87.5, against the recipes' 42-43) and ship at 46% and 48%; every other textured
+entry ships at half its original contrast or better. The three entries left below
+half are the animated frames below, where redrawing one frame on its own would
+make the animation flicker between new and old art: `+0cgrate1_1`,
+`+0cgrate3_1` and `+0btshoot1`.
 
 ## Putting art into the game, and the format it has to be
 

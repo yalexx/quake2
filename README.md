@@ -24,7 +24,7 @@ engine files in `engine/` were copied from the project's public site
 | `control/` | `bridge.mjs` (drives the running game over CDP: navigation *and* the fire button), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck), `combat.mjs` (the same walker, shooting back at the level's own monsters) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
 | `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as seven tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), `tex-lib-test.mjs` (the checker's own rules) and `texture-pack-test.mjs` (what the packer refuses) and `map-art-test.mjs` (which surfaces the map art draws), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests). Also the texture art: `texture-lib.mjs` (the shared PAK/WAL/PCX/SP2 contract), `texture-pack.mjs` (art into the archive), `tex-check.mjs` (art against the manifest), and the tools that draw it, `map-art.mjs`, `model-art.mjs` and `hud-art.mjs`, see [Texture art](#texture-art) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -61,6 +61,126 @@ PORT=4299 QUAKE2_DATA_DIR=/srv/quake2-saves node server.js
 The box serves it at `/apps/quake2/`. The startup line names the port and the
 save folder: `Quake 2 static server on http://127.0.0.1:4231/ (also
 /apps/quake2/), saves in /…/userdata`.
+
+## Texture art
+
+The engine reads every picture from the PAK and from nowhere else, so new art
+reaches the game only by rewriting an entry inside `baseq2/pak0.pak`. That is
+what `scripts/texture-pack.mjs` does, and it has been done: the walls, floors,
+ceilings and trim of all three levels, the weapons, the monsters and items, the
+HUD status bar, the menu, the console font and the sprite animations are new
+pictures, in place of the demo's own.
+
+| | entries |
+|---|---|
+| image entries in `baseq2/pak0.pak` | 1106 (303 WAL textures, 300 PCX pictures, 8 SP2 sprites, 495 other) |
+| carried into the game by the manifest (`assets/textures/manifest.json`) | 603 |
+| pictures replaced with new art | **475** |
+| left byte for byte as the demo shipped them | 631 of the archive's entries, 128 of the 603 |
+| sprites drawn from their frames | 8 (an SP2 holds a frame list, not pixels) |
+
+No entry changed its dimensions, its palette, its WAL header fields or its name:
+the archive is still a PAK the engine boots, and the 631 entries that were not
+replaced are byte for byte what they were (checked by an independent parser of
+the container, the WAL mip chains and the PCX headers -- see
+[Checking it](#checking-it)). The 128 pictures left alone are:
+66 `pics/*.pcx` (the 45 item and weapon icons, 15 menu cursors and the status
+glyphs, `colormap.pcx`, `field_3.pcx` and `s_bubble_0..1`), 51 WALs no map in the
+archive draws plus 3 animated frames whose families are left whole, and the 6
+`env/*.pcx` sky faces. `assets/textures/*/NOTES.md` says why for each group.
+
+### The pipeline
+
+One record per entry in `assets/textures/manifest.json` says where its art goes.
+The art is a PNG at that path, at exactly the entry's size; the tools are:
+
+| tool | what it does |
+|---|---|
+| `node scripts/tex-check.mjs` | every PNG against its entry: size, readability, and anything under the art directory that no entry claims |
+| `node scripts/texture-pack.mjs` | re-indexes each picture onto the palette the ENGINE uses for that entry and rewrites the archive in one atomic step; `--dry-run` writes nothing, `--check` exits 1 unless the archive is already the art on disk |
+| `node scripts/map-art.mjs` | draws the surface textures the levels' own BSPs ask for (walls, floors, ceilings, grates, doors, signs) |
+| `node scripts/model-art.mjs --fallback` | re-derives the 125 model, weapon, item and monster skins from their own pixels |
+| `node scripts/hud-art.mjs` | derives the HUD, menu and sprite pictures from the raw art in `assets/textures/hud/` |
+
+```
+node scripts/tex-check.mjs                 # 475 with art, 0 the wrong size, 0 unreadable, 0 unclaimed
+node scripts/texture-pack.mjs --dry-run    # 475 packed, 0 failed, nothing written
+node scripts/texture-pack.mjs              # write them into baseq2/pak0.pak
+node scripts/texture-pack.mjs --check      # exit 0 only if the archive is exactly this art
+```
+
+### Where the art is, and what is source art
+
+Art for an entry goes at `assets/textures/<the archive path with .png>`: the
+archive name, not just the file name, because `pics/`, `textures/` and
+`sprites/` all hold files of the same sort. Three folders under
+`assets/textures/` hold **source** art instead -- `hud/` (the raw pictures the
+HUD, menu and sprites are derived from), `map/` and `model/` (where a generated
+square or skin would be dropped). They are declared in
+`scripts/texture-lib.mjs` (`SOURCE_ART_DIRS`), each documented by the NOTES.md
+it holds, and no entry can name one of them; `tex-check.mjs` counts them
+separately instead of calling them unclaimed.
+
+### The three routes the art came from
+
+1. **This box's image generator**, for the map surfaces, the HUD, the menus and
+   the sprites: a 1024x1024 (or 512x512) picture per entry, cropped to the
+   entry's aspect and filtered down to its exact size. `scripts/hud-art.mjs`
+   derives the per-entry pictures from those sources with four recipes
+   (`transfer`, `tile`, `sprite`, `regrade`) -- a HUD is a layout, not a picture,
+   and the same run reproduces the 101 shipped HUD, menu and sprite pictures
+   exactly.
+2. **Node, for the model skins** (`scripts/model-art.mjs --fallback`). A skin is
+   a UV atlas, not a photograph of a gun: a generated side view painted across
+   one renders as noise on the model. The 125 skins are therefore a regrade of
+   the originals -- same registration, same silhouette, new surface -- which is
+   why they are the entries that keep the original's structure (Pearson r 0.93 to
+   0.99) instead of being replaced.
+3. **Node, for 162 map textures** -- the 141 entries no earlier pass had reached
+   (the other units' surfaces, and the textures only demo2 and demo3 draw) and 26
+   that were drawn again because the generated picture could not survive the trip:
+   a 1024x1024 picture box-averaged down to a 16x16 tile is a single tone, and
+   `textures/e1u1/ceil1_4` (16x16) arrived at luminance spread 4.0 where the
+   texture it replaces is 58.5, `sky1` at 3.8 against 50.1 and five times darker
+   than the original's. Procedural art is drawn at the entry's own size and cannot
+   lose a pattern that way. Measured on what ships -- the art after the packer's
+   own re-indexing -- every textured entry is back at half its original contrast
+   or better except three animated frames (left whole on purpose) and two entries
+   whose originals are the set's highest-contrast, shipping at 46% and 48%. The
+   seam error of a drawn wall is 1.14x a normal interior pixel step, so they still
+   tile.
+
+### Checking it
+
+```
+node scripts/tex-check.mjs             # 603 entries: 475 with art, 0 the wrong size, 0 unreadable
+node scripts/texture-pack.mjs --check  # the archive is exactly the art on disk
+node scripts/route-test.mjs            # 196 checks, off the packed archive
+node scripts/engine-state-test.mjs     # 35 checks
+node scripts/e2e-saves.js              # the real game in headless Chromium: boots, saves, reloads
+```
+
+The archive is reproducible from this repository alone. `baseq2/pak0.pak` as the
+demo shipped it (`sha1 b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the copy the
+manifest was built from) plus the art committed here, through
+`node scripts/texture-pack.mjs`, produces the archive that is committed here
+byte for byte -- `sha1 9ddbf5276c7f8fbc3b3e719f97b0fc05a3ee51ea`. So nothing in
+it was hand-edited and no step is missing from the pipeline above; re-running it
+from a pristine `baseq2/` reproduces the game exactly.
+
+The archive itself was also parsed by an independent reader written for the run
+(not `scripts/texture-lib.mjs`, so a bug in the reader could not hide in both):
+1106 entries, every one inside the file and non-overlapping, the directory
+ending at EOF, every WAL's four mip offsets and mip total matching its header,
+every PCX 8-bit, one plane, RLE, version 5 and the size its entry declares, and
+631 entries byte for byte identical to the pre-pack archive. Measured on every
+packed entry: 0 silhouette faults -- no entry lost or gained a pixel of the
+engine's transparent index (index 255) anywhere, which is the rule that keeps a
+model's cut-out a cut-out.
+
+The per-task records, with the prompts, the recipes and the measurements behind
+each family, are in `assets/textures/map/NOTES.md`,
+`assets/textures/model/NOTES.md` and `assets/textures/hud/NOTES.md`.
 
 ## Saved games
 
@@ -3569,8 +3689,39 @@ node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
 node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fail
 node scripts/route-test.mjs       # the route planner, off the archive: exit 0 pass, 1 fail
 node scripts/engine-state-test.mjs # what the reader makes of the memory: exit 0 pass, 1 fail
+node scripts/tex-lib-test.mjs     # the texture checker's own rules: exit 0 pass, 1 fail
+node scripts/texture-pack-test.mjs # what the packer refuses: exit 0 pass, 1 fail
+node scripts/map-art-test.mjs     # which surfaces the map art draws: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
+
+**`scripts/tex-lib-test.mjs`** needs no archive and no browser either: it pins the
+two rules `scripts/tex-check.mjs` turns on -- that the folders `scripts/texture-lib.mjs`
+declares as source art (`hud/`, `map/`, `model/`) are told apart from art no entry
+claims, at the edges as well as in the middle, and that an `--only` run still claims
+the pictures it was not asked to check while a real stray is still reported and
+named. It runs the checker itself for the second half, and writes only into a
+temporary art directory. See [Texture art](#texture-art).
+
+**`scripts/texture-pack-test.mjs`** pins what the packer refuses and what it
+leaves behind: that `--check` passes on the shipped archive, that a picture of
+the wrong size (and a PNG whose header lies about its own data) fails the run
+with the entry and both sizes named and writes no archive, that `--dry-run`
+writes nothing, that `--out` writes a whole archive to the path it was given and
+leaves its input untouched, and that a bad `--only` or a missing pak is refused
+in a sentence. Every run in it is against a copy of the archive in a temporary
+directory and writes to another file there, and its last check proves the
+shipped `baseq2/pak0.pak` is still byte for byte the archive the commit holds.
+
+**`scripts/map-art-test.mjs`** holds `scripts/map-art.mjs` to the coverage it
+gained, through `--list`, which prints the plan and draws nothing: that the
+surfaces only demo2 and demo3 draw are in the plan at all, that a texture two
+maps share carries the uses of both (sorted by one map's count it would read as a
+minor tile), that the animated frames are still refused, and that every row names
+an archive entry with an art path, at that entry's size, whose picture is on
+disk. It compares names through `normalizeName` and never by building a path,
+because the archive is not uniform in case -- demo3 asks for `e1u1/FLAT1_2` where
+another map asks for the same texture in lower case.
 
 **`scripts/route-test.mjs`** needs no browser and no game: it reads
 `baseq2/pak0.pak` and checks what the planner makes of it -- that all 34 inline

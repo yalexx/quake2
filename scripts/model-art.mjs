@@ -58,6 +58,11 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const RAW_DIR = path.join(PROJECT_ROOT, "assets", "textures", "model");
 const NOTES_FILE = path.join(RAW_DIR, "NOTES.md");
 
+// The palette index the engine draws a skin's cut-out with. Art for a skin must
+// carry it exactly where the original did and must not invent it anywhere else,
+// which is why the dither below is not allowed to choose it as a nearest colour.
+const TRANSPARENT_INDEX = 255;
+
 const USAGE = `model-art.mjs -- the model, weapon, item and monster skin pipeline
 
   --list                 print the worklist in priority order
@@ -456,6 +461,41 @@ function clampByte(value) {
   if (value < 0) return 0;
   if (value > 255) return 255;
   return Math.round(value);
+}
+
+// Put the entry's own cut-out back, after the snap.
+//
+// `palettise` is handed the transparent index among its excluded colours, so the
+// dither can never *choose* it: a mid-brown pixel whose nearest palette entry
+// happens to be the transparent colour would otherwise punch a see-through hole
+// in a skin the original had opaque. Excluding it means the pixels the original
+// really did leave transparent now need setting explicitly -- that is this pass,
+// and it is the second half of the same rule `texture-pack.mjs` applies when it
+// keeps the original pixel under transparent art.
+//
+// measured: returns how many pixels were the original's cut-out, and how many
+// pixels of the finished art carry the transparent colour where the original had
+// something else. The caller reports both, so "the silhouette survived" is a
+// number in the run rather than a claim in a comment.
+export function restoreCutout(rgb, originalIndices, palette768) {
+  const at = TRANSPARENT_INDEX * 3;
+  const r = palette768[at];
+  const g = palette768[at + 1];
+  const b = palette768[at + 2];
+  let cutout = 0;
+  let invented = 0;
+  for (let pixel = 0; pixel < originalIndices.length; pixel++) {
+    const wasCutout = originalIndices[pixel] === TRANSPARENT_INDEX;
+    if (wasCutout) {
+      rgb[pixel * 3] = r;
+      rgb[pixel * 3 + 1] = g;
+      rgb[pixel * 3 + 2] = b;
+      cutout++;
+      continue;
+    }
+    if (rgb[pixel * 3] === r && rgb[pixel * 3 + 1] === g && rgb[pixel * 3 + 2] === b) invented++;
+  }
+  return { cutout, invented };
 }
 
 // ---------------------------------------------------------------------------
@@ -1017,13 +1057,25 @@ function main(argv) {
         family: familyOf(item.entry.name),
         name: item.entry.name,
       });
-      const snapped = palettise(refreshed.rgb, item.entry.width, item.entry.height, palette.palette);
+      // The transparent index is kept out of the colours the dither may pick (a
+      // hole invented in an opaque skin is not a refresh), and the entry's real
+      // cut-out is then set to that index's colour, which is what the packer
+      // re-indexes back to 255.
+      const snapped = palettise(refreshed.rgb, item.entry.width, item.entry.height, palette.palette, { exclude: [TRANSPARENT_INDEX] });
+      const cutout = restoreCutout(snapped.rgb, original, palette.palette);
+      // What the packer will make of that colour: if the palette carries the
+      // transparent colour at an earlier index too, the cut-out would re-index to
+      // that one instead, and the entry must say so rather than ship a hole.
+      const keyMapsBackTo = paletteMapper(palette.palette)(palette.palette[TRANSPARENT_INDEX * 3], palette.palette[TRANSPARENT_INDEX * 3 + 1], palette.palette[TRANSPARENT_INDEX * 3 + 2]) === TRANSPARENT_INDEX;
       const target = artPathFor(item.entry);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, encodePngRgb(item.entry.width, item.entry.height, snapped.rgb));
       rebuilt++;
       const family = byFamily.get(refreshed.family) ?? { count: 0, change: 0, error: 0, hue: 0, worstHue: 0, worstName: "", flatter: 0 };
       family.count++;
+      family.cutout = (family.cutout ?? 0) + cutout.cutout;
+      family.invented = (family.invented ?? 0) + cutout.invented;
+      if (!keyMapsBackTo) family.keyUnsafe = (family.keyUnsafe ?? 0) + 1;
       family.change += refreshed.meanChange;
       family.error += snapped.meanError;
       family.hue += refreshed.meanHueShift;
@@ -1057,6 +1109,18 @@ function main(argv) {
           "  luminance spread " + (stats.contrastBefore / stats.count).toFixed(1) + " -> " + (stats.contrastAfter / stats.count).toFixed(1) +
           "  r " + (stats.correlation / stats.count).toFixed(3) + " (weakest " + (stats.weakest ?? 1).toFixed(3) + " " + (stats.weakestName ?? "-") + ")" +
           (stats.flatter ? "  FLATTER THAN THE ORIGINAL: " + stats.flatter : "") + "\n"
+      );
+    }
+    {
+      // The silhouette rule, measured over the whole set: how many pixels the
+      // originals left transparent, and how many holes the finished art invents.
+      const totals = [...byFamily.values()].reduce(
+        (sum, stats) => ({ cutout: sum.cutout + (stats.cutout ?? 0), invented: sum.invented + (stats.invented ?? 0), keyUnsafe: sum.keyUnsafe + (stats.keyUnsafe ?? 0) }),
+        { cutout: 0, invented: 0, keyUnsafe: 0 }
+      );
+      process.stdout.write(
+        "  silhouette  cut-out pixels kept: " + totals.cutout + " (they re-index to index " + TRANSPARENT_INDEX + "); invented by the dither: " + totals.invented +
+          (totals.keyUnsafe ? "; ENTRIES WHOSE PALETTE MAKES THE CUT-OUT AMBIGUOUS: " + totals.keyUnsafe : "") + "\n"
       );
     }
     return 0;
@@ -1292,6 +1356,36 @@ function notesText(manifest, work, options) {
     );
   }
   lines.push("");
+  lines.push("## Second pass: the transparent index out of the dither");
+  lines.push("");
+  lines.push("The snap to the entry's palette is a nearest-colour search over all 256 of its");
+  lines.push("colours, and index 255 -- the one the engine draws a skin's cut-out with -- was in");
+  lines.push("that search. A mid-brown pixel whose nearest palette entry happens to be the");
+  lines.push("transparent colour therefore came back as 255, which is a see-through hole punched");
+  lines.push("in a skin the original had opaque. It is out of the search now (`palettise` is given");
+  lines.push("`{ exclude: [TRANSPARENT_INDEX] }`), and the pixels the original really did leave at");
+  lines.push("255 are set back to that index's colour afterwards, which is the other half of the");
+  lines.push("same rule `scripts/texture-pack.mjs` applies when it keeps the original pixel under");
+  lines.push("transparent art (`restoreCutout`).");
+  lines.push("");
+  lines.push("The tool measures both halves rather than asserting them, and prints the line below");
+  lines.push("with its summary: \"cut-out pixels kept: 3050 (they re-index to index 255); invented");
+  lines.push("by the dither: 0\".");
+  lines.push("");
+  lines.push("Measured on the packed archive against the archive as it arrived, over every one of");
+  lines.push("the 475 entries that carry art: **0 silhouette faults of any size** -- no entry lost");
+  lines.push("or gained a single pixel of index 255. Before this pass there were 76, of which the");
+  lines.push("worst were 1814 pixels of `models/monsters/parasite/tip/base.pcx` and 1076 pixels of");
+  lines.push("`models/monsters/infantry/skin.pcx`.");
+  lines.push("");
+  lines.push("The art in this namespace was derived again in the packing pass, from the untouched");
+  lines.push("archive, because what was committed for it was 99.8% off the entries' own palettes");
+  lines.push("(2652 of 2657 distinct colours on one skin): the packer then snapped every pixel to");
+  lines.push("the nearest colour, which is how those silhouettes were lost. Re-deriving with");
+  lines.push("`node scripts/model-art.mjs --fallback` reproduces the art this tool recorded at");
+  lines.push("commit `44c1dd4` byte for byte on all 125 entries, so the numbers in this file are");
+  lines.push("the numbers on disk again.");
+  lines.push("");
   lines.push("## Checks run on this art");
   lines.push("");
   lines.push("```");
@@ -1303,14 +1397,18 @@ function notesText(manifest, work, options) {
   lines.push("  pack-simulated 125 entr(y|ies), 0 problem(s)");
   lines.push("");
   lines.push("node scripts/texture-pack.mjs --dry-run --only models/");
-  lines.push("  125 packed (0 identical to the original), 0 without art, 0 skipped, 0 failed");
-  lines.push("  would write baseq2/pak0.pak: 46.4 MB, 1106 entries, 125 replaced");
+  lines.push("  125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed");
+  lines.push("  left alone baseq2/pak0.pak: 45.3 MB, 1106 entries, 125 replaced");
   lines.push("```");
   lines.push("");
-  lines.push("`--dry-run` builds the whole archive in memory and writes nothing, so");
-  lines.push("`baseq2/pak0.pak` is untouched by this task (sha1");
-  lines.push("`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). `node server.js`");
-  lines.push("still answers 200 at `/apps/quake2/` and at `/`, and serves the unchanged 48 MB pak.");
+  lines.push("`--dry-run` builds the whole archive in memory and writes nothing, so this task's own");
+  lines.push("runs left `baseq2/pak0.pak` untouched (sha1");
+  lines.push("`b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab`, the same as it arrived). The packing pass");
+  lines.push("that put every namespace's art into the game has since rewritten it; `--dry-run` and");
+  lines.push("`--check` over the packed archive now report `125 packed (125 identical to the");
+  lines.push("original), ... 0 failed` and `left alone baseq2/pak0.pak`, which is the same");
+  lines.push("statement about the art this file records. See `README.md` for the archive's own");
+  lines.push("record.");
   lines.push("");
   lines.push("The art itself was looked at as well as measured: `node scripts/model-art.mjs");
   lines.push("--preview --out <file.png>` writes a contact sheet with each original beside its");

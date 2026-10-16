@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// scripts/map-art.mjs -- new art for the demo1 map's surface textures.
+// scripts/map-art.mjs -- new art for the surface textures the maps draw.
 //
 //   node scripts/map-art.mjs                        # draw every used map texture
 //   node scripts/map-art.mjs --list                 # what it would draw, and as what family
@@ -10,9 +10,12 @@
 //   node scripts/map-art.mjs --src assets/textures/map
 //                                                  # prefer a generated picture when one exists
 //
-// One PNG per WAL entry that maps/demo1.bsp actually draws, written where
-// scripts/texture-lib.mjs says an entry's art belongs (artPathInProject): the
-// archive name with its extension turned into .png, under assets/textures.
+// One PNG per WAL entry that any map in the archive actually draws -- every map
+// in the manifest, not just maps/demo1.bsp, because a texture demo2 or demo3
+// draws is a surface a player sees the moment that level is loaded. The picture
+// is written where scripts/texture-lib.mjs says an entry's art belongs
+// (artPathInProject): the archive name with its extension turned into .png,
+// under assets/textures.
 // scripts/tex-check.mjs then verifies the sizes and scripts/texture-pack.mjs
 // re-indexes them onto the archive's own palette -- this tool only has to get
 // the picture right, at exactly the entry's dimensions.
@@ -55,7 +58,7 @@ import {
   readPakFile,
 } from "./texture-lib.mjs";
 
-const USAGE = `map-art.mjs -- new art for the demo1 map surface textures
+const USAGE = `map-art.mjs -- new art for the surface textures the maps draw
 
   --list             print the entries and the recipe each one gets, draw nothing
   --only <text>      draw only entries whose name contains <text> (repeatable, comma-splittable)
@@ -1216,9 +1219,25 @@ function main(argv) {
   const pak = loadPak(DEFAULT_PAK);
   const palette = globalPalette(pak).palette;
   const entries = new Map(manifest.entries.map((entry) => [entry.name, entry]));
-  const used = manifest.maps[0].textures
-    .filter((texture) => texture.uses > 0)
-    .sort((a, b) => b.uses - a.uses)
+
+  // Every map in the archive, not just the first one. A texture demo2 or demo3
+  // draws is a surface a player sees the moment that level is loaded, so it is
+  // this pass's art too; a texture several maps share is pooled once with its
+  // uses summed, so the order still runs most-used first and a picture is drawn
+  // once per entry rather than once per map that wants it.
+  const pooled = new Map();
+  for (const map of manifest.maps) {
+    for (const texture of map.textures) {
+      if (!(texture.uses > 0)) continue;
+      const key = texture.wal.toLowerCase();
+      const seen = pooled.get(key) ?? { ...texture, uses: 0, maps: [] };
+      seen.uses += texture.uses;
+      if (!seen.maps.includes(map.name)) seen.maps.push(map.name);
+      pooled.set(key, seen);
+    }
+  }
+  const used = [...pooled.values()]
+    .sort((a, b) => b.uses - a.uses || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
     .map((texture) => ({ ...texture, entry: entries.get(texture.wal) }))
     .filter((texture) => texture.entry);
 
