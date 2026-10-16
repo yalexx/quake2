@@ -28,6 +28,10 @@
 //   art with no entry  a warning. A PNG under the art directory that no manifest
 //                      entry claims will never reach the game. (The six sky TGAs
 //                      are not manifest entries: only WAL, PCX and SP2 are.)
+//                      Source art is not this: the pictures under the folders
+//                      scripts/texture-lib.mjs declares as SOURCE_ART_DIRS are
+//                      what an art script derives an entry's picture FROM, and
+//                      they are counted and listed separately as "source art".
 //
 // A sprite (SP2) is not an art target: it holds no picture, only a list of frame
 // entries that are PCXs in the archive and are listed with art paths of their
@@ -50,6 +54,7 @@ import {
   artPathFor,
   decodePng,
   formatBytes,
+  isSourceArt,
   readManifest,
 } from "./texture-lib.mjs";
 
@@ -186,6 +191,13 @@ function main(argv) {
   }
 
   const orphans = pngFilesUnder(options.art).filter((file) => !claimed.has(path.resolve(file))).map((file) => rel(file));
+  // Source art is not an orphan: it is the picture an art script derives an
+  // entry's picture FROM, and the folders that hold it are declared in
+  // scripts/texture-lib.mjs (SOURCE_ART_DIRS). Anything else under the art
+  // directory that no entry claims is still reported, because that is art which
+  // will never reach the game.
+  const sources = orphans.filter((file) => isSourceArt(path.join(PROJECT_ROOT, file), options.art));
+  const unclaimed = orphans.filter((file) => !isSourceArt(path.join(PROJECT_ROOT, file), options.art));
   const failures = mismatches.length + broken.length + (options.requireAll ? missing.length : 0);
   const summary = {
     manifest: rel(options.manifest),
@@ -197,7 +209,8 @@ function main(argv) {
     missing: missing.length,
     mismatched: mismatches.length,
     unreadable: broken.length,
-    orphans: orphans.length,
+    orphans: unclaimed.length,
+    sourceArt: sources.length,
     bytes: totalBytes,
     byType: Object.fromEntries([...byType.entries()].map(([key, value]) => [key, value])),
     ok: failures === 0,
@@ -216,7 +229,8 @@ function main(argv) {
           mismatches: capped(mismatches),
           broken: capped(broken),
           missingNames: capped(missing),
-          orphanNames: capped(orphans),
+          orphanNames: capped(unclaimed),
+          sourceNames: capped(sources),
           drawnFromFrames: capped(noArtPath),
           covered: options.quiet ? [] : capped(covered),
         },
@@ -242,13 +256,17 @@ function main(argv) {
       const shown = missing.slice(0, 10);
       process.stdout.write("no art yet (" + missing.length + "): " + shown.join(", ") + (missing.length > shown.length ? " and " + (missing.length - shown.length) + " more" : "") + "\n");
     }
-    if (orphans.length) {
-      process.stdout.write("art no entry claims (" + orphans.length + "): " + orphans.slice(0, 10).join(", ") + "\n");
+    if (unclaimed.length) {
+      process.stdout.write("art no entry claims (" + unclaimed.length + "): " + unclaimed.slice(0, 10).join(", ") + "\n");
+    }
+    if (sources.length) {
+      process.stdout.write("source art, not an entry of its own (" + sources.length + "): " + sources.slice(0, 10).join(", ") + (sources.length > 10 ? " and " + (sources.length - 10) + " more" : "") + "\n");
     }
   }
   process.stdout.write(
     "checked " + artTargets + " pictures of " + manifest.entries.length + " entries: " + covered.length + " with art (" + formatBytes(totalBytes) + "), " +
-      missing.length + " without, " + mismatches.length + " the wrong size, " + broken.length + " unreadable, " + orphans.length + " unclaimed" +
+      missing.length + " without, " + mismatches.length + " the wrong size, " + broken.length + " unreadable, " + unclaimed.length + " unclaimed" +
+      (sources.length ? ", " + sources.length + " source picture(s)" : "") +
       (noArtPath.length ? ", " + noArtPath.length + " sprite(s) drawn from their frames" : "") + "\n"
   );
   return failures ? 1 : 0;
