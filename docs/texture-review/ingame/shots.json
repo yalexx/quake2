@@ -1,0 +1,270 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-29T17:11:50.564Z",
+  "engine": "Chrome/156.0.8078.47",
+  "chrome": "/usr/bin/google-chrome",
+  "pak": {
+    "pristine": {
+      "source": "cache /tmp/quake2-pristine-b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab.pak",
+      "bytes": 49951322
+    },
+    "pak9": {
+      "bytes": 25031035,
+      "entries": 270,
+      "first": "textures/e1u1/metal2_1.png"
+    }
+  },
+  "pak9Fetch": {
+    "before": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 309
+      }
+    ],
+    "beforeInEngine": -1,
+    "after": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 25031335
+      }
+    ],
+    "afterInEngine": 25031035,
+    "retexturingOff": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 25031335
+      }
+    ],
+    "retexturingOffInEngine": 25031035
+  },
+  "engineState": {
+    "before": {
+      "pak9InEngine": -1,
+      "cvars": {
+        "r_retexturing": "1",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    },
+    "after": {
+      "pak9InEngine": 25031035,
+      "cvars": {
+        "r_retexturing": "1",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    },
+    "retexturingOff": {
+      "pak9InEngine": 25031035,
+      "cvars": {
+        "r_retexturing": "0",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    }
+  },
+  "maps": [
+    {
+      "map": "demo1",
+      "composite": "demo1-before-after.png",
+      "before": {
+        "laplacian": 59.63,
+        "meanLuma": 33.08,
+        "bytes": 689943
+      },
+      "after": {
+        "laplacian": 65.72,
+        "meanLuma": 33.09,
+        "bytes": 754670
+      },
+      "retexturingOff": {
+        "laplacian": 56.33,
+        "meanLuma": 33.12,
+        "bytes": 688869
+      },
+      "diff": {
+        "afterVsRetexturingOff": {
+          "meanAbsDiff": 0.6665,
+          "differingPixels": 1571,
+          "pixels": 786432
+        },
+        "beforeVsAfter": {
+          "meanAbsDiff": 0.6801,
+          "differingPixels": 1667,
+          "pixels": 786432
+        },
+        "beforeVsRetexturingOff": {
+          "meanAbsDiff": 0.1187,
+          "differingPixels": 2280,
+          "pixels": 786432
+        }
+      },
+      "signalToNoise": 5.62,
+      "laplacianGap": 9.383,
+      "reference": "AFTER vs r_retexturing 0 flips only r_retexturing on the same two archives, so it is the pak9 art alone; BEFORE vs r_retexturing 0 is the original WALs against the shipped pak0's 1x art, and the pak9 change stands 5.6x above that",
+      "temporalNoise": {
+        "before": 0.0019,
+        "after": 0.0013,
+        "retexturingOff": 0.0469,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "before": [],
+        "after": [],
+        "retexturingOff": []
+      },
+      "imagelist": {
+        "before": {
+          "lines": 367,
+          "png": []
+        },
+        "after": {
+          "lines": 368,
+          "png": []
+        },
+        "retexturingOff": {
+          "lines": 368,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (AFTER changes the view 5.6x as much as the 1x art swap does)"
+    },
+    {
+      "map": "demo2",
+      "composite": "demo2-before-after.png",
+      "before": {
+        "laplacian": 133.42,
+        "meanLuma": 45.18,
+        "bytes": 793272
+      },
+      "after": {
+        "laplacian": 151.84,
+        "meanLuma": 45.2,
+        "bytes": 861692
+      },
+      "retexturingOff": {
+        "laplacian": 143.52,
+        "meanLuma": 45.27,
+        "bytes": 798194
+      },
+      "diff": {
+        "afterVsRetexturingOff": {
+          "meanAbsDiff": 1.0585,
+          "differingPixels": 7425,
+          "pixels": 786432
+        },
+        "beforeVsAfter": {
+          "meanAbsDiff": 1.148,
+          "differingPixels": 10081,
+          "pixels": 786432
+        },
+        "beforeVsRetexturingOff": {
+          "meanAbsDiff": 0.2585,
+          "differingPixels": 8502,
+          "pixels": 786432
+        }
+      },
+      "signalToNoise": 4.1,
+      "laplacianGap": 8.324,
+      "reference": "AFTER vs r_retexturing 0 flips only r_retexturing on the same two archives, so it is the pak9 art alone; BEFORE vs r_retexturing 0 is the original WALs against the shipped pak0's 1x art, and the pak9 change stands 4.1x above that",
+      "temporalNoise": {
+        "before": 0.0548,
+        "after": 0.0424,
+        "retexturingOff": 0.0522,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "before": [],
+        "after": [],
+        "retexturingOff": []
+      },
+      "imagelist": {
+        "before": {
+          "lines": 368,
+          "png": []
+        },
+        "after": {
+          "lines": 368,
+          "png": []
+        },
+        "retexturingOff": {
+          "lines": 368,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (AFTER changes the view 4.1x as much as the 1x art swap does)"
+    },
+    {
+      "map": "demo3",
+      "composite": "demo3-before-after.png",
+      "before": {
+        "laplacian": 27.1,
+        "meanLuma": 19.86,
+        "bytes": 427364
+      },
+      "after": {
+        "laplacian": 27.55,
+        "meanLuma": 19.85,
+        "bytes": 487609
+      },
+      "retexturingOff": {
+        "laplacian": 27.03,
+        "meanLuma": 19.87,
+        "bytes": 426898
+      },
+      "diff": {
+        "afterVsRetexturingOff": {
+          "meanAbsDiff": 0.425,
+          "differingPixels": 39,
+          "pixels": 786432
+        },
+        "beforeVsAfter": {
+          "meanAbsDiff": 0.4374,
+          "differingPixels": 388,
+          "pixels": 786432
+        },
+        "beforeVsRetexturingOff": {
+          "meanAbsDiff": 0.0179,
+          "differingPixels": 366,
+          "pixels": 786432
+        }
+      },
+      "signalToNoise": 23.72,
+      "laplacianGap": 0.518,
+      "reference": "AFTER vs r_retexturing 0 flips only r_retexturing on the same two archives, so it is the pak9 art alone; BEFORE vs r_retexturing 0 is the original WALs against the shipped pak0's 1x art, and the pak9 change stands 23.7x above that",
+      "temporalNoise": {
+        "before": 0,
+        "after": 0,
+        "retexturingOff": 0,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "before": [],
+        "after": [],
+        "retexturingOff": []
+      },
+      "imagelist": {
+        "before": {
+          "lines": 475,
+          "png": []
+        },
+        "after": {
+          "lines": 475,
+          "png": []
+        },
+        "retexturingOff": {
+          "lines": 475,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (AFTER changes the view 23.7x as much as the 1x art swap does)"
+    }
+  ],
+  "summary": {
+    "maps": 3,
+    "drawn": 3,
+    "failures": [],
+    "retexturing": "r_retexturing on; the off shot is the same archive through the URL query app.js appends",
+    "outputBytes": 3921382
+  }
+}
