@@ -48,12 +48,14 @@ import path from "node:path";
 import zlib from "node:zlib";
 import {
   DEFAULT_PAK,
+  HIRES_SCALE,
   PROJECT_ROOT,
   artPathInProject,
   decodePng,
   decodeWal,
   globalPalette,
   loadPak,
+  pngSize,
   readManifest,
   readPakFile,
 } from "./texture-lib.mjs";
@@ -67,7 +69,7 @@ const USAGE = `map-art.mjs -- new art for the surface textures the maps draw
   --sheet <file>     write a contact sheet of the art to <file> (relative to the project)
   --pairs            with --sheet: draw original next to new for each entry
   --cell <px>        with --sheet: cell size (default 64)
-  --force            redraw art that is already there
+  --force            redraw art that is already there (never 4x hi-res art)
   --help             this text
 `;
 
@@ -1208,6 +1210,19 @@ function parseArgs(argv) {
   return options;
 }
 
+// Is the picture already at an entry's art path drawn at HIRES_SCALE times the
+// entry, in both directions? Read from the PNG's own header, so nothing has to
+// be decoded to answer it; a file that is not a readable PNG is not hi-res art
+// (this tool may replace it).
+function isHiresArt(file, entry) {
+  try {
+    const size = pngSize(fs.readFileSync(file));
+    return size.width === entry.width * HIRES_SCALE && size.height === entry.height * HIRES_SCALE;
+  } catch {
+    return false;
+  }
+}
+
 function main(argv) {
   const options = parseArgs(argv);
   if (options.help) {
@@ -1245,6 +1260,7 @@ function main(argv) {
 
   const done = [];
   const skipped = [];
+  const hires = [];
   const drawn = [];
   for (const texture of wanted) {
     const entry = texture.entry;
@@ -1264,6 +1280,15 @@ function main(argv) {
           how,
         ].join(" ") + "\n",
       );
+      continue;
+    }
+
+    // Art already drawn at HIRES_SCALE times the entry is somebody else's work --
+    // the 4x pass -- and this tool's 1x recipe would replace it with a smaller
+    // picture. --force says "redraw what I drew", not "overwrite the hi-res art",
+    // so this skip is unconditional.
+    if (isHiresArt(outPath, entry)) {
+      hires.push(texture.name);
       continue;
     }
 
@@ -1307,6 +1332,7 @@ function main(argv) {
         wanted.length +
         " map textures" +
         (skipped.length ? " (" + skipped.length + " animated frames left alone: " + skipped.join(", ") + ")" : "") +
+        (hires.length ? " (" + hires.length + " left alone at " + HIRES_SCALE + "x: " + hires.join(", ") + ")" : "") +
         "\n",
     );
     for (const item of drawn) process.stdout.write("  " + item.name.padEnd(22) + item.art.padEnd(50) + item.how + "\n");

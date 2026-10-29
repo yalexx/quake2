@@ -14,7 +14,7 @@ var Module;
   // Relative URLs only: the box serves this app under /apps/quake2/.
   const PAK_DIR = "baseq2/";
   const REQUIRED_PAK = "pak0.pak";
-  const OPTIONAL_PAKS = ["pak1.pak", "pak2.pak"];
+  const OPTIONAL_PAKS = ["pak1.pak", "pak2.pak", "pak9.pak"];
   const ENGINE_DIR = "engine/";
   const ENGINE_SCRIPT = ENGINE_DIR + "index.js";
   // Saved games and config.cfg: server.js keeps them (the page's sandbox has
@@ -122,7 +122,11 @@ var Module;
   }
 
   function buildArguments() {
-    let args = ["+set", "vid_renderer", "gles3"];
+    // r_retexturing makes the engine look for textures/<map>/<name>.png before
+    // the .wal it is about to draw, which is how the 4x wall art in pak9 reaches
+    // the game (Yamagi draws it at the WAL's own size). The query string is
+    // appended after these, so a URL can still turn it off.
+    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1"];
     if (window.location.search.length > 1) {
       const extra = window.location.search.substr(1).split("&").filter(Boolean).map(function (arg) {
         try {

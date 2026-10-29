@@ -7,13 +7,21 @@
 //   node scripts/tex-check.mjs --require-all      # also fail when an entry has no art yet
 //   node scripts/tex-check.mjs --json
 //
-// A replacement texture must be exactly the size of the texture it replaces: the
-// engine maps a WAL onto the surface at the dimensions in its header and indexes
-// the mip chain by them, so a picture of the wrong size does not merely look
-// wrong, it is a texture the renderer will read past. Every entry in
+// A replacement texture must be the size of the texture it replaces: the engine
+// maps a WAL onto the surface at the dimensions in its header and indexes the
+// mip chain by them, so a picture of the wrong size does not merely look wrong,
+// it is a texture the renderer will read past. Every entry in
 // assets/textures/manifest.json therefore carries the width and height its art
 // has to have, and this tool is the check that says so -- it exits non-zero on
 // the first mismatch, which is what makes it usable in front of texture-pack.mjs.
+//
+// A WAL (a wall, floor, ceiling or trim) is the one kind of entry whose art may
+// be drawn larger: exactly HIRES_SCALE (4) times its width AND height, which
+// texture-pack.mjs averages back down for the archive and copies verbatim into
+// the hires archive the engine's r_retexturing reads. Those pictures are counted
+// as `hires` -- the count is what a run says about how much of the wall art has
+// been redrawn at 4x. A PCX picture is still exact-size only, and 2x, 3x or a
+// wrong shape fails for a WAL just as it does for anything else.
 //
 // What it reports, and what fails:
 //
@@ -48,6 +56,7 @@ import path from "node:path";
 import {
   DEFAULT_ART_DIR,
   DEFAULT_MANIFEST,
+  HIRES_SCALE,
   MANIFEST_SCHEMA,
   PROJECT_ROOT,
   TextureError,
@@ -55,6 +64,7 @@ import {
   decodePng,
   formatBytes,
   isSourceArt,
+  pngSize,
   readManifest,
 } from "./texture-lib.mjs";
 
@@ -120,14 +130,6 @@ function pngFilesUnder(directory, depth = 0) {
   return found;
 }
 
-// The dimensions in a PNG's own header, without decoding its image data, so a
-// file whose size is already wrong is caught before any of its pixels are read.
-function pngHeaderSize(buffer) {
-  if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) throw new TextureError("not a PNG", "BAD_PNG");
-  if (buffer.toString("latin1", 12, 16) !== "IHDR") throw new TextureError("the PNG has no header chunk", "BAD_PNG");
-  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
-}
-
 function main(argv) {
   const options = parseArguments(argv);
   if (options.help) {
@@ -144,6 +146,7 @@ function main(argv) {
   const broken = [];
   const missing = [];
   const covered = [];
+  const hires = [];
   const claimed = new Set();
   const byType = new Map();
   const noArtPath = [];
@@ -175,21 +178,28 @@ function main(argv) {
     claimed.add(path.resolve(file));
     try {
       const buffer = fs.readFileSync(file);
-      const size = pngHeaderSize(buffer);
-      if (size.width !== entry.width || size.height !== entry.height) {
-        mismatches.push({ name: entry.name, want: entry.width + "x" + entry.height, got: size.width + "x" + size.height, file: rel(file) });
+      const size = pngSize(buffer);
+      // Exact size, or -- for a WAL only -- exactly HIRES_SCALE times its width
+      // AND height. Anything else is a picture that does not describe its entry.
+      const isHires = entry.type === "wal" && size.width === entry.width * HIRES_SCALE && size.height === entry.height * HIRES_SCALE;
+      const want = entry.width + "x" + entry.height + (entry.type === "wal" ? " or " + entry.width * HIRES_SCALE + "x" + entry.height * HIRES_SCALE : "");
+      if (!isHires && (size.width !== entry.width || size.height !== entry.height)) {
+        mismatches.push({ name: entry.name, want, got: size.width + "x" + size.height, file: rel(file) });
         continue;
       }
       // The header agrees, so read the whole picture: a PNG whose header says
       // 64x64 and whose data is a different length must not pass.
       const image = decodePng(buffer);
-      if (image.width !== entry.width || image.height !== entry.height) {
-        mismatches.push({ name: entry.name, want: entry.width + "x" + entry.height, got: image.width + "x" + image.height, file: rel(file) });
+      const wantedWidth = isHires ? entry.width * HIRES_SCALE : entry.width;
+      const wantedHeight = isHires ? entry.height * HIRES_SCALE : entry.height;
+      if (image.width !== wantedWidth || image.height !== wantedHeight) {
+        mismatches.push({ name: entry.name, want, got: image.width + "x" + image.height, file: rel(file) });
         continue;
       }
       type.withArt++;
       totalBytes += buffer.length;
       covered.push({ name: entry.name, type: entry.type, width: image.width, height: image.height, bytes: buffer.length });
+      if (isHires) hires.push({ name: entry.name, width: image.width, height: image.height, bytes: buffer.length });
     } catch (error) {
       broken.push({ name: entry.name, file: rel(file), problem: error instanceof TextureError ? error.message : String(error && error.message ? error.message : error) });
     }
@@ -211,6 +221,8 @@ function main(argv) {
     artTargets,
     drawnFromFrames: noArtPath.length,
     withArt: covered.length,
+    hires: hires.length,
+    hiresBytes: hires.reduce((total, item) => total + item.bytes, 0),
     missing: missing.length,
     mismatched: mismatches.length,
     unreadable: broken.length,
@@ -237,6 +249,7 @@ function main(argv) {
           orphanNames: capped(unclaimed),
           sourceNames: capped(sources),
           drawnFromFrames: capped(noArtPath),
+          hiresNames: capped(hires.map((item) => item.name)),
           covered: options.quiet ? [] : capped(covered),
         },
         null,
@@ -256,7 +269,11 @@ function main(argv) {
     for (const name of missing) process.stderr.write("FAIL " + name + ": no art yet\n");
   }
   if (!options.quiet) {
-    for (const item of covered) process.stdout.write("ok   " + item.name + "  " + item.width + "x" + item.height + "  " + formatBytes(item.bytes) + "\n");
+    const hired = new Set(hires.map((hire) => hire.name));
+    for (const item of covered) {
+      const at = hired.has(item.name) ? "  " + HIRES_SCALE + "x" : "";
+      process.stdout.write("ok   " + item.name + "  " + item.width + "x" + item.height + at + "  " + formatBytes(item.bytes) + "\n");
+    }
     if (missing.length) {
       const shown = missing.slice(0, 10);
       process.stdout.write("no art yet (" + missing.length + "): " + shown.join(", ") + (missing.length > shown.length ? " and " + (missing.length - shown.length) + " more" : "") + "\n");
@@ -270,6 +287,7 @@ function main(argv) {
   }
   process.stdout.write(
     "checked " + artTargets + " pictures of " + manifest.entries.length + " entries: " + covered.length + " with art (" + formatBytes(totalBytes) + "), " +
+      hires.length + " of them at " + HIRES_SCALE + "x (" + formatBytes(summary.hiresBytes) + "), " +
       missing.length + " without, " + mismatches.length + " the wrong size, " + broken.length + " unreadable, " + unclaimed.length + " unclaimed" +
       (sources.length ? ", " + sources.length + " source picture(s)" : "") +
       (noArtPath.length ? ", " + noArtPath.length + " sprite(s) drawn from their frames" : "") + "\n"
