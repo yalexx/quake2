@@ -46,6 +46,30 @@
 // settles it. One parameter set, with per-class overrides chosen by the
 // texture's name and the WAL header's own flags/contents.
 //
+// The material pass
+//
+// The faithful upscale above is the base for every target. materialFor()
+// (material-classes.mjs) then names each texture's surface from its name and
+// the WAL's own pixels -- stone, metal, rust, tech, crate, wood, organic, lamp,
+// glass -- and applyMaterial() (material-lib.mjs) draws that surface over the
+// base: relief from the base's own shading, one fixed light from the upper
+// left, cavity occlusion, grime and streaks, a wrapped grain, lamp glow and
+// glass reflections, all deterministic from the texture's name and all
+// wrapped, so the result still tiles. sign, water, sky and flat are "faithful":
+// they keep the base exactly and only the original gates. The material art's
+// outermost ring is blended back toward the base wherever the wrap boundary
+// would be seamier than the base's own (guardMaterialSeam), so the pass cannot
+// add a seam the faithful enlargement did not have. The report records the
+// material, the reason materialFor gave, per-material counts, the knobs in
+// MATERIAL_PARAMS and the recipe text per entry.
+//
+// Coverage
+//
+// The targets are the WALs that have art plus every WAL a map in the manifest
+// actually uses that has none yet (clip, clip_mon, hint and origin excepted --
+// they are collision brushes and trigger volumes the engine never draws), with
+// every animation family closed so +0..+9 frames share one material.
+//
 // The gates --check enforces (all from the original WAL pixels, not from an
 // earlier replacement):
 //
@@ -72,6 +96,29 @@
 //      min/max on any channel.
 //   5. mean luminance gradient >= 1.05x a plain wrapped bilinear 4x.
 //
+// Gates 1-3 and 5 hold for material art too, with gate 2's tolerance widened
+// from 2 to REALISM_GATES.meanLuminance (also 2) and gate 3 measured against
+// the faithful base instead of bilinear. Gate 4 does not: a material pass
+// deliberately shades pixels inside the source's colour range but outside its
+// 3x3 envelope, so outlier pixels are what "relief" means. The material gates
+// (REALISM_GATES) are 1 and 2 as above, 3 against the base, plus:
+//
+//   6. mean hue shift <= 3 degrees over pixels whose source chroma is above 8.
+//   7. 99th-percentile chroma <= the base's x1.10 + 3 (no neon).
+//   8. share of pixels with a channel >= 250 <= the base's + 0.5% (not washed
+//      out by lamp glow or highlights).
+//   9. detailEnergy (mean absolute wrapped luminance step to the left/up
+//      neighbour, in 0..255 levels) >= 1.5x the base's and >= 1.5 levels;
+//      lamp and glass, which are smooth by nature, need only 1.0x and 1.0 level.
+//
+// Every entry, faithful or material, also passes a software-renderer gate: the
+// art is box-downsampled to 1x and re-indexed onto the global palette with the
+// packer's own path (texture-lib paletteMapper + rgbaToIndices), which is the
+// 1x picture the software renderer actually draws. Its mean palette luminance
+// must stay within 2.5 of the pristine WAL's, and it must use at least 70% as
+// many distinct palette indices as the original -- a picture that both reads
+// the same and keeps the palette's banding structure survives the re-index.
+//
 // The report goes to docs/texture-review/hires-report.json.
 //
 // This file imports the readers from texture-lib.mjs and edits nothing there.
@@ -92,10 +139,18 @@ import {
   decodeWal,
   formatBytes,
   globalPalette,
+  paletteMapper,
   readManifest,
   readPakDirectory,
   readPakFile,
+  rgbaToIndices,
 } from "./texture-lib.mjs";
+// The material pass reads the two libraries the material tasks own: the class
+// decision (material-classes.mjs) and the surface recipes (material-lib.mjs).
+// material-classes imports this module for isUniform(), and isUniform is a
+// function declaration, so the cycle is resolved before either module runs.
+import { MATERIALS, materialFor } from "./material-classes.mjs";
+import { MATERIAL_PARAMS, UNCHANGED_MATERIALS, applyMaterial } from "./material-lib.mjs";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -121,6 +176,53 @@ export const GATES = {
   outlierTolerance: 4,
   gradient: 1.05,
 };
+
+// The gates a material picture is held to instead of gate 4 (the source 3x3
+// envelope: relief legitimately brightens an edge past its neighbours) and
+// gate 5 (the bilinear gradient rule, which real relief beats by construction).
+// They say a material may move light around, but only the way a lit surface
+// would: it must still be the same picture (Pearson, mean RGB, mean
+// luminance), it must not invent colour (hue, chroma, highlights), it must
+// still tile (seam against the faithful base's own seam), and it must carry
+// more detail than the faithful base (detail energy). `lamp` and `glass` are
+// smooth by nature and only have to keep the detail they had.
+export const REALISM_GATES = Object.freeze({
+  pearson: 0.9,
+  meanAbsRgb: 10,
+  meanLuminance: 2,
+  hueShift: 3,
+  sourceChroma: 8,
+  chromaPercentile: 0.99,
+  chromaScale: 1.1,
+  chromaSlack: 3,
+  brightChannel: 250,
+  brightShare: 0.005,
+  seamScale: 1.15,
+  seamSlack: 0.05,
+  detailEnergy: 1.5,
+  detailEnergyLevels: 1.5,
+  smoothDetailEnergy: 1,
+  smoothDetailLevels: 1,
+});
+
+// The materials that are smooth surfaces, not rough ones: a lamp's tube and a
+// window's pane keep the detail they had rather than gaining relief.
+export const SMOOTH_MATERIALS = Object.freeze(["lamp", "glass"]);
+
+// The gates every entry gets, material or not: the 4x art box-downsampled to
+// the entry's pixels and indexed through the packer's own path (the global
+// palette, nearest colour you can count on). If the software renderer would not
+// draw what the picture says, the picture is wrong however good it looks at 4x.
+export const SOFTWARE_GATES = Object.freeze({
+  luminance: 2.5,
+  indexShare: 0.7,
+});
+
+// The bookkeeping textures a map names but no one should see: `clip` and
+// `clip_mon` are the invisible collision brushes, `hint` is a hint brush, and
+// `origin` marks entity origins. They are in map texture tables but not drawn as
+// surfaces, so they never get replacement art.
+export const COVERAGE_EXCLUDED = Object.freeze(["clip", "clip_mon", "hint", "origin"]);
 
 // How far past the seam limit the upscaler alone may aim, leaving room for the
 // last rounding step and for measureGates' own 0.05 of head-room.
@@ -386,6 +488,58 @@ export function textureTargets(manifest, options = {}) {
   }
 
   return [...wanted.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+// The WALs the maps name but no art covers yet -- the holes the earlier target
+// list left, because it followed art that already existed. Every map's texture
+// table is read (manifest `maps[].textures`, which names each WAL the BSP's
+// texinfos use), and each WAL without a PNG becomes a target, except the
+// bookkeeping textures in COVERAGE_EXCLUDED and except frames whose animation
+// family would then be half old art: walking the animname chain closes the
+// family, so a frame is drawn with all of its siblings or not at all.
+export function mapCoverageTargets(manifest) {
+  const wals = manifest.entries.filter((entry) => entry.type === "wal");
+  const byName = new Map(wals.map((entry) => [entry.name.toLowerCase(), entry]));
+  const used = new Set();
+  for (const map of manifest.maps ?? []) {
+    for (const texture of map.textures ?? []) {
+      if (texture.wal) used.add(texture.wal.toLowerCase());
+    }
+  }
+
+  const baseNameOf = (entry) => entry.name.slice(entry.name.lastIndexOf("/") + 1).replace(/\.wal$/i, "").toLowerCase();
+  const wanted = new Map();
+  for (const entry of wals) {
+    if (!used.has(entry.name.toLowerCase())) continue;
+    if (COVERAGE_EXCLUDED.includes(baseNameOf(entry))) continue;
+    if (!entry.png) continue;
+    if (fs.existsSync(path.resolve(PROJECT_ROOT, entry.png))) continue;
+    wanted.set(entry.name.toLowerCase(), entry);
+  }
+
+  const queue = [...wanted.keys()];
+  while (queue.length) {
+    const entry = byName.get(queue.pop());
+    if (!entry || !entry.animname) continue;
+    const mateName = ("textures/" + entry.animname + ".wal").toLowerCase();
+    if (wanted.has(mateName)) continue;
+    const mate = byName.get(mateName);
+    if (!mate || COVERAGE_EXCLUDED.includes(baseNameOf(mate))) continue;
+    wanted.set(mateName, mate);
+    queue.push(mateName);
+  }
+
+  return [...wanted.values()].sort((left, right) => left.name.localeCompare(right.name));
+}
+
+// The target list the tool draws: everything that already has art, then the
+// holes the maps name. An entry is only ever listed once.
+export function textureTargetsWithCoverage(manifest, options = {}) {
+  const byName = new Map();
+  for (const entry of [...textureTargets(manifest, options), ...mapCoverageTargets(manifest)]) {
+    byName.set(entry.name.toLowerCase(), entry);
+  }
+  return [...byName.values()].sort((left, right) => left.name.localeCompare(right.name));
 }
 
 // ---------------------------------------------------------------------------
@@ -1052,6 +1206,52 @@ function guardSeam(out, outWidth, outHeight, image) {
   }
 }
 
+// The material pass draws over the faithful base, so its wrap boundary is held
+// to the base's own seam rather than bilinear's: the same measured rule as
+// guardSeam (ratio of boundary step to interior step, 1.15x baseline + 0.05),
+// but the ring is blended back toward the faithful base, which is the picture
+// the material pass started from. Only the outermost ring moves, so the relief
+// and grain the pass drew survive everywhere a face is actually textured.
+export function guardMaterialSeam(art, base) {
+  const { width, height } = art;
+  const baseline = seamSteps(base);
+  let amount = 0;
+  for (let pass = 0; pass < 6; pass++) {
+    const current = seamSteps(art);
+    const needs = {};
+    for (const axis of ["X", "Y"]) {
+      const step = current["seam" + axis];
+      const baselineStep = baseline["seam" + axis];
+      // A boundary no more than one level high in both pictures cannot be seen.
+      if (step <= 1 && baselineStep <= 1) continue;
+      const limit = REALISM_GATES.seamScale * baseline["ratio" + axis] + REALISM_GATES.seamSlack;
+      if (current["ratio" + axis] > limit) needs[axis] = true;
+    }
+    if (!needs.X && !needs.Y) break;
+    amount = Math.min(1, amount === 0 ? 0.1 : amount * 2);
+    const mix = (at) => {
+      for (let channel = 0; channel < 3; channel++) {
+        art.rgb[at + channel] = Math.round(
+          art.rgb[at + channel] + (base.rgb[at + channel] - art.rgb[at + channel]) * amount
+        );
+      }
+    };
+    if (needs.X) {
+      for (let y = 0; y < height; y++) {
+        mix(y * width * 3);
+        mix((y * width + width - 1) * 3);
+      }
+    }
+    if (needs.Y) {
+      for (let x = 0; x < width; x++) {
+        mix(x * 3);
+        mix(((height - 1) * width + x) * 3);
+      }
+    }
+  }
+  return art;
+}
+
 function meanGradient(image) {
   const { width, height } = image;
   const lum = luminanceArray(image);
@@ -1066,6 +1266,126 @@ function meanGradient(image) {
     }
   }
   return count ? total / count : 0;
+}
+
+// How much fine detail a picture carries, in 0..255 luminance levels: the mean
+// absolute step between each pixel's luminance and its wrapped left and upper
+// neighbour. It is the edge energy of the picture -- the measure the old gate 5
+// already used against a bilinear baseline -- read on its own so a material can
+// be held to it. A smooth 4x enlargement of a small tile is near zero; a surface
+// with relief, grain and edge highlights is several levels. The realism gate
+// asks material art to beat the faithful base on this measure, so
+// "photorealistic" is checkable: more surface, not just more pixels.
+export function detailEnergy(image) {
+  return meanGradient(image);
+}
+
+// Hue in degrees and chroma (max minus min, 0..255) of one sRGB pixel.
+function hueChroma(r, g, b) {
+  const high = Math.max(r, g, b);
+  const delta = high - Math.min(r, g, b);
+  if (delta === 0) return { hue: 0, chroma: 0 };
+  let hue;
+  if (high === r) hue = ((g - b) / delta) % 6;
+  else if (high === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue *= 60;
+  if (hue < 0) hue += 360;
+  return { hue, chroma: delta };
+}
+
+// The mean circular hue change, in degrees, over the pixels whose source has
+// enough chroma to have a hue at all. A material may shade a wall; it may not
+// repaint it.
+function meanHueShift(original, downsampled) {
+  const count = original.width * original.height;
+  let total = 0;
+  let pixels = 0;
+  for (let index = 0; index < count; index++) {
+    const at = index * 3;
+    const source = hueChroma(original.rgb[at], original.rgb[at + 1], original.rgb[at + 2]);
+    if (source.chroma <= REALISM_GATES.sourceChroma) continue;
+    const art = hueChroma(downsampled.rgb[at], downsampled.rgb[at + 1], downsampled.rgb[at + 2]);
+    let difference = Math.abs(art.hue - source.hue);
+    if (difference > 180) difference = 360 - difference;
+    total += difference;
+    pixels++;
+  }
+  return pixels ? total / pixels : 0;
+}
+
+// The chroma at a percentile of the picture's pixels, from a 256-bin histogram:
+// no sort of a megapixel array.
+function chromaPercentile(image, percentile) {
+  const histogram = new Uint32Array(256);
+  const count = image.width * image.height;
+  for (let index = 0; index < count; index++) {
+    const at = index * 3;
+    histogram[Math.max(image.rgb[at], image.rgb[at + 1], image.rgb[at + 2]) - Math.min(image.rgb[at], image.rgb[at + 1], image.rgb[at + 2])]++;
+  }
+  const target = count * percentile;
+  let seen = 0;
+  for (let value = 0; value < 256; value++) {
+    seen += histogram[value];
+    if (seen >= target) return value;
+  }
+  return 255;
+}
+
+// The share of pixels with any channel at `channel` or above: the loud part of
+// the picture, the one the software renderer's clamped palette turns into a flat
+// white patch.
+function brightShare(image, channel) {
+  const count = image.width * image.height;
+  let bright = 0;
+  for (let index = 0; index < count; index++) {
+    const at = index * 3;
+    if (image.rgb[at] >= channel || image.rgb[at + 1] >= channel || image.rgb[at + 2] >= channel) bright++;
+  }
+  return count ? bright / count : 0;
+}
+
+// The software renderer's view of a picture, through the packer's own path:
+// box-down to the entry's pixels, then every pixel to its nearest colour in the
+// global palette (the last 768 bytes of pics/colormap.pcx), which is the index
+// the engine actually draws. Returns the mean luminance the drawn pixels would
+// have and how many distinct indices they land on, both to compare with the
+// pristine WAL's own indices.
+function softwareView(original, downsampled, map, palette) {
+  const { width, height } = downsampled;
+  const rgba = new Uint8Array(width * height * 4);
+  for (let index = 0; index < width * height; index++) {
+    rgba[index * 4] = downsampled.rgb[index * 3];
+    rgba[index * 4 + 1] = downsampled.rgb[index * 3 + 1];
+    rgba[index * 4 + 2] = downsampled.rgb[index * 3 + 2];
+    rgba[index * 4 + 3] = 255;
+  }
+  const indices = rgbaToIndices(rgba, width, height, map, { alphaCutoff: 128, fallback: 0 });
+  // The palette's own luminance per index, in the same Rec. 601 units the
+  // texture gates use: this is the colour the software renderer paints.
+  const table = new Float32Array(256);
+  for (let index = 0; index < 256; index++) {
+    table[index] = luminance(palette[index * 3], palette[index * 3 + 1], palette[index * 3 + 2]);
+  }
+  let artLuminance = 0;
+  const artIndices = new Set();
+  for (let index = 0; index < indices.length; index++) {
+    artLuminance += table[indices[index]];
+    artIndices.add(indices[index]);
+  }
+  // The pristine WAL's own indices, on the same palette.
+  let sourceLuminance = 0;
+  const sourceIndices = new Set();
+  for (let index = 0; index < original.indices.length; index++) {
+    sourceLuminance += table[original.indices[index]];
+    sourceIndices.add(original.indices[index]);
+  }
+  return {
+    luminance: artLuminance / indices.length,
+    sourceLuminance: sourceLuminance / original.indices.length,
+    distinct: artIndices.size,
+    sourceDistinct: sourceIndices.size,
+  };
 }
 
 // The 3x3 source envelope gate 4 measures against, per source pixel.
@@ -1098,8 +1418,39 @@ function sourceRange(image) {
 // Measure one 4x picture against the original it was drawn from. `art` is the
 // 4x image; `original` is the WAL's own size. Returns every number the report
 // keeps, the gate verdicts and the list of gates that failed.
+//
+// Options:
+//   gates        the faithful-enlargement gate set (default GATES)
+//   material     the material the picture was drawn with (materialFor's
+//                answer). A material other than sign/water/sky/flat switches
+//                the gate set: gates 4 and 5 are dropped, because relief
+//                legitimately brightens a pixel past its source neighbours and
+//                beats a bilinear gradient by construction, and REALISM_GATES
+//                take their place.
+//   base         the faithful 4x enlargement the material was applied to.
+//                Required for material art: the seam, chroma, highlight and
+//                detail limits are all measured against this picture.
+//   palette      the global palette (the last 768 bytes of pics/colormap.pcx),
+//                the one the software renderer indexes every WAL through.
+//   paletteMap   an optional paletteMapper() reused across entries; the nearest
+//                colour answers are memoised on it.
 export function measureGates(original, art, options = {}) {
   const gates = options.gates ?? GATES;
+  const material = options.material ?? null;
+  const materialArt = material != null && !UNCHANGED_MATERIALS.includes(material);
+  const base = options.base ?? null;
+  const realism = materialArt ? REALISM_GATES : null;
+  const palette = options.palette ?? null;
+  if (materialArt && !base) {
+    throw new TextureError('measureGates: material "' + material + '" needs the faithful base picture to measure against', "BAD_ARGUMENT");
+  }
+  if (!palette || palette.length < 768) {
+    throw new TextureError("measureGates: the software-renderer gate needs the 768-byte global palette (options.palette)", "BAD_ARGUMENT");
+  }
+  if (!original.indices) {
+    throw new TextureError("measureGates: the original needs its palette indices (readWalRgb returns them) for the software-renderer gate", "BAD_ARGUMENT");
+  }
+  const paletteMap = options.paletteMap ?? paletteMapper(palette);
   const failures = [];
   const dimsOk = art.width === original.width * SCALE && art.height === original.height * SCALE;
   if (!dimsOk) {
@@ -1141,66 +1492,166 @@ export function measureGates(original, art, options = {}) {
 
   const artSeam = seamSteps(art);
   const sourceSeam = seamSteps(original);
-  const bilinear = bilinear4x(original);
-  const bilinearSeam = seamSteps(bilinear);
+  // A faithful enlargement is compared with what a plain bilinear 4x does; a
+  // material picture with the faithful base it was lit from, because the
+  // material's own relief already changed the bilinear baseline.
+  const bilinear = materialArt ? null : bilinear4x(original);
+  const bilinearSeam = bilinear ? seamSteps(bilinear) : null;
+  const baseSeam = materialArt ? seamSteps(base) : null;
   const seam = artSeam.ratio;
 
-  // Gate 3 says the upscale adds no seam, so each axis is compared as the ratio
-  // seam step / interior step -- the shape of the transition, which is what a
-  // sharpening filter legitimately changes -- against the same ratio for a plain
-  // wrapped bilinear 4x. 0.05 of a ratio is head-room for a step averaged over
-  // 0..255 levels. A boundary step under one level in both pictures is invisible
-  // and passes outright; that is the `trigger` texture, whose baseline is zero.
-  const seamAllows = (axis) =>
-    (artSeam["seam" + axis] <= 1 && bilinearSeam["seam" + axis] <= 1) ||
-    artSeam["ratio" + axis] <= gates.seam * bilinearSeam["ratio" + axis] + 0.05;
+  // Gate 3 says the enlargement adds no seam, so each axis is compared as the
+  // ratio seam step / interior step -- the shape of the transition, which is
+  // what a sharpening filter or a lit surface legitimately changes -- against
+  // the same ratio for its baseline. 0.05 of a ratio is head-room for a step
+  // averaged over 0..255 levels. A boundary step under one level in both
+  // pictures is invisible and passes outright; that is the `trigger` texture,
+  // whose baseline is zero.
+  const seamAllows = (axis) => {
+    if (!materialArt) {
+      return (
+        (artSeam["seam" + axis] <= 1 && bilinearSeam["seam" + axis] <= 1) ||
+        artSeam["ratio" + axis] <= gates.seam * bilinearSeam["ratio" + axis] + 0.05
+      );
+    }
+    return (
+      (artSeam["seam" + axis] <= 1 && baseSeam["seam" + axis] <= 1) ||
+      artSeam["ratio" + axis] <= realism.seamScale * baseSeam["ratio" + axis] + realism.seamSlack
+    );
+  };
   const gate3 = seamAllows("X") && seamAllows("Y");
 
-  // Gate 4: how far outside the source 3x3 each output pixel sits.
-  const range = sourceRange(original);
-  let outliers = 0;
-  for (let y = 0; y < art.height; y++) {
-    const sourceRow = (y >> 2) * original.width;
-    for (let x = 0; x < art.width; x++) {
-      const at = (y * art.width + x) * 3;
-      const envelope = (sourceRow + (x >> 2)) * 3;
-      let outside = false;
-      for (let channel = 0; channel < 3; channel++) {
-        const value = art.rgb[at + channel];
-        if (value > range.high[envelope + channel] + gates.outlierTolerance || value < range.low[envelope + channel] - gates.outlierTolerance) {
-          outside = true;
-          break;
+  // Gate 4: how far outside the source 3x3 each output pixel sits. Only a
+  // faithful enlargement is held to it -- relief is supposed to break it.
+  let outlierPercent = null;
+  let gate4 = true;
+  if (!materialArt) {
+    const range = sourceRange(original);
+    let outliers = 0;
+    for (let y = 0; y < art.height; y++) {
+      const sourceRow = (y >> 2) * original.width;
+      for (let x = 0; x < art.width; x++) {
+        const at = (y * art.width + x) * 3;
+        const envelope = (sourceRow + (x >> 2)) * 3;
+        let outside = false;
+        for (let channel = 0; channel < 3; channel++) {
+          const value = art.rgb[at + channel];
+          if (value > range.high[envelope + channel] + gates.outlierTolerance || value < range.low[envelope + channel] - gates.outlierTolerance) {
+            outside = true;
+            break;
+          }
         }
+        if (outside) outliers++;
       }
-      if (outside) outliers++;
     }
+    outlierPercent = (outliers / (art.width * art.height)) * 100;
   }
-  const outlierPercent = (outliers / (art.width * art.height)) * 100;
 
-  const artGradient = meanGradient(art);
-  const baselineGradient = meanGradient(bilinear);
-  const gradientRatio = baselineGradient > 1e-6 ? artGradient / baselineGradient : artGradient > 1e-6 ? Infinity : 1;
+  const artGradient = materialArt ? null : meanGradient(art);
+  const baselineGradient = materialArt ? null : meanGradient(bilinear);
+  const gradientRatio = materialArt ? null : baselineGradient > 1e-6 ? artGradient / baselineGradient : artGradient > 1e-6 ? Infinity : 1;
 
-  const gate1 = flat ? flatMax <= gates.flatMax : correlation >= gates.pearson && meanAbsRgb <= gates.meanAbsRgb;
+  const gate1 = flat ? flatMax <= gates.flatMax : correlation >= (realism ? realism.pearson : gates.pearson) && meanAbsRgb <= (realism ? realism.meanAbsRgb : gates.meanAbsRgb);
   if (!gate1) failures.push(flat ? "a flat original is not flat within " + gates.flatMax + " (worst " + flatMax + ")" : "r " + correlation.toFixed(4) + " / mean RGB error " + meanAbsRgb.toFixed(3));
   // "mean luminance within 2" is the picture's mean, not each pixel's: the
   // per-pixel error is reported beside it, but a dithered source would fail a
   // per-pixel rule no faithful enlargement can avoid.
   const meanLuminanceBias = Math.abs(meanDownsample - meanOriginal);
-  const gate2 = meanLuminanceBias <= gates.meanLuminance;
+  const gate2 = meanLuminanceBias <= (realism ? realism.meanLuminance : gates.meanLuminance);
   if (!gate2) failures.push("mean luminance shifted " + meanLuminanceBias.toFixed(3));
   if (!gate3) {
     failures.push(
-      "wrap seam X " + artSeam.ratioX.toFixed(4) + "/Y " + artSeam.ratioY.toFixed(4) + "x interior, bilinear X " +
-        bilinearSeam.ratioX.toFixed(4) + "/Y " + bilinearSeam.ratioY.toFixed(4) + "x (source " + sourceSeam.ratio.toFixed(4) + "x)"
+      materialArt
+        ? "wrap seam X " + artSeam.ratioX.toFixed(4) + "/Y " + artSeam.ratioY.toFixed(4) + "x interior, base X " +
+            baseSeam.ratioX.toFixed(4) + "/Y " + baseSeam.ratioY.toFixed(4) + "x (source " + sourceSeam.ratio.toFixed(4) + "x)"
+        : "wrap seam X " + artSeam.ratioX.toFixed(4) + "/Y " + artSeam.ratioY.toFixed(4) + "x interior, bilinear X " +
+            bilinearSeam.ratioX.toFixed(4) + "/Y " + bilinearSeam.ratioY.toFixed(4) + "x (source " + sourceSeam.ratio.toFixed(4) + "x)"
     );
   }
-  const gate4 = outlierPercent <= gates.outlierPercent;
-  if (!gate4) failures.push(outlierPercent.toFixed(3) + "% of pixels outside their source 3x3 by more than " + gates.outlierTolerance);
+  if (materialArt) {
+    gate4 = true;
+  } else {
+    gate4 = outlierPercent <= gates.outlierPercent;
+    if (!gate4) failures.push(outlierPercent.toFixed(3) + "% of pixels outside their source 3x3 by more than " + gates.outlierTolerance);
+  }
   // A completely flat original has no gradient to beat; there is nothing for
   // the 1.05x rule to measure, so it passes by construction.
-  const gate5 = baselineGradient <= 1e-6 || gradientRatio >= gates.gradient;
+  const gate5 = materialArt ? true : baselineGradient <= 1e-6 || gradientRatio >= gates.gradient;
   if (!gate5) failures.push("gradient " + gradientRatio.toFixed(3) + "x bilinear");
+
+  // The realism gates: a material may add surface, but it must still be the same
+  // picture, in the same colours, tiling the same way, with more detail rather
+  // than less.
+  let hueShift = null;
+  let chroma99 = null;
+  let chroma99Base = null;
+  let bright = null;
+  let brightBase = null;
+  let energy = null;
+  let energyBase = null;
+  let gateHue = true;
+  let gateChroma = true;
+  let gateBright = true;
+  let gateDetail = true;
+  if (materialArt) {
+    hueShift = meanHueShift(original, downsampled);
+    gateHue = hueShift <= realism.hueShift;
+    if (!gateHue) failures.push("hue shift " + hueShift.toFixed(2) + "° (limit " + realism.hueShift + "° over chroma > " + realism.sourceChroma + ")");
+
+    chroma99 = chromaPercentile(art, realism.chromaPercentile);
+    chroma99Base = chromaPercentile(base, realism.chromaPercentile);
+    gateChroma = chroma99 <= chroma99Base * realism.chromaScale + realism.chromaSlack;
+    if (!gateChroma) {
+      failures.push(
+        "99th-percentile chroma " + chroma99 + " over base " + chroma99Base + " x" + realism.chromaScale + " + " + realism.chromaSlack +
+          " (" + (chroma99Base * realism.chromaScale + realism.chromaSlack) + " allowed)"
+      );
+    }
+
+    bright = brightShare(art, realism.brightChannel);
+    brightBase = brightShare(base, realism.brightChannel);
+    gateBright = bright <= brightBase + realism.brightShare;
+    if (!gateBright) {
+      failures.push(
+        (bright * 100).toFixed(2) + "% of pixels with a channel at " + realism.brightChannel + "+ over base's " + (brightBase * 100).toFixed(2) +
+          "% (+" + (realism.brightShare * 100).toFixed(1) + "% allowed)"
+      );
+    }
+
+    energy = detailEnergy(art);
+    energyBase = detailEnergy(base);
+    const smooth = SMOOTH_MATERIALS.includes(material);
+    const ratioFloor = smooth ? realism.smoothDetailEnergy : realism.detailEnergy;
+    const levelFloor = smooth ? realism.smoothDetailLevels : realism.detailEnergyLevels;
+    gateDetail = energy >= energyBase * ratioFloor && energy >= levelFloor;
+    if (!gateDetail) {
+      failures.push(
+        "detail energy " + energy.toFixed(2) + " levels vs base " + energyBase.toFixed(2) + " (needs " + ratioFloor + "x and " + levelFloor + " levels)"
+      );
+    }
+  }
+
+  // Every entry, material or not, is drawn by the software renderer through the
+  // packer's own path: box-down to 1x, then to the nearest global-palette
+  // index. The picture that lands on screen must be the picture the pristine
+  // WAL was: same mean luminance, still using most of its palette indices.
+  const software = softwareView(original, downsampled, paletteMap, palette);
+  const softwareLuminanceBias = Math.abs(software.luminance - software.sourceLuminance);
+  const softwareIndexShare = software.sourceDistinct ? software.distinct / software.sourceDistinct : 1;
+  const gateSoftwareLuminance = softwareLuminanceBias <= SOFTWARE_GATES.luminance;
+  if (!gateSoftwareLuminance) {
+    failures.push(
+      "software-renderer mean luminance " + software.luminance.toFixed(2) + " against the pristine WAL's " + software.sourceLuminance.toFixed(2) +
+        " (" + softwareLuminanceBias.toFixed(2) + " off, limit " + SOFTWARE_GATES.luminance + ")"
+    );
+  }
+  const gateSoftwareIndices = softwareIndexShare >= SOFTWARE_GATES.indexShare;
+  if (!gateSoftwareIndices) {
+    failures.push(
+      "software-renderer palette uses " + software.distinct + " indices, " + (softwareIndexShare * 100).toFixed(1) + "% of the pristine WAL's " +
+        software.sourceDistinct + " (needs " + (SOFTWARE_GATES.indexShare * 100) + "%)"
+    );
+  }
 
   const metrics = {
     pearson: round(correlation),
@@ -1211,17 +1662,35 @@ export function measureGates(original, art, options = {}) {
     meanLuminanceBias: round(meanLuminanceBias),
     seam: round(seam),
     seamSource: round(sourceSeam.ratio),
-    seamBilinear: round(bilinearSeam.ratio),
+    seamBaseline: materialArt ? round(baseSeam.ratio) : round(bilinearSeam.ratio),
+    seamBaselineKind: materialArt ? "material base" : "bilinear",
     seamStep: round(Math.max(artSeam.seamX, artSeam.seamY)),
-    seamStepBilinear: round(Math.max(bilinearSeam.seamX, bilinearSeam.seamY)),
-    outlierPercent: round(outlierPercent),
-    gradient: round(gradientRatio),
+    seamStepBaseline: materialArt ? round(Math.max(baseSeam.seamX, baseSeam.seamY)) : round(Math.max(bilinearSeam.seamX, bilinearSeam.seamY)),
+    outlierPercent: outlierPercent == null ? null : round(outlierPercent),
+    gradient: gradientRatio == null ? null : round(gradientRatio),
+    hueShift: hueShift == null ? null : round(hueShift),
+    chroma99: chroma99 == null ? null : chroma99,
+    chroma99Base: chroma99Base == null ? null : chroma99Base,
+    brightShare: bright == null ? null : round(bright),
+    brightShareBase: brightBase == null ? null : round(brightBase),
+    detailEnergy: energy == null ? null : round(energy),
+    detailEnergyBase: energyBase == null ? null : round(energyBase),
+    softwareLuminance: round(software.luminance),
+    softwareSourceLuminance: round(software.sourceLuminance),
+    softwareLuminanceBias: round(softwareLuminanceBias),
+    softwareIndices: software.distinct,
+    softwareSourceIndices: software.sourceDistinct,
+    softwareIndexShare: round(softwareIndexShare),
   };
+
+  const verdicts = materialArt
+    ? { downsample: gate1, luminance: gate2, seam: gate3, hue: gateHue, chroma: gateChroma, highlights: gateBright, detail: gateDetail, softwareLuminance: gateSoftwareLuminance, softwareIndices: gateSoftwareIndices }
+    : { downsample: gate1, luminance: gate2, seam: gate3, outliers: gate4, gradient: gate5, softwareLuminance: gateSoftwareLuminance, softwareIndices: gateSoftwareIndices };
 
   return {
     metrics,
-    gates: { downsample: gate1, luminance: gate2, seam: gate3, outliers: gate4, gradient: gate5 },
-    pass: dimsOk && gate1 && gate2 && gate3 && gate4 && gate5,
+    gates: verdicts,
+    pass: dimsOk && Object.values(verdicts).every(Boolean),
     failures,
   };
 }
@@ -1328,7 +1797,7 @@ export function encodePngRgb(width, height, rgb) {
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
     pngChunk("IHDR", header),
-    pngChunk("IDAT", zlib.deflateSync(raw, { level: 6 })),
+    pngChunk("IDAT", zlib.deflateSync(raw, { level: 9 })),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
 }
@@ -1403,16 +1872,18 @@ function main(argv) {
     return 0;
   }
   const manifest = readManifest(DEFAULT_MANIFEST);
-  let targets = textureTargets(manifest);
+  let targets = textureTargetsWithCoverage(manifest);
   if (options.only.length) {
     targets = targets.filter((entry) => options.only.some((text) => entry.name.toLowerCase().includes(text)));
     if (!targets.length) throw new TextureError("no target WAL matches --only " + options.only.join(", "), "BAD_ARGUMENT");
   }
 
   const pristine = loadPristine();
+  const paletteMap = paletteMapper(pristine.palette);
   const reportPath = options.report ?? DEFAULT_REPORT;
   const entries = [];
   const classCounts = {};
+  const materialCounts = Object.fromEntries(MATERIALS.map((name) => [name, 0]));
   let artBytes = 0;
   let pngBytes = 0;
   let artPixels = 0;
@@ -1423,21 +1894,43 @@ function main(argv) {
     const original = pristine.readWal(entry.name);
     const recipe = recipeFor(entry, original);
     const textureClass = recipe.textureClass;
+    // The material decision and the faithful enlargement both come first: the
+    // material pass is a function of (base, source, material, name), and even a
+    // --check run recomputes the base so the realism gates have the picture the
+    // art claims to have been lit from.
+    const decision = materialFor(entry, original);
+    const material = decision.material;
+    const materialArt = !UNCHANGED_MATERIALS.includes(material);
+    const base = upscaleImage(original, { textureClass, params: recipe.params });
     const file = artFileFor(entry);
     let art = null;
     let generated = false;
 
     if (options.check) {
       if (!fs.existsSync(file)) {
-        const result = { name: entry.name, png: rel(file), textureClass, source: original.width + "x" + original.height, art: null, pass: false, failures: ["no art on disk"], metrics: null, gates: null };
+        const result = {
+          name: entry.name,
+          png: rel(file),
+          textureClass,
+          material,
+          materialWhy: decision.why,
+          materialBy: decision.by,
+          source: original.width + "x" + original.height,
+          art: null,
+          pass: false,
+          failures: ["no art on disk"],
+          metrics: null,
+          gates: null,
+        };
         entries.push(result);
+        materialCounts[material]++;
         failures++;
         if (!options.quiet) process.stderr.write("FAIL " + entry.name + ": no art on disk (" + rel(file) + ")\n");
         continue;
       }
       art = decodePngRgb(file);
     } else {
-      art = upscaleImage(original, { textureClass, params: recipe.params });
+      art = materialArt ? guardMaterialSeam(applyMaterial(base, original, material, { seed: entry.name }), base) : base;
       const png = encodePngRgb(art.width, art.height, art.rgb);
       const previous = fs.existsSync(file) ? fs.readFileSync(file) : null;
       if (!previous || !previous.equals(png)) {
@@ -1452,18 +1945,23 @@ function main(argv) {
       generated = true;
     }
 
-    const measurement = measureGates(original, art);
+    const measurement = measureGates(original, art, { material, base, palette: pristine.palette, paletteMap });
     const bytes = fs.existsSync(file) ? fs.statSync(file).size : 0;
     artBytes += art.width * art.height * 3;
     artPixels += art.width * art.height;
     pngBytes += bytes;
     classCounts[textureClass] = (classCounts[textureClass] ?? 0) + 1;
+    materialCounts[material]++;
     if (!measurement.pass) failures++;
 
     entries.push({
       name: entry.name,
       png: rel(file),
       textureClass,
+      material,
+      materialWhy: decision.why,
+      materialBy: decision.by,
+      recipe: materialArt ? "material" : "faithful",
       ...(recipe.override ? { detectedClass: recipe.detectedClass, override: { class: recipe.override.class ?? null, params: recipe.override.params ?? null, why: recipe.override.why } } : {}),
       source: original.width + "x" + original.height,
       art: art.width + "x" + art.height,
@@ -1475,12 +1973,14 @@ function main(argv) {
       failures: measurement.failures,
     });
     if (!measurement.pass) {
-      for (const failure of measurement.failures) process.stderr.write("FAIL " + entry.name + " (" + textureClass + "): " + failure + "\n");
+      for (const failure of measurement.failures) process.stderr.write("FAIL " + entry.name + " (" + material + "/" + textureClass + "): " + failure + "\n");
     } else if (!options.quiet) {
       const metrics = measurement.metrics;
       process.stdout.write(
-        "ok   " + entry.name.padEnd(38) + " " + textureClass.padEnd(15) + " " + original.width + "x" + original.height + " -> " + art.width + "x" + art.height +
-          "  r " + metrics.pearson.toFixed(4) + "  rgb " + metrics.meanAbsRgb.toFixed(2) + "  seam " + metrics.seam.toFixed(2) + "  grad " + metrics.gradient.toFixed(2) + "\n"
+        "ok   " + entry.name.padEnd(38) + " " + material.padEnd(8) + " " + textureClass.padEnd(15) + " " + original.width + "x" + original.height + " -> " + art.width + "x" + art.height +
+          "  r " + metrics.pearson.toFixed(4) + "  rgb " + metrics.meanAbsRgb.toFixed(2) + "  seam " + metrics.seam.toFixed(2) +
+          (metrics.detailEnergy == null ? "" : "  detail " + metrics.detailEnergy.toFixed(2) + "(x" + (metrics.detailEnergy / metrics.detailEnergyBase).toFixed(2) + ")") +
+          "  sw " + metrics.softwareLuminanceBias.toFixed(2) + "\n"
       );
     }
   }
@@ -1500,16 +2000,30 @@ function main(argv) {
       seamGuard: "only if the finished 8-bit seam ratio exceeds 1.15x bilinear's, blend the outermost ring that far toward a plain wrapped bilinear",
       grain: "wrapped value noise on the source grid, at most 3% of local luminance and 4/255 absolute, scaled by source 3x3 variance; off for sign/arrow/text, light, water/warp, sky and flat/black",
       finalClamp: "source 3x3 min/max +/- " + GATES.outlierTolerance,
+      material:
+        "materialFor(entry, source) decides one of " + MATERIALS.length + " materials for every WAL. sign, water, sky and flat keep the faithful upscale and the faithful gates. " +
+        "Every other material is drawn by applyMaterial(base, source, material, {seed: entry.name}): relief from the base's own shading, one fixed light from the upper left, " +
+        "wrapped cavity occlusion, grunge, grain and edge wear, and a mean-brightness guard -- all deterministic, all tileable, all in scripts/material-lib.mjs.",
+      materialParams: MATERIAL_PARAMS,
+      materialGates: "material art is held to the realism gates instead of gate 4 (source 3x3 envelope) and gate 5 (bilinear gradient)",
       parameters: BASE_PARAMS,
       classes: CLASS_PARAMS,
       overrides: TEXTURE_OVERRIDES,
     },
     gates: GATES,
+    realismGates: REALISM_GATES,
+    softwareGates: SOFTWARE_GATES,
+    coverage: {
+      maps: (manifest.maps ?? []).length,
+      excluded: COVERAGE_EXCLUDED,
+      rule: "every WAL a map names gets art, except the bookkeeping textures; an animation family is drawn whole or not at all",
+    },
     summary: {
       entries: entries.length,
       passed: entries.length - failures,
       failed: failures,
       classes: Object.fromEntries(CLASS_NAMES.filter((name) => classCounts[name]).map((name) => [name, classCounts[name]])),
+      materials: materialCounts,
       artPixels,
       artBytes,
       pngBytes,
@@ -1523,8 +2037,10 @@ function main(argv) {
 
   process.stdout.write(
     (options.check ? "checked" : "drew") + " " + entries.length + " textures: " + report.summary.passed + " pass, " + failures + " fail" +
-      " (" + GATES.pearson + " r, " + GATES.meanAbsRgb + " rgb, " + GATES.meanLuminance + " luma, " + GATES.seam + "x seam, " +
-      GATES.outlierPercent + "% outliers, " + GATES.gradient + "x gradient); " +
+      " (faithful " + GATES.pearson + " r / " + GATES.meanAbsRgb + " rgb / " + GATES.outlierPercent + "% outliers; material " +
+      REALISM_GATES.pearson + " r / " + REALISM_GATES.meanAbsRgb + " rgb / " + REALISM_GATES.hueShift + "° hue / " +
+      REALISM_GATES.detailEnergy + "x detail; software " + SOFTWARE_GATES.luminance + " luma / " +
+      (SOFTWARE_GATES.indexShare * 100) + "% indices); " +
       artPixels + " px, " + formatBytes(pngBytes) + " PNG" +
       (options.check ? "" : ", " + unchanged + " already identical") + "\n" +
       "report: " + rel(reportPath) + "\n"

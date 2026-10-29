@@ -514,6 +514,40 @@ export const TABLE = {
   "e2u1/hdoor1_1": { material: "tech", why: "heavy steel door; tech by name" },
   "e2u1/hdoor1_2": { material: "tech", why: "heavy steel door; tech by name" },
   "e2u2/refdr9_3": { material: "tech", why: "machine/computer panel, name and look agree" },
+  // The WALs the maps use that had no replacement art when the sheets above
+  // were reviewed. They were drawn by the coverage pass, and each row records
+  // the decision that was drawn -- materialFor's own rule, including the
+  // rust-hue test on the source pixels -- so a later run reaches the same
+  // material by table and the art on disk does not change meaning. The `why`
+  // says where the row came from; those entries have no sheet.
+  "e1u1/pipe1_1": { material: "rust", why: "rust: metal name and 71.8% of source pixels are rust-hued (>= 35%) (added for map coverage)" },
+  "e1u1/grate2_6": { material: "rust", why: "rust: metal name and 41.5% of source pixels are rust-hued (>= 35%) (added for map coverage)" },
+  "e1u1/metal1_1": { material: "metal", why: "metal: metal name and only 32.8% rust-hued source pixels (< 35%) (added for map coverage)" },
+  "e1u1/grey1_3": { material: "stone", why: "stone: the default when no rule matches (added for map coverage)" },
+  "e1u1/grey_p1_3": { material: "stone", why: "stone: the default when no rule matches (added for map coverage)" },
+  "e1u1/metal1_4": { material: "rust", why: "rust: metal name and 36.5% of source pixels are rust-hued (>= 35%) (added for map coverage)" },
+  "e1u1/wtroof4_6": { material: "rust", why: "rust: metal name and 63.5% of source pixels are rust-hued (>= 35%) (added for map coverage)" },
+  "e1u1/wgrate1_7": { material: "rust", why: "rust: metal name and 65.7% of source pixels are rust-hued (>= 35%) (added for map coverage)" },
+  "e1u3/fmet1_2": { material: "stone", why: "stone: the default when no rule matches (added for map coverage)" },
+  "e1u1/grass1_8": { material: "organic", why: "organic: grass or green-growth name (added for map coverage)" },
+  "e1u1/+0comp10_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+1comp10_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+2comp10_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+3comp10_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+4comp10_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+0cgrate2_1": { material: "metal", why: "metal: metal name and only 27.7% rust-hued source pixels (< 35%) (added for map coverage)" },
+  "e1u1/+1cgrate2_1": { material: "metal", why: "metal: metal name and only 27.7% rust-hued source pixels (< 35%) (added for map coverage)" },
+  "e1u1/ggrat2_2": { material: "metal", why: "metal: metal name and only 30.8% rust-hued source pixels (< 35%) (added for map coverage)" },
+  "e1u1/+0comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+1comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+2comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+3comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+4comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+5comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+6comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+7comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+8comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
+  "e1u1/+9comp11_1": { material: "tech", why: "tech: machine, computer or door-mechanism name (added for map coverage)" },
 };
 
 // Look the entry up in the reviewed table, then fall back to the rules. The
