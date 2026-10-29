@@ -154,6 +154,42 @@ export function paramsFor(textureClass) {
   return { ...BASE_PARAMS, ...(CLASS_PARAMS[textureClass] ?? CLASS_PARAMS.generic) };
 }
 
+// Textures whose content the name test cannot read. `trigger` is a brown sign
+// reading "Trig" and `baslt3_1` is a fluorescent tube in a metal frame like its
+// `baselt_*` neighbours, but neither name matches a class pattern, so both were
+// drawn as generic: grain on a glowing fixture, text edges worked as if they
+// were a rock. An override names the class to draw with (or sets single knobs
+// after it), and goes into the report so the delivered art records every
+// texture that did not follow its name. Gates are never touched from here.
+export const TEXTURE_OVERRIDES = {
+  "textures/e1u1/trigger.wal": {
+    class: "sign/arrow/text",
+    why: "brown sign reading 'Trig': text keeps its edges and takes no grain",
+  },
+  "textures/e1u1/baslt3_1.wal": {
+    class: "light",
+    why: "fluorescent tube in a metal frame, the same fixture as the baselt_* lights",
+  },
+};
+
+export function overrideFor(name) {
+  return TEXTURE_OVERRIDES[String(name).toLowerCase()] ?? null;
+}
+
+// What a texture is actually drawn with: the detected class unless an override
+// names another, then that class's parameters, then any knob the override sets.
+export function recipeFor(entry, source = null) {
+  const detectedClass = classifyTexture(entry, source);
+  const override = overrideFor(entry.name);
+  const textureClass = override?.class ?? detectedClass;
+  return {
+    textureClass,
+    detectedClass,
+    override,
+    params: { ...paramsFor(textureClass), ...(override?.params ?? {}) },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Colour: sRGB <-> linear light
 // ---------------------------------------------------------------------------
@@ -1385,7 +1421,8 @@ function main(argv) {
 
   for (const entry of targets) {
     const original = pristine.readWal(entry.name);
-    const textureClass = classifyTexture(entry, original);
+    const recipe = recipeFor(entry, original);
+    const textureClass = recipe.textureClass;
     const file = artFileFor(entry);
     let art = null;
     let generated = false;
@@ -1400,7 +1437,7 @@ function main(argv) {
       }
       art = decodePngRgb(file);
     } else {
-      art = upscaleImage(original, { textureClass });
+      art = upscaleImage(original, { textureClass, params: recipe.params });
       const png = encodePngRgb(art.width, art.height, art.rgb);
       const previous = fs.existsSync(file) ? fs.readFileSync(file) : null;
       if (!previous || !previous.equals(png)) {
@@ -1427,6 +1464,7 @@ function main(argv) {
       name: entry.name,
       png: rel(file),
       textureClass,
+      ...(recipe.override ? { detectedClass: recipe.detectedClass, override: { class: recipe.override.class ?? null, params: recipe.override.params ?? null, why: recipe.override.why } } : {}),
       source: original.width + "x" + original.height,
       art: art.width + "x" + art.height,
       pngBytes: bytes,
@@ -1464,6 +1502,7 @@ function main(argv) {
       finalClamp: "source 3x3 min/max +/- " + GATES.outlierTolerance,
       parameters: BASE_PARAMS,
       classes: CLASS_PARAMS,
+      overrides: TEXTURE_OVERRIDES,
     },
     gates: GATES,
     summary: {
