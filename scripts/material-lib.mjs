@@ -38,12 +38,16 @@
 //      that highlight is a desaturated glint. Metal, crate and tech edges take
 //      chipped wear.
 //   4. Grunge. Low-frequency fbm gated by cavity, darkening and desaturating by
-//      up to 15%, plus faint vertical streaks. Grain of +-2-4% (metal +-1.5%)
+//      up to 15%, plus faint vertical streaks. Fine grain (2% on the smooth
+//      materials up to 36% on tech, the amplitude MATERIAL_PARAMS names)
 //      finishes. Lamp gets a soft glow falloff around its bright pixels; glass
 //      gets faint diagonal reflection streaks.
 //   5. Colour. Every change is a scale on the base RGB, except the deliberate
 //      pull toward the pixel's own luminance for desaturation -- no channel is
-//      ever re-hued. A mean-brightness guard then computes one global gain that
+//      ever re-hued. Every term that brightens (shade, edge highlight, chip
+//      wear, glow, grain) fades out with the head-room left before the
+//      brightest channel reaches white, so a surface already near 250 cannot be
+//      pushed into extra clipped pixels. A mean-brightness guard then computes one global gain that
 //      puts the result's encoded luminance back where the faithful enlargement
 //      had it (the first pass balances linear light, up to two more correct the
 //      encoded mean, reaching further only when a recipe drifted a long way),
@@ -69,7 +73,15 @@ export { MATERIALS };
 // contract, not a separate list a caller can vary.
 export const UNCHANGED_MATERIALS = Object.freeze(["sign", "water", "sky", "flat"]);
 
-const MATERIAL_SET = new Set(MATERIALS);
+// MATERIALS is owned by material-classes.mjs, which imports hires-art.mjs,
+// which imports this file. When material-classes.mjs is the entry point that
+// cycle means its exports are not initialised yet while this file evaluates, so
+// the name set is built on first use instead of at module load.
+let materialSet = null;
+function materialNames() {
+  if (!materialSet) materialSet = new Set(MATERIALS);
+  return materialSet;
+}
 const UNCHANGED_SET = new Set(UNCHANGED_MATERIALS);
 
 // ---------------------------------------------------------------------------
@@ -609,16 +621,21 @@ function organicDetail(W, H, seed) {
 // `grain` is the grain amplitude; `edge` is the convex-edge brightening;
 // `glint` marks metal, whose highlight is desaturated instead of plain bright;
 // `wear` is the chipped-paint strength on edges.
-const PROFILES = Object.freeze({
-  stone: { detail: "stone", normals: 8.5, shade: 1.15, ao: 0.35, grunge: 1.0, grain: 0.03, edge: 0.16, glint: 0, wear: 0 },
-  metal: { detail: "metal", normals: 7.0, shade: 0.85, ao: 0.25, grunge: 0.8, grain: 0.015, edge: 0.10, glint: 1, wear: 1 },
-  rust: { detail: "rust", normals: 7.5, shade: 1.05, ao: 0.30, grunge: 1.0, grain: 0.035, edge: 0.14, glint: 0, wear: 0.5 },
-  tech: { detail: "tech", normals: 6.0, shade: 0.80, ao: 0.22, grunge: 0.7, grain: 0.02, edge: 0.12, glint: 0, wear: 1 },
-  crate: { detail: "crate", normals: 7.0, shade: 0.90, ao: 0.25, grunge: 0.8, grain: 0.025, edge: 0.13, glint: 0, wear: 1 },
-  wood: { detail: "wood", normals: 7.0, shade: 0.95, ao: 0.25, grunge: 1.0, grain: 0.03, edge: 0.14, glint: 0, wear: 0.4 },
-  organic: { detail: "organic", normals: 7.0, shade: 0.85, ao: 0.28, grunge: 1.0, grain: 0.035, edge: 0.12, glint: 0, wear: 0 },
-  lamp: { detail: "smooth", normals: 2.0, shade: 0.30, ao: 0.03, grunge: 0.1, grain: 0.02, edge: 0.05, glint: 0, wear: 0 },
-  glass: { detail: "smooth", normals: 2.5, shade: 0.35, ao: 0.10, grunge: 0.4, grain: 0.02, edge: 0.05, glint: 0, wear: 0 },
+//
+// This table is the tuning surface the pipeline's brief names: the realism
+// gates in hires-art.mjs judge the result, and a value that misses them is
+// corrected here rather than by loosening a gate. Exported so a report can
+// record exactly which response drew each picture.
+export const MATERIAL_PARAMS = Object.freeze({
+  stone: { detail: "stone", normals: 2.0, shade: 0.5, ao: 0.35, grunge: 1.0, grain: 0.24, edge: 0.6, glint: 0, wear: 0 },
+  metal: { detail: "metal", normals: 7.0, shade: 0.3, ao: 0.25, grunge: 0.8, grain: 0.24, edge: 0.24, glint: 1, wear: 1 },
+  rust: { detail: "rust", normals: 7.5, shade: 0.27, ao: 0.3, grunge: 1.0, grain: 0.32, edge: 0.32, glint: 0, wear: 0.5 },
+  tech: { detail: "tech", normals: 6.0, shade: 0.3, ao: 0.22, grunge: 0.7, grain: 0.36, edge: 0.45, glint: 0, wear: 1 },
+  crate: { detail: "crate", normals: 7.0, shade: 0.24, ao: 0.25, grunge: 0.8, grain: 0.18, edge: 0.32, glint: 0, wear: 1 },
+  wood: { detail: "wood", normals: 7.0, shade: 0.25, ao: 0.25, grunge: 1.0, grain: 0.18, edge: 0.3, glint: 0, wear: 0.4 },
+  organic: { detail: "organic", normals: 7.0, shade: 0.24, ao: 0.28, grunge: 1.0, grain: 0.32, edge: 0.28, glint: 0, wear: 0 },
+  lamp: { detail: "smooth", normals: 2.0, shade: 0.3, ao: 0.03, grunge: 0.1, grain: 0.05, edge: 0.05, glint: 0, wear: 0, glow: 1.0 },
+  glass: { detail: "smooth", normals: 2.5, shade: 0.35, ao: 0.1, grunge: 0.4, grain: 0.02, edge: 0.05, glint: 0, wear: 0 },
 });
 
 // ---------------------------------------------------------------------------
@@ -727,7 +744,7 @@ function validateImage(image, what) {
 
 export function applyMaterial(base, source, material, options = {}) {
   const { width, height } = validateImage(base, "base");
-  if (typeof material !== "string" || !MATERIAL_SET.has(material)) {
+  if (typeof material !== "string" || !materialNames().has(material)) {
     throw new TypeError(
       "applyMaterial: unknown material " + JSON.stringify(material) + "; the contract names " + MATERIALS.join(" ")
     );
@@ -739,7 +756,7 @@ export function applyMaterial(base, source, material, options = {}) {
     return { width, height, rgb: Uint8Array.from(base.rgb) };
   }
 
-  const profile = PROFILES[material];
+  const profile = MATERIAL_PARAMS[material];
   if (!profile) throw new TypeError("applyMaterial: material " + JSON.stringify(material) + " has no recipe");
   if (source != null) validateImage(source, "source");
 
@@ -862,7 +879,7 @@ export function applyMaterial(base, source, material, options = {}) {
     for (let pixel = 0; pixel < count; pixel++) bright[pixel] = smoothstep(0.55, 0.95, luma[pixel]);
     const tight = boxBlurWrapped(bright, width, height, Math.max(2, Math.round(shortSide / 24)));
     const wide = boxBlurWrapped(bright, width, height, Math.max(3, Math.round(shortSide / 8)), 1);
-    for (let pixel = 0; pixel < count; pixel++) glow[pixel] = 1.2 * tight[pixel] + 0.7 * wide[pixel];
+    for (let pixel = 0; pixel < count; pixel++) glow[pixel] = (profile.glow ?? 1) * (1.2 * tight[pixel] + 0.7 * wide[pixel]);
   }
 
   // Glass: two families of faint diagonal reflection streaks. The phase
@@ -896,14 +913,45 @@ export function applyMaterial(base, source, material, options = {}) {
 
   // -- 5. colour -----------------------------------------------------------
   const out = new Float32Array(count * 3);
-  const grainAmplitude = profile.grain;
+  // Grain is scaled by the surface's own relief. A flat painted panel has
+  // little microtexture to show, so a full-strength grain there reads as noise
+  // and pulls the picture away from its source; the same grain on a busy
+  // surface is invisible detail. The measure is the mean absolute luminance
+  // step between wrapped neighbours, in 0..255 levels -- the same quantity the
+  // pipeline's detail gate uses.
+  let reliefLevels = 0;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    for (let x = 0; x < width; x++) {
+      const here = (row + x) * 3;
+      const left = (row + wrap(x - 1, width)) * 3;
+      const up = (wrap(y - 1, height) * width + x) * 3;
+      const level = LUMA_R * base.rgb[here] + LUMA_G * base.rgb[here + 1] + LUMA_B * base.rgb[here + 2];
+      const leftLevel = LUMA_R * base.rgb[left] + LUMA_G * base.rgb[left + 1] + LUMA_B * base.rgb[left + 2];
+      const upLevel = LUMA_R * base.rgb[up] + LUMA_G * base.rgb[up + 1] + LUMA_B * base.rgb[up + 2];
+      reliefLevels += Math.abs(level - leftLevel) + Math.abs(level - upLevel);
+    }
+  }
+  reliefLevels /= 2 * width * height;
+  const grainAmplitude = profile.grain * clamp(reliefLevels / 3.5, 0.65, 1);
   for (let pixel = 0; pixel < count; pixel++) {
     const pixelAt = pixel * 3;
     const ndl = nDotL[pixel];
     const facing = clamp((ndl - LIGHT_FLAT) / (1 - LIGHT_FLAT));
 
+    // Head-room: how much brighter this pixel can get before a channel
+    // saturates. It is the brightest channel that decides, not the luminance --
+    // a saturated cyan panel is bright on one channel while its luminance still
+    // reads mid-tone. Every brightening term fades out with the head-room
+    // (shade, edge highlight, chip, glow and grain) so a lit surface near white
+    // does not turn into clipped highlights the mean guard then has to balance;
+    // darkening keeps the room it has.
+    const peak = Math.max(linear[pixelAt], linear[pixelAt + 1], linear[pixelAt + 2]);
+    const headRoom = 1 - smoothstep(0.55, 0.9, peak);
+
     let shade = 1 + profile.shade * (ndl / LIGHT_FLAT - 1);
     shade = clamp(shade, 0.25, 2.2);
+    if (shade > 1) shade = 1 + (shade - 1) * headRoom;
     const occlusion = 1 - profile.ao * cavity[pixel];
 
     let brighten;
@@ -911,24 +959,25 @@ export function applyMaterial(base, source, material, options = {}) {
     if (profile.glint) {
       // Metal's convex highlight is a glint: less bright, and pulled toward
       // its own grey so it reads as sheen rather than paint.
-      brighten = 0.10 * convex[pixel] * facing;
+      brighten = 0.10 * convex[pixel] * facing * headRoom;
       desaturate += 0.35 * convex[pixel] * facing;
     } else {
-      brighten = profile.edge * convex[pixel] * facing;
+      brighten = profile.edge * convex[pixel] * facing * headRoom;
     }
     if (profile.wear > 0) {
-      brighten += 0.12 * chip[pixel];
+      brighten += 0.12 * chip[pixel] * headRoom;
       desaturate += 0.45 * chip[pixel];
     }
 
-    const grain = 1 + grainAmplitude * (grainNoise[pixel] * 2 - 1);
+    const grainAmp = grainAmplitude * headRoom;
+    const grain = 1 + grainAmp * (grainNoise[pixel] * 2 - 1);
     const factor =
       shade *
       occlusion *
       (1 + brighten) *
       (1 - 0.15 * grunge[pixel]) *
       grain *
-      (1 + glow[pixel]) *
+      (1 + glow[pixel] * headRoom) *
       (1 + 0.10 * reflection[pixel]);
 
     const r = linear[pixelAt] * factor;

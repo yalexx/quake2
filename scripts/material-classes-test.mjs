@@ -15,9 +15,11 @@
 //      the optional source picture; at 35% a metal name becomes rust, below 35%
 //      it stays metal, and a table row never moves with the source.
 //   3. the reviewed table and the manifest. The table must decide every one of
-//      the 270 WALs that carry replacement art, every row must name a real
-//      material and say why, and every animname link in the archive must share
-//      one material, so an animation cannot flicker between recipes.
+//      the 270 reviewed WALs that carry replacement art plus the ones the
+//      coverage pass added (every art-bearing WAL, never fewer than the 270
+//      reviewed), every row must name a real material and say why, and every
+//      animname link in the archive must share one material, so an animation
+//      cannot flicker between recipes.
 
 import { MATERIALS, RUST_SHARE, TABLE, materialCounts, materialFor, materialKey } from "./material-classes.mjs";
 import { textureTargets } from "./hires-art.mjs";
@@ -146,7 +148,7 @@ const manifest = readManifest();
 const targets = textureTargets(manifest);
 const targetKeys = new Set(targets.map((e) => materialKey(e)));
 const tableKeys = new Set(Object.keys(TABLE));
-check("the table decides all 270 textures with replacement art", targets.length === 270 && tableKeys.size === 270);
+check("the table decides every texture with replacement art (the 270 reviewed, plus coverage)", targets.length === tableKeys.size && targets.length >= 270, targets.length + " targets, " + tableKeys.size + " rows");
 check("every target is in the table", [...targetKeys].every((key) => tableKeys.has(key)), [...targetKeys].filter((key) => !tableKeys.has(key)).slice(0, 4).join(", "));
 check("the table has no key that is not a target", [...tableKeys].every((key) => targetKeys.has(key)), [...tableKeys].filter((key) => !targetKeys.has(key)).slice(0, 4).join(", "));
 check("every table row names a real material", Object.entries(TABLE).every(([, row]) => MATERIALS.includes(row.material)));
@@ -198,7 +200,7 @@ check("every animation family shares one material", splits.length === 0, splits.
 
 const counts = materialCounts(targets);
 check("materialCounts returns exactly the thirteen names", Object.keys(counts).join(",") === MATERIALS.join(","));
-check("materialCounts sums to the 270 targets", Object.values(counts).reduce((a, b) => a + b, 0) === targets.length, JSON.stringify(counts));
+check("materialCounts sums to the targets", Object.values(counts).reduce((a, b) => a + b, 0) === targets.length, JSON.stringify(counts));
 check("materialCounts agrees with materialFor", targets.every((e) => counts[materialFor(e).material] >= 1));
 check("materialCounts accepts a manifest object", (() => {
   const other = materialCounts({ entries: targets });
