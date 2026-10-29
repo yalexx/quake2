@@ -26,12 +26,68 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { PROJECT_ROOT, SOURCE_ART_DIRS, isSourceArt } from "./texture-lib.mjs";
+import { HIRES_SCALE, PROJECT_ROOT, SOURCE_ART_DIRS, decodePng, downsampleRgba, isSourceArt, pngSize } from "./texture-lib.mjs";
 
 const CHECKER = path.join(path.dirname(fileURLToPath(import.meta.url)), "tex-check.mjs");
 const ART_DIR = path.join(PROJECT_ROOT, "assets", "textures");
+
+// A PNG writer, here and only here: the fixtures below are the pictures this
+// test decides the checker's answer on, so they have to be built rather than
+// borrowed from the project's own art (which another task may be changing).
+// Colour type 2 (RGB) for the 4x wall pictures and colour type 3 (indexed) for
+// the palette case the decoder has to read.
+function pngChunk(type, data) {
+  const out = Buffer.alloc(12 + data.length);
+  out.writeUInt32BE(data.length, 0);
+  out.write(type, 4, "latin1");
+  data.copy(out, 8);
+  out.writeUInt32BE(zlib.crc32(Buffer.concat([Buffer.from(type, "latin1"), data])) >>> 0, 8 + data.length);
+  return out;
+}
+
+function encodePngRgb(width, height, rgb) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2;
+  const stride = width * 3;
+  const raw = Buffer.alloc(height * (stride + 1));
+  for (let y = 0; y < height; y++) rgb.copy(raw, y * (stride + 1) + 1, y * stride, (y + 1) * stride);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("IDAT", zlib.deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+function encodePngIndexed(width, height, indices, palette) {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 3;
+  const raw = Buffer.alloc(height * (width + 1));
+  for (let y = 0; y < height; y++) indices.copy(raw, y * (width + 1) + 1, y * width, (y + 1) * width);
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    pngChunk("IHDR", ihdr),
+    pngChunk("PLTE", Buffer.from(palette.flat())),
+    pngChunk("IDAT", zlib.deflateSync(raw)),
+    pngChunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+// A solid RGB picture, the cheapest fixture that has the size a case is about.
+function solidRgb(width, height, colour) {
+  const rgb = Buffer.alloc(width * height * 3);
+  for (let index = 0; index < width * height; index++) rgb.set(colour, index * 3);
+  return { width, height, rgb };
+}
 
 let failed = 0;
 let checked = 0;
@@ -184,6 +240,120 @@ process.stdout.write("\na picture of the wrong size fails, missing art fails onl
     fs.writeFileSync(artPath("pics/num_0.pcx"), Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.from("not a png body")]));
     const broken = runChecker(["--art", sandbox]);
     check("a file that is not a readable PNG fails the check", broken.status === 1 && broken.json.unreadable === 1, "exit " + broken.status + " unreadable " + broken.json.unreadable);
+  } finally {
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  }
+}
+
+// The 4x wall art contract lives on two library pieces: the PNG reader has to
+// read the indexed form the artists' tool may emit, and the reducer has to turn a
+// 4x picture into the entry's pixels by averaging whole blocks. Both are pinned
+// here, on pictures made in the test, before either tool that uses them.
+process.stdout.write("\nthe PNG reader reads an indexed (colour type 3) picture\n");
+{
+  const palette = [
+    [10, 20, 30],
+    [200, 100, 50],
+    [0, 0, 0],
+    [250, 250, 250],
+  ];
+  const indices = Buffer.from([0, 1, 2, 3, 3, 2, 1, 0, 1, 0, 3, 2, 2, 3, 0, 1]);
+  const png = encodePngIndexed(4, 4, indices, palette);
+  const size = pngSize(png);
+  check("the header of an indexed picture gives its size", size.width === 4 && size.height === 4, JSON.stringify(size));
+  const image = decodePng(png);
+  check("an indexed picture decodes at its size", image.width === 4 && image.height === 4, image.width + "x" + image.height);
+  const expected = Array.from(indices, (index) => [...palette[index], 255]);
+  const got = [];
+  for (let pixel = 0; pixel < 16; pixel++) got.push([...image.data.subarray(pixel * 4, pixel * 4 + 4)]);
+  check("and its pixels are the palette colours, in index order", JSON.stringify(got) === JSON.stringify(expected), JSON.stringify(got.slice(0, 4)));
+  check("an indexed picture is opaque", got.every((pixel) => pixel[3] === 255), JSON.stringify(got.find((pixel) => pixel[3] !== 255)));
+}
+
+process.stdout.write("\n4x art is reduced by averaging each whole block\n");
+{
+  // A 4x4 picture of four 2x2 blocks: each destination pixel is the mean of its
+  // block, which for a constant block is the block's colour.
+  const rgba = Buffer.alloc(4 * 4 * 4);
+  const blocks = [
+    [200, 0, 0],
+    [0, 200, 0],
+    [0, 0, 200],
+    [200, 200, 0],
+  ];
+  for (let y = 0; y < 4; y++) {
+    for (let x = 0; x < 4; x++) {
+      const colour = blocks[(y < 2 ? 0 : 2) + (x < 2 ? 0 : 1)];
+      rgba.set([...colour, 255], (y * 4 + x) * 4);
+    }
+  }
+  const reduced = downsampleRgba(rgba, 4, 4, 2, 2);
+  const got = [];
+  for (let pixel = 0; pixel < 4; pixel++) got.push([...reduced.data.subarray(pixel * 4, pixel * 4 + 3)]);
+  check("a 4x picture reduces to a quarter in each direction", reduced.width === 2 && reduced.height === 2, reduced.width + "x" + reduced.height);
+  check("and each pixel is its block's colour", JSON.stringify(got) === JSON.stringify(blocks), JSON.stringify(got));
+
+  // Unequal values average rather than point-sample: three zeros and a 255 give
+  // 64, round half up from 63.75 -- and never one of the source values alone.
+  const mixed = Buffer.alloc(2 * 2 * 4, 0);
+  mixed[4] = 255; // the red channel of the second pixel
+  for (let pixel = 0; pixel < 4; pixel++) mixed[pixel * 4 + 3] = 255;
+  const one = downsampleRgba(mixed, 2, 2, 1, 1);
+  check("a block is averaged, not point-sampled", one.data[0] === 64, "red " + one.data[0]);
+  check("and alpha is averaged too", one.data[3] === 255, "alpha " + one.data[3]);
+}
+
+// The checker's half of the contract: a wall's art may be exactly HIRES_SCALE
+// times its entry and is counted as such; anything else is still a mismatch, and
+// a PCX never gets the allowance. All on a temporary art directory.
+process.stdout.write("\ntex-check accepts wall art at 4x, and counts it\n");
+{
+  const sandbox = fs.mkdtempSync(path.join(os.tmpdir(), "tex-lib-hires-"));
+  const at = (name) => {
+    const file = path.join(sandbox, name.replace(/\.[a-z0-9]+$/i, ".png"));
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    return file;
+  };
+  // textures/e1u1/metal2_1.wal is 64x128 in the archive, so 4x is 256x512.
+  try {
+    const picture = solidRgb(64 * HIRES_SCALE, 128 * HIRES_SCALE, [64, 96, 128]);
+    const file = at("textures/e1u1/metal2_1.wal");
+    fs.writeFileSync(file, encodePngRgb(picture.width, picture.height, picture.rgb));
+    const report = runChecker(["--art", sandbox]);
+    check("4x wall art passes the check", report.status === 0, "exit " + report.status + " " + JSON.stringify(report.json.mismatches));
+    check("and is counted as hires", report.json.hires === 1, "hires " + report.json.hires);
+    check("and its bytes are counted with it", report.json.hiresBytes === fs.statSync(file).size, "bytes " + report.json.hiresBytes + " of " + fs.statSync(file).size);
+    check("and it is the entry that was counted", JSON.stringify(report.json.hiresNames) === JSON.stringify(["textures/e1u1/metal2_1.wal"]), JSON.stringify(report.json.hiresNames));
+    check("and it counts as art, not as a mismatch", report.json.withArt === 1 && report.json.mismatched === 0, "withArt " + report.json.withArt + " mismatched " + report.json.mismatched);
+
+    // 2x and 3x are neither the entry nor 4x its size, so both fail.
+    const two = solidRgb(128, 256, [64, 96, 128]);
+    fs.writeFileSync(file, encodePngRgb(two.width, two.height, two.rgb));
+    const doubled = runChecker(["--art", sandbox]);
+    check("2x wall art fails", doubled.status === 1 && doubled.json.mismatched === 1, "exit " + doubled.status + " mismatched " + doubled.json.mismatched);
+    check("and the failure names both allowed sizes", doubled.json.mismatches?.[0]?.want === "64x128 or 256x512", JSON.stringify(doubled.json.mismatches?.[0]));
+    check("and 2x art is not counted as hires", doubled.json.hires === 0, "hires " + doubled.json.hires);
+
+    const three = solidRgb(192, 384, [64, 96, 128]);
+    fs.writeFileSync(file, encodePngRgb(three.width, three.height, three.rgb));
+    const tripled = runChecker(["--art", sandbox]);
+    check("3x wall art fails too", tripled.status === 1 && tripled.json.mismatched === 1, "exit " + tripled.status + " mismatched " + tripled.json.mismatched);
+
+    // The right pixel count in the wrong shape is not 4x, either.
+    const squashed = solidRgb(512, 256, [64, 96, 128]);
+    fs.writeFileSync(file, encodePngRgb(squashed.width, squashed.height, squashed.rgb));
+    const aspect = runChecker(["--art", sandbox]);
+    check("4x pixels in the wrong shape fail", aspect.status === 1 && aspect.json.mismatched === 1, "exit " + aspect.status + " mismatched " + aspect.json.mismatched);
+
+    // A PCX is drawn from its own pixels, not through r_retexturing, so it never
+    // gets the 4x allowance: pics/num_0.pcx is 16x24, and 64x96 is 4x it.
+    fs.writeFileSync(file, encodePngRgb(256, 512, solidRgb(256, 512, [64, 96, 128]).rgb));
+    const pcx = at("pics/num_0.pcx");
+    const huge = solidRgb(64, 96, [200, 200, 200]);
+    fs.writeFileSync(pcx, encodePngRgb(huge.width, huge.height, huge.rgb));
+    const wrong = runChecker(["--art", sandbox]);
+    check("4x-sized PCX art fails", wrong.status === 1 && wrong.json.mismatched === 1, "exit " + wrong.status + " mismatched " + wrong.json.mismatched);
+    check("and the PCX failure says exact size only", wrong.json.mismatches?.[0]?.name === "pics/num_0.pcx" && wrong.json.mismatches[0].want === "16x24", JSON.stringify(wrong.json.mismatches?.[0]));
   } finally {
     fs.rmSync(sandbox, { recursive: true, force: true });
   }

@@ -87,9 +87,17 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 // tool run from anywhere in the checkout still means the same files.
 export const PROJECT_ROOT = path.join(HERE, "..");
 export const DEFAULT_PAK = path.join(PROJECT_ROOT, "baseq2", "pak0.pak");
+// The second archive: the same wall art as PNGs, which Yamagi's r_retexturing
+// loads in place of the .wal at the WAL's own size. It holds only pictures that
+// arrived at HIRES_SCALE times their entry's size, and rides beside pak0 so the
+// engine finds it by name.
+export const DEFAULT_HIRES_PAK = path.join(PROJECT_ROOT, "baseq2", "pak9.pak");
 export const DEFAULT_ART_DIR = path.join(PROJECT_ROOT, "assets", "textures");
 export const DEFAULT_MANIFEST = path.join(DEFAULT_ART_DIR, "manifest.json");
 export const MANIFEST_SCHEMA = 1;
+// A wall's art may be drawn at four times its width and height and is averaged
+// back down to the entry's size for pak0; the sharp original goes to pak9.
+export const HIRES_SCALE = 4;
 
 // The one global palette, and the id every WAL in the manifest points at.
 export const GLOBAL_PALETTE_ENTRY = "pics/colormap.pcx";
@@ -296,8 +304,90 @@ export function writePak(source, replacements = new Map(), dst, options = {}) {
     changed: true,
     written: false,
   };
+  return writeArchive(built.buffer, plan, options);
+}
+
+// A whole archive built from a list of entries and nothing else, in the order
+// the list gives: "PACK", the entry data from byte 12, then the directory, all
+// contiguous, which is the same layout the engine's own archives have.
+//
+//   entries  [{ name, data }] -- `data` is any Buffer-like; names are lower-cased
+//            the way readPakDirectory lower-cases them
+//
+// The order is the caller's, not sorted, so an archive whose contents are
+// generated from a manifest is byte-identical run to run; a name that appears
+// twice is refused rather than silently replaced.
+export function buildPakFromEntries(entries) {
+  const list = [];
+  const seen = new Set();
+  for (const item of entries ?? []) {
+    const name = normalizeName(item && item.name);
+    if (!name) throw new TextureError("an archive entry needs a name", "BAD_ARGUMENT");
+    if (Buffer.byteLength(name, "latin1") > PAK_NAME_BYTES - 1) {
+      throw new TextureError('the entry name "' + name + '" is longer than ' + (PAK_NAME_BYTES - 1) + " characters", "BAD_ARGUMENT");
+    }
+    if (seen.has(name)) throw new TextureError('"' + name + '" is added twice', "BAD_ARGUMENT");
+    seen.add(name);
+    const data = item.data ?? item.buffer;
+    if (data === null || data === undefined) throw new TextureError('the entry "' + name + '" is empty', "BAD_ARGUMENT");
+    const bytes = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    if (!bytes.length) throw new TextureError('the entry "' + name + '" is empty', "BAD_ARGUMENT");
+    list.push({ name, data: bytes });
+  }
+  let cursor = PAK_HEADER_BYTES;
+  const records = [];
+  for (const item of list) {
+    records.push({ name: item.name, offset: cursor, length: item.data.length });
+    cursor += item.data.length;
+  }
+  const directoryOffset = cursor;
+  const directoryLength = records.length * PAK_ENTRY_BYTES;
+  const out = Buffer.alloc(directoryOffset + directoryLength);
+  out.write("PACK", 0, "latin1");
+  out.writeUInt32LE(directoryOffset, 4);
+  out.writeUInt32LE(directoryLength, 8);
+  for (let index = 0; index < records.length; index++) list[index].data.copy(out, records[index].offset);
+  let at = directoryOffset;
+  for (const record of records) {
+    out.write(record.name, at, "latin1");
+    at += PAK_NAME_BYTES;
+    out.writeUInt32LE(record.offset, at);
+    out.writeUInt32LE(record.length, at + 4);
+    at += 8;
+  }
+  return { buffer: out, records };
+}
+
+// Write out an archive that was already built (buildPakFromEntries): the same
+// compare-then-rename rule writePak uses, so a second run with the same entries
+// touches nothing and a reader never sees half an archive.
+export function writePakBytes(buffer, dst, options = {}) {
+  if (typeof dst !== "string" || !dst) throw new TextureError("writePakBytes needs a destination path", "BAD_ARGUMENT");
+  if (!Buffer.isBuffer(buffer) || buffer.length < PAK_HEADER_BYTES) {
+    throw new TextureError("writePakBytes needs a whole archive", "BAD_ARGUMENT");
+  }
+  const directoryLength = buffer.readUInt32LE(8);
+  const entries = directoryLength % PAK_ENTRY_BYTES ? 0 : directoryLength / PAK_ENTRY_BYTES;
+  const plan = {
+    path: dst,
+    bytes: buffer.length,
+    entries,
+    replaced: [],
+    added: options.added ?? [],
+    unchanged: 0,
+    changed: true,
+    written: false,
+  };
+  return writeArchive(buffer, plan, options);
+}
+
+// The one atomic writer both of the above go through: compare with what is
+// already at `dst`, leave it alone when it matches, and otherwise write a
+// temporary beside it, flush it, and rename it over the target.
+function writeArchive(buffer, plan, options = {}) {
+  const dst = plan.path;
   const existing = readExisting(dst);
-  if (existing && existing.length === built.buffer.length && existing.equals(built.buffer) && !options.force) {
+  if (existing && existing.length === buffer.length && existing.equals(buffer) && !options.force) {
     plan.changed = false;
     return plan;
   }
@@ -311,7 +401,7 @@ export function writePak(source, replacements = new Map(), dst, options = {}) {
   const handle = fs.openSync(temporary, "w");
   try {
     let written = 0;
-    while (written < built.buffer.length) written += fs.writeSync(handle, built.buffer, written, built.buffer.length - written);
+    while (written < buffer.length) written += fs.writeSync(handle, buffer, written, buffer.length - written);
     fs.fsyncSync(handle);
   } finally {
     fs.closeSync(handle);
@@ -348,12 +438,22 @@ function toPairs(replacements) {
 // PNG: what the art arrives as
 // ---------------------------------------------------------------------------
 
+// The dimensions in a PNG's own header, without decoding its image data. A tool
+// that decides "is this picture 4x its entry?" before spending any pixels reads
+// the first 24 bytes here.
+export function pngSize(buffer) {
+  if (buffer.length < 24 || buffer.readUInt32BE(0) !== 0x89504e47) throw new TextureError("not a PNG", "BAD_PNG");
+  if (buffer.toString("latin1", 12, 16) !== "IHDR") throw new TextureError("the PNG has no header chunk", "BAD_PNG");
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
+}
+
 // A minimal PNG reader: the eight-bit greyscale, RGB, RGBA and palette forms,
 // any filter, zlib.inflateSync doing the decompression. Sixteen-bit samples are
 // read at their high byte, which is what an eight-bit engine would do with them
 // anyway. Returns RGBA, row-major, so the caller never has to think about the
 // source's channel count or row filters. Interlaced PNGs are refused rather than
-// half-decoded.
+// half-decoded. Colour type 3 (indexed) reads its PLTE palette, with tRNS as the
+// per-index alpha -- that is the form a generated 4x wall picture may arrive in.
 export function decodePng(buffer) {
   if (buffer.length < 8 || buffer.readUInt32BE(0) !== 0x89504e47) {
     throw new TextureError("not a PNG", "BAD_PNG");
@@ -944,6 +1044,62 @@ export function rgbaToIndices(rgba, width, height, map, options = {}) {
     indices[index] = rgba[at + 3] >= cut ? map(rgba[at], rgba[at + 1], rgba[at + 2]) : originalOf(index);
   }
   return indices;
+}
+
+// ---------------------------------------------------------------------------
+// The reduction of a picture drawn larger than its entry
+// ---------------------------------------------------------------------------
+
+// Area-average an RGBA picture down to the size its entry has: every destination
+// pixel is the mean of the source block it covers, all four channels averaged,
+// each mean rounded. Art drawn at 4x (HIRES_SCALE) is reduced by this -- a
+// box filter over each 4x4 block -- before it is indexed onto the palette, so the
+// coarser mip the engine's walls show is the average of the detail rather than a
+// point sample of it (which would drop three pixels in four and alias).
+//
+// The block edges are computed from the ratio, so a picture and its destination
+// that do not divide evenly still reduce: each destination pixel takes at least
+// one source pixel and the blocks tile the source exactly.
+export function downsampleRgba(rgba, width, height, outWidth, outHeight) {
+  for (const [name, value] of [["width", width], ["height", height], ["outWidth", outWidth], ["outHeight", outHeight]]) {
+    if (!Number.isInteger(value) || value <= 0) throw new TextureError("downsampleRgba needs whole, positive dimensions (" + name + " " + value + ")", "BAD_ARGUMENT");
+  }
+  if (outWidth > width || outHeight > height) {
+    throw new TextureError("cannot reduce a " + width + "x" + height + " picture to " + outWidth + "x" + outHeight, "BAD_ARGUMENT");
+  }
+  if (rgba.length !== width * height * 4) {
+    throw new TextureError("a " + width + "x" + height + " RGBA picture is " + width * height * 4 + " bytes, got " + rgba.length, "BAD_ARGUMENT");
+  }
+  const data = Buffer.alloc(outWidth * outHeight * 4);
+  for (let y = 0; y < outHeight; y++) {
+    const y0 = Math.floor((y * height) / outHeight);
+    const y1 = Math.max(y0 + 1, Math.floor(((y + 1) * height) / outHeight));
+    for (let x = 0; x < outWidth; x++) {
+      const x0 = Math.floor((x * width) / outWidth);
+      const x1 = Math.max(x0 + 1, Math.floor(((x + 1) * width) / outWidth));
+      let r = 0;
+      let g = 0;
+      let b = 0;
+      let a = 0;
+      let count = 0;
+      for (let sy = y0; sy < y1; sy++) {
+        for (let sx = x0; sx < x1; sx++) {
+          const at = (sy * width + sx) * 4;
+          r += rgba[at];
+          g += rgba[at + 1];
+          b += rgba[at + 2];
+          a += rgba[at + 3];
+          count++;
+        }
+      }
+      const target = (y * outWidth + x) * 4;
+      data[target] = Math.round(r / count);
+      data[target + 1] = Math.round(g / count);
+      data[target + 2] = Math.round(b / count);
+      data[target + 3] = Math.round(a / count);
+    }
+  }
+  return { width: outWidth, height: outHeight, data };
 }
 
 // ---------------------------------------------------------------------------
