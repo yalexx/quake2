@@ -1,0 +1,65 @@
+{
+ "generatedAt": "2026-10-29T23:36:04Z",
+ "prevCommit": "b6c2a4f",
+ "before": {
+  "pak0": {
+   "bytes": 47498591,
+   "entries": 1106,
+   "wal": 303
+  },
+  "pak9": {
+   "bytes": 25031035,
+   "png": 270
+  }
+ },
+ "after": {
+  "pak0": {
+   "bytes": 47498591,
+   "entries": 1106,
+   "wal": 303
+  },
+  "pak9": {
+   "bytes": 41201057,
+   "png": 298
+  }
+ },
+ "deltaBytes": {
+  "pak0": 0,
+  "pak9": 16170022
+ },
+ "hiresArt": {
+  "textures": 298,
+  "passed": 298,
+  "failed": 0,
+  "alreadyIdentical": 298,
+  "pngBytes": 41181973,
+  "materials": {
+   "stone": 21,
+   "metal": 71,
+   "rust": 77,
+   "tech": 68,
+   "crate": 16,
+   "wood": 0,
+   "organic": 2,
+   "lamp": 16,
+   "glass": 1,
+   "sign": 22,
+   "water": 2,
+   "sky": 1,
+   "flat": 1
+  }
+ },
+ "commands": [
+  "node --input-type=module -e \"import fs from 'node:fs';import{readPakDirectory}from'./scripts/texture-lib.mjs';const s=f=>{const b=fs.readFileSync(f),d=readPakDirectory(b),n=[...d.values()].map(e=>e.name.toLowerCase());return{bytes:b.length,entries:d.size,wal:n.filter(x=>x.endsWith('.wal')).length,png:n.filter(x=>x.endsWith('.png')).length}};console.log(JSON.stringify({pak0:s('baseq2/pak0.pak'),pak9:s('baseq2/pak9.pak')}))\"",
+  "node scripts/hires-art.mjs",
+  "node scripts/texture-pack.mjs",
+  "node scripts/hires-art.mjs --check --quiet",
+  "node scripts/tex-check.mjs",
+  "node scripts/texture-pack.mjs --check",
+  "node scripts/tex-lib-test.mjs",
+  "node scripts/texture-pack-test.mjs",
+  "node scripts/material-classes-test.mjs",
+  "node scripts/material-lib-test.mjs",
+  "node scripts/texture-pack.mjs  # second run; it wrote nothing"
+ ]
+}
