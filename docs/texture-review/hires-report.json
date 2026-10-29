@@ -55,6 +55,16 @@
     "grain": 0
    },
    "generic": {}
+  },
+  "overrides": {
+   "textures/e1u1/trigger.wal": {
+    "class": "sign/arrow/text",
+    "why": "brown sign reading 'Trig': text keeps its edges and takes no grain"
+   },
+   "textures/e1u1/baslt3_1.wal": {
+    "class": "light",
+    "why": "fluorescent tube in a metal frame, the same fixture as the baselt_* lights"
+   }
   }
  },
  "gates": {
@@ -72,17 +82,17 @@
   "passed": 270,
   "failed": 0,
   "classes": {
-   "sign/arrow/text": 23,
-   "light": 16,
+   "sign/arrow/text": 24,
+   "light": 17,
    "water/warp": 6,
    "sky": 1,
    "grate": 40,
    "flat/black": 4,
-   "generic": 180
+   "generic": 178
   },
   "artPixels": 26259456,
   "artBytes": 78778368,
-  "pngBytes": 25025259,
+  "pngBytes": 25013743,
   "unchanged": 0
  },
  "entries": [
@@ -914,10 +924,16 @@
   {
    "name": "textures/e1u1/baslt3_1.wal",
    "png": "assets/textures/textures/e1u1/baslt3_1.png",
-   "textureClass": "generic",
+   "textureClass": "light",
+   "detectedClass": "generic",
+   "override": {
+    "class": "light",
+    "params": null,
+    "why": "fluorescent tube in a metal frame, the same fixture as the baselt_* lights"
+   },
    "source": "32x128",
    "art": "128x512",
-   "pngBytes": 61885,
+   "pngBytes": 54913,
    "generated": false,
    "pass": true,
    "gates": {
@@ -929,18 +945,18 @@
    },
    "metrics": {
     "pearson": 0.9999,
-    "meanAbsRgb": 0.4539,
+    "meanAbsRgb": 0.278,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 0.4874,
-    "meanLuminanceBias": 0.0047,
-    "seam": 1.4128,
+    "meanLuminanceError": 0.3101,
+    "meanLuminanceBias": 0.017,
+    "seam": 1.4684,
     "seamSource": 1.5446,
     "seamBilinear": 1.732,
-    "seamStep": 2.3698,
+    "seamStep": 2.3802,
     "seamStepBilinear": 1.9219,
     "outlierPercent": 0,
-    "gradient": 1.2077
+    "gradient": 1.1983
    },
    "failures": []
   },
@@ -7250,10 +7266,16 @@
   {
    "name": "textures/e1u1/trigger.wal",
    "png": "assets/textures/textures/e1u1/trigger.png",
-   "textureClass": "generic",
+   "textureClass": "sign/arrow/text",
+   "detectedClass": "generic",
+   "override": {
+    "class": "sign/arrow/text",
+    "params": null,
+    "why": "brown sign reading 'Trig': text keeps its edges and takes no grain"
+   },
    "source": "32x32",
    "art": "128x128",
-   "pngBytes": 7637,
+   "pngBytes": 3093,
    "generated": false,
    "pass": true,
    "gates": {
@@ -7264,19 +7286,19 @@
     "gradient": true
    },
    "metrics": {
-    "pearson": 0.9995,
-    "meanAbsRgb": 1.7337,
+    "pearson": 0.9996,
+    "meanAbsRgb": 1.6185,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.928,
-    "meanLuminanceBias": 1.5394,
-    "seam": 0.0434,
+    "meanLuminanceError": 1.8235,
+    "meanLuminanceBias": 1.5682,
+    "seam": 0,
     "seamSource": 0,
     "seamBilinear": 0,
-    "seamStep": 0.1406,
+    "seamStep": 0,
     "seamStepBilinear": 0,
     "outlierPercent": 0,
-    "gradient": 1.1973
+    "gradient": 1.1941
    },
    "failures": []
   },
