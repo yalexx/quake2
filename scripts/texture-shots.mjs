@@ -7,18 +7,23 @@
 // real engine in headless Chromium, stand at the spawn of a map, and photograph
 // the same view with and without the new archives.
 //
-// Every run builds two throwaway app folders in a scratch directory, because
-// server.js serves its own folder and the before/after difference must live in
-// the served baseq2/:
+// Every run builds three throwaway app folders in a scratch directory, because
+// server.js serves its own folder and the difference must live in the served
+// baseq2/ (each gets the same app files copied from this checkout, engine/
+// symlinked):
 //
-//   before/  index.html, app.js, engine-state.js, style.css, favicon.*,
-//            engine/ (symlink) and server.js, copied from this checkout, plus
-//            baseq2/pak0.pak written from loadPristine() -- the demo's original
-//            archive, from git history -- and no pak9.pak at all. This is the
-//            game as it shipped.
-//   after/   the same app files, plus the archives a release run produces:
+//   before/  baseq2/pak0.pak written from loadPristine() -- the demo's original
+//            archive, from git history -- and no pak9.pak at all. The game as
+//            it shipped; the BEFORE side of the <map>-before-after composite.
+//   prev/    the previous team's archives, streamed out of git at --prev <rev>
+//            (default b6c2a4f) with `git cat-file blob <rev>:baseq2/pak0.pak`
+//            and ...:baseq2/pak9.pak. PREV.
+//   after/   the archives a release run produces:
 //            `node scripts/texture-pack.mjs --out after/baseq2/pak0.pak`, which
-//            also writes pak9.pak beside it. This is what the player gets.
+//            also writes pak9.pak beside it. What the player gets; NEW.
+//
+// The fourth variant is the after folder again with r_retexturing 0 (the URL
+// query app.js appends), the engine drawing the WALs: OFF.
 //
 // Each variant is a fresh page load against its own server.js on a free port
 // (never 4231 or 4233, the live app and the control API) with a temporary
@@ -28,31 +33,43 @@
 // engine is still uploading textures for a moment after the map loads, and a
 // shot taken mid-fade is not the view a player sees -- its Laplacian sits 25-50
 // points off the settled one, which is several times the pak9 effect measured
-// here. The third
-// variant is the after archive with r_retexturing 0 (the URL query app.js
-// appends), the engine drawing the WALs.
+// here.
 //
-// For every map it prints and saves:
-//   * mean absolute difference of AFTER vs r_retexturing 0 -- the same page and
-//     the same two archives with only that cvar flipped, so it is the pak9 art
-//     alone -- and of BEFORE vs AFTER, the whole shipped change;
-//   * the yardstick to read that against: BEFORE vs r_retexturing 0, the
-//     original WALs against the 1x pictures the shipped pak0 carries. A pak9
-//     shot has to move the view at least twice as much as that; the three maps
-//     land at 4-24x;
-//   * the Laplacian energy of every shot (mean squared 4-neighbour Laplacian of
-//     luma): higher means more high-frequency detail, i.e. crisper walls, and
-//     the AFTER/retexturing-off gap is reported with it;
+// The views are not a sweep: each map's spawn (view `<map>-spawn`), plus up to
+// two more from a targetnamed info_player_start (`map <map>$<targetname>`, read
+// out of the BSP's entity lump with loadMap() from control/route.mjs). An extra
+// view that does not load on its first try -- or that lands on the spawn view
+// pixel for pixel -- is dropped and the rest carry on.
+//
+// For every view it prints and saves:
+//   * mean absolute difference of NEW vs OFF -- the same page and the same two
+//     archives with only r_retexturing flipped, so it is the pak9 art alone --
+//     of PREV vs NEW, the change this checkout made, and of PREV vs OFF;
+//   * the floor to read NEW vs OFF against: the temporal noise, i.e. how much
+//     the same view of the same art moves between settled frames. A pak9 shot
+//     has to clear 0.5 mean |diff| and twice that jitter, change some pixels
+//     and lift the Laplacian. BEFORE vs OFF is printed too, but the material
+//     pass also
+//     redrew pak0's 1x WALs, so it now measures two changes, not one floor;
+//   * the Laplacian energy and mean luma of every shot (mean squared 4-neighbour
+//     Laplacian of luma): higher means more high-frequency detail;
 //   * `imagelist` line counts, and every engine console line naming a .png (this
 //     build logs none -- the list is recorded even when empty);
 //   * whether the page fetched pak9.pak, and the size of the engine's own copy.
-// The run exits 1 when AFTER does not stand clear of the r_retexturing 0 shot,
-// which is what a pak the engine never read would look like. (Replacing every
-// pak9 picture with solid magenta moved 583,882 pixels of this same view, so a
-// pak it reads is unmistakable.)
+// The run exits 1 when NEW does not stand clear of the OFF shot, which is what a
+// pak the engine never read would look like. (Replacing every pak9 picture with
+// solid magenta moved 583,882 pixels of this same view, so a pak it reads is
+// unmistakable.) A PREV vs NEW mean |diff| at or below EQUAL_EPS is printed as a
+// note, not a failure: the material pass may leave a view untouched. An extra
+// view whose `map <map>$<targetname>` lands on the spawn view pixel for pixel is
+// dropped the same way: this build's `map` does not honour the targetname.
 //
-// Output (docs/texture-review/ingame/ by default), under 8 MB in total:
-//   <map>-before-after.png   one labelled side-by-side (BEFORE | AFTER) per map
+// Output (docs/texture-review/ingame/ by default), under 12 MB in total:
+//   <view>-PREV.jpg, <view>-NEW.jpg, <view>-OFF.jpg
+//                            the identical frozen view in each variant, JPEG q90
+//                            (the numbers below always come from the lossless PNG)
+//   <view>-prev-new.png      one labelled PREV | NEW side-by-side per view
+//   <map>-before-after.png   the shipped change (BEFORE | AFTER), spawn view
 //   shots.json               every number above, plus what was drawn from where
 //
 // Node built-ins only; the PNG reader is the project's own (texture-lib.mjs) and
@@ -60,9 +77,10 @@
 //
 //   node scripts/texture-shots.mjs                       # demo1, demo2, demo3
 //   node scripts/texture-shots.mjs --maps demo1          # one map while working
+//   node scripts/texture-shots.mjs --prev b6c2a4f        # the PREV archives' rev
 //   node scripts/texture-shots.mjs --keep --verbose      # keep scratch, echo console
 //
-// Exit: 0 all maps show the pak9 art; 1 a map did not (or the run failed).
+// Exit: 0 every view shows the pak9 art; 1 one did not (or the run failed).
 "use strict";
 
 import fs from "node:fs";
@@ -74,11 +92,15 @@ import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { loadPristine } from "./hires-art.mjs";
 import { decodePng, readPakDirectory } from "./texture-lib.mjs";
+import { loadMap } from "../control/route.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..");
 const DEFAULT_OUT = path.join(ROOT, "docs", "texture-review", "ingame");
 const DEFAULT_MAPS = ["demo1", "demo2", "demo3"];
+const DEFAULT_PREV_REV = "b6c2a4f"; // the archives before this team's repack
+const EXTRA_VIEW_LIMIT = 2; // targetnamed start views beside the spawns
+const JPEG_QUALITY = 90;
 // The live quake2-app.service and the box's control API: never touched.
 const BANNED_PORTS = new Set([4231, 4233]);
 const PREFERRED_PORT = 4292;
@@ -92,11 +114,13 @@ const STEP_MS = 30000; // anything the game answers at once
 const QUIET_MS = 1500; // console silence that ends a map load
 const KEY_GAP_MS = 25;
 const EQUAL_EPS = 0.05; // mean |difference| below which two shots are "equal"
-const OUTPUT_LIMIT = 8 * 1024 * 1024; // output folder ceiling, per the task
+const OUTPUT_LIMIT = 12 * 1024 * 1024; // output folder ceiling, per the task
 
 const USAGE = `texture-shots.mjs -- in-game before/after shots for the 4x WAL art
 
   --maps <list>     comma-separated maps (default ${DEFAULT_MAPS.join(",")})
+  --prev <rev>      git revision the PREV archives come from
+                    (default ${DEFAULT_PREV_REV}: baseq2/pak0.pak + pak9.pak)
   --out <dir>       where the side-by-sides and shots.json go
                     (default docs/texture-review/ingame)
   --tmp <dir>       scratch folder (default a new folder under ${os.tmpdir()})
@@ -179,6 +203,7 @@ process.on("exit", () => {
 function parseArguments(argv) {
   const options = {
     maps: DEFAULT_MAPS.slice(),
+    prev: DEFAULT_PREV_REV,
     out: DEFAULT_OUT,
     tmp: null,
     keep: process.env.TEXTURE_SHOTS_KEEP === "1",
@@ -196,6 +221,7 @@ function parseArguments(argv) {
       return next;
     };
     if (arg === "--maps") options.maps = value().split(",").map((map) => map.trim()).filter(Boolean);
+    else if (arg === "--prev") options.prev = value();
     else if (arg === "--out") options.out = value();
     else if (arg === "--tmp") options.tmp = value();
     else if (arg === "--keep") options.keep = true;
@@ -593,6 +619,7 @@ const PUNCTUATION_KEYS = {
   ".": { code: "Period", keyCode: 190 },
   "-": { code: "Minus", keyCode: 189 },
   "_": { code: "Minus", keyCode: 189, shift: true },
+  "$": { code: "Digit4", keyCode: 52, shift: true },
 };
 
 function charKey(ch) {
@@ -711,6 +738,13 @@ async function captureNow(page) {
   return Buffer.from(data, "base64");
 }
 
+// The stored shot: half the bytes of the PNG for a view nobody measures. Taken
+// right after the steady PNG, while timescale 0 still freezes the world.
+async function captureJpeg(page) {
+  const { data } = await page.send("Page.captureScreenshot", { format: "jpeg", quality: JPEG_QUALITY }, 30000);
+  return Buffer.from(data, "base64");
+}
+
 function meanLuma(image) {
   let sum = 0;
   const { data } = image;
@@ -797,23 +831,34 @@ async function shootSteady(page) {
 const MARGIN = 16;
 const GAP = 16;
 
-// Renders a labelled BEFORE | AFTER picture in the browser that took the shots
-// (its PNG encoder is the one we already have) and returns its bytes.
-async function compose(cdp, map, beforePng, afterPng, caption, scale = 1) {
+// Renders a labelled side-by-side in the browser that took the shots (its PNG
+// encoder is the one we already have) and returns its bytes. `spec` is
+// { title, subtitle, left: { png, label, note }, right: { png, label, note },
+// caption }, so the caller says what the two halves are; `format` "jpeg" writes
+// the whole board as JPEG_QUALITY for the folder-size fallback.
+async function compose(cdp, spec, scale = 1, format = "png") {
   const page = await openPage(cdp, { record: false });
   const imageW = Math.round(SHOT_W * scale);
   const imageH = Math.round(SHOT_H * scale);
   const width = imageW * 2 + GAP + 2 * MARGIN;
+  const text = {
+    title: spec.title,
+    subtitle: spec.subtitle,
+    caption: spec.caption,
+    left: { label: spec.left.label, note: spec.left.note },
+    right: { label: spec.right.label, note: spec.right.note },
+  };
   try {
     await page.send("Emulation.setDeviceMetricsOverride", {
       width, height: 1200, deviceScaleFactor: 1, mobile: false,
     });
     await page.evaluate("window.__shots = " + JSON.stringify([
-      beforePng.toString("base64"),
-      afterPng.toString("base64"),
+      spec.left.png.toString("base64"),
+      spec.right.png.toString("base64"),
     ]) + "; \"ok\"", 60000);
     const height = await page.evaluate(`(() => {
       const [a, b] = window.__shots;
+      const spec = ${JSON.stringify(text)};
       document.documentElement.style.background = "#0b0b0d";
       document.body.style.cssText = "margin:0;background:#0b0b0d;color:#e6e6e6;font:14px/1.4 system-ui,'DejaVu Sans',sans-serif";
       const figure = (src, label, sub) => {
@@ -826,38 +871,51 @@ async function compose(cdp, map, beforePng, afterPng, caption, scale = 1) {
         img.style.cssText = "display:block";
         const cap = document.createElement("figcaption");
         cap.style.cssText = "padding-top:6px;color:#c9d1d9";
-        cap.innerHTML = "<b>" + label + "</b> — " + sub;
+        const name = document.createElement("b");
+        name.textContent = label;
+        cap.append(name, " — " + sub);
         fig.append(img, cap);
         return fig;
       };
       const head = document.createElement("div");
       head.style.cssText = "padding:${MARGIN}px ${MARGIN}px 0";
-      head.innerHTML = '<div style="font-size:20px;font-weight:600">' + ${JSON.stringify(map + " — BEFORE | AFTER")} + '</div>' +
-        '<div style="color:#9aa4b2">left: pak0.pak only (the demo\\'s original WAL art) · right: pak0.pak + pak9.pak (4x PNG art through r_retexturing)</div>';
+      const title = document.createElement("div");
+      title.style.cssText = "font-size:20px;font-weight:600";
+      title.textContent = spec.title;
+      const subtitle = document.createElement("div");
+      subtitle.style.cssText = "color:#9aa4b2";
+      subtitle.textContent = spec.subtitle;
+      head.append(title, subtitle);
       const row = document.createElement("div");
       row.style.cssText = "display:flex;gap:${GAP}px;padding:10px ${MARGIN}px 0";
-      row.append(figure(a, "BEFORE", "baseq2/pak0.pak, no pak9.pak"), figure(b, "AFTER", "baseq2/pak0.pak + pak9.pak"));
+      row.append(figure(a, spec.left.label, spec.left.note), figure(b, spec.right.label, spec.right.note));
       const foot = document.createElement("div");
       foot.style.cssText = "padding:8px ${MARGIN}px 0;color:#9fe3a0;font-variant-numeric:tabular-nums";
-      foot.textContent = ${JSON.stringify(caption)};
+      foot.textContent = spec.caption;
       document.body.replaceChildren(head, row, foot);
       return Promise.all(Array.from(document.images, (img) => img.decode().catch(() => {})))
-        .then(() => Math.ceil(document.body.getBoundingClientRect().height));
+        .then(() => Math.ceil(Math.max(...Array.from(document.body.children,
+          (element) => element.getBoundingClientRect().bottom))));
     })()`, 60000);
+    const contentHeight = Math.max(200, height);
     await page.send("Emulation.setDeviceMetricsOverride", {
-      width, height: Math.max(200, height), deviceScaleFactor: 1, mobile: false,
+      width, height: contentHeight, deviceScaleFactor: 1, mobile: false,
     });
     await sleep(200);
+    const shotParams = format === "jpeg"
+      ? { format: "jpeg", quality: JPEG_QUALITY }
+      : { format: "png" };
     const { data } = await page.send("Page.captureScreenshot", {
-      format: "png",
-      clip: { x: 0, y: 0, width, height: Math.max(200, height), scale: 1 },
+      ...shotParams,
+      clip: { x: 0, y: 0, width, height: contentHeight, scale: 1 },
       captureBeyondViewport: true,
     }, 60000);
-    const png = Buffer.from(data, "base64");
-    const decoded = decodePng(png);
-    assert(decoded.width === width && decoded.height === Math.max(200, height),
-      "the composite came out " + decoded.width + "x" + decoded.height + ", not " + width + "x" + height);
-    return png;
+    const bytes = Buffer.from(data, "base64");
+    if (format === "jpeg") return bytes;
+    const decoded = decodePng(bytes);
+    assert(decoded.width === width && decoded.height === contentHeight,
+      "the composite came out " + decoded.width + "x" + decoded.height + ", not " + width + "x" + contentHeight);
+    return bytes;
   } finally {
     await closePage(page);
   }
@@ -877,6 +935,60 @@ function makeAppRoot(rootDir) {
     if (fs.existsSync(from)) fs.copyFileSync(from, path.join(rootDir, name));
   }
   fs.symlinkSync(path.join(ROOT, "engine"), path.join(rootDir, "engine"), "dir");
+}
+
+// Writes one archive out of git history straight into `dest`. stdout goes to a
+// file descriptor: execFileSync's 1 MiB maxBuffer cannot hold a 50 MB blob.
+function extractGitBlob(rev, entry, dest) {
+  let fd = fs.openSync(dest, "w");
+  return new Promise((resolve, reject) => {
+    const child = track(spawn("git", ["-C", ROOT, "cat-file", "blob", rev + ":" + entry], {
+      stdio: ["ignore", fd, "pipe"],
+    }));
+    let err = "";
+    child.stderr.setEncoding("utf8").on("data", (chunk) => { err += chunk; });
+    const finish = (error) => {
+      if (fd !== null) {
+        fs.closeSync(fd);
+        fd = null;
+      }
+      if (error) reject(error);
+      else resolve(fs.statSync(dest).size);
+    };
+    child.once("error", (error) => finish(error));
+    child.once("exit", (code) => {
+      const size = fs.existsSync(dest) ? fs.statSync(dest).size : 0;
+      if (code === 0 && size > 0) return finish(null);
+      fs.rmSync(dest, { force: true });
+      finish(new Error("--prev " + rev + " has no " + entry +
+        (err.trim() ? " (" + err.trim().split("\n").pop() + ")" : "")));
+    });
+  });
+}
+
+// Up to EXTRA_VIEW_LIMIT further views, one per map in turn: the first
+// info_player_start carrying a targetname, which `map <map>$<targetname>` picks.
+async function extraViews(maps) {
+  const views = [];
+  for (const map of maps) {
+    if (views.length >= EXTRA_VIEW_LIMIT) break;
+    let loaded;
+    try {
+      loaded = await loadMap(map);
+    } catch (error) {
+      note("no route data for " + map + " (" + error.message + ")");
+      continue;
+    }
+    const start = loaded.entities.find((entity) => entity.classname === "info_player_start" && entity.targetname);
+    if (!start) continue;
+    views.push({
+      name: map + "-" + start.targetname,
+      map,
+      command: "map " + map + "$" + start.targetname,
+      extra: true,
+    });
+  }
+  return views;
 }
 
 // Runs one of this checkout's node scripts and resolves with its output.
@@ -911,6 +1023,7 @@ async function run(options) {
     : await fsp.mkdtemp(path.join(os.tmpdir(), "quake2-texture-shots-"));
   const outDir = path.resolve(ROOT, options.out);
   const beforeRoot = path.join(scratch, "before");
+  const prevRoot = path.join(scratch, "prev");
   const afterRoot = path.join(scratch, "after");
   const dataRoot = path.join(scratch, "data");
   const profileDir = path.join(scratch, "profile");
@@ -925,21 +1038,22 @@ async function run(options) {
     else await fsp.rm(scratch, { recursive: true, force: true }).catch(() => {});
   };
   try {
-    return await runWith(ctx, options, { scratch, outDir, beforeRoot, afterRoot, dataRoot, profileDir, rawDir });
+    return await runWith(ctx, options, { scratch, outDir, beforeRoot, prevRoot, afterRoot, dataRoot, profileDir, rawDir });
   } finally {
     await cleanup();
   }
 }
 
 async function runWith(ctx, options, dirs) {
-  const { scratch, outDir, beforeRoot, afterRoot, dataRoot, profileDir, rawDir } = dirs;
+  const { outDir, beforeRoot, prevRoot, afterRoot, dataRoot, profileDir, rawDir } = dirs;
   verboseMode = options.verbose;
   fs.mkdirSync(outDir, { recursive: true });
 
-  // -- 1. The two archives ---------------------------------------------------
-  step("Build the BEFORE and AFTER app folders");
+  // -- 1. The archives -------------------------------------------------------
+  step("Build the BEFORE, PREV and AFTER app folders");
 
   makeAppRoot(beforeRoot);
+  makeAppRoot(prevRoot);
   makeAppRoot(afterRoot);
   const pristine = loadPristine();
   fs.writeFileSync(path.join(beforeRoot, "baseq2", "pak0.pak"), pristine.pak);
@@ -956,6 +1070,21 @@ async function runWith(ctx, options, dirs) {
   const pak9Names = [...readPakDirectory(pak9).keys()].filter((name) => /\.png$/i.test(name));
   assert(pak9Names.length > 0, "pak9.pak holds no .png entries");
   ok("pak9.pak: " + pak9Names.length + " PNG(s), " + formatBytes(pak9.length) + " (first: " + pak9Names[0] + ")");
+
+  // PREV: the previous team's two archives, straight out of git. pak9.pak is
+  // required -- without it "previous" would silently mean "before".
+  const prevSizes = {};
+  for (const entry of ["pak0.pak", "pak9.pak"]) {
+    const dest = path.join(prevRoot, "baseq2", entry);
+    prevSizes[entry] = await extractGitBlob(options.prev, "baseq2/" + entry, dest);
+    assert(fs.readFileSync(dest).toString("latin1", 0, 4) === "PACK",
+      "--prev " + options.prev + ":baseq2/" + entry + " is not a PAK");
+  }
+  const prevPak9 = fs.readFileSync(path.join(prevRoot, "baseq2", "pak9.pak"));
+  const prevPak9Names = [...readPakDirectory(prevPak9).keys()].filter((name) => /\.png$/i.test(name));
+  assert(prevPak9Names.length > 0, "--prev " + options.prev + ":baseq2/pak9.pak holds no .png entries");
+  ok("PREV: pak0.pak " + formatBytes(prevSizes["pak0.pak"]) + ", pak9.pak " + formatBytes(prevSizes["pak9.pak"]) +
+    " (" + prevPak9Names.length + " PNG(s)) from " + options.prev);
 
   // -- 2. The browser --------------------------------------------------------
   step("Start headless Chromium");
@@ -1017,11 +1146,19 @@ async function runWith(ctx, options, dirs) {
 
   // -- 3. Shoot every variant ------------------------------------------------
   const variants = [
-    { key: "before", label: "BEFORE (original pak0.pak)", root: beforeRoot, retexturingOn: true },
-    { key: "after", label: "AFTER (pak0.pak + pak9.pak)", root: afterRoot, retexturingOn: true },
-    { key: "retexturingOff", label: "AFTER with r_retexturing 0", root: afterRoot, retexturingOn: false },
+    { key: "before", label: "BEFORE (original pak0.pak)", root: beforeRoot, retexturingOn: true, store: false },
+    { key: "prev", label: "PREV (archives at " + options.prev + ")", root: prevRoot, retexturingOn: true, store: true },
+    { key: "after", label: "NEW (pak0.pak + pak9.pak)", root: afterRoot, retexturingOn: true, store: true },
+    { key: "retexturingOff", label: "NEW with r_retexturing 0", root: afterRoot, retexturingOn: false, store: true },
   ];
-  const shots = {}; // map -> variant -> { image, png, laplacian, luma, pngLines }
+  // A handful of representative views: each map's spawn, then up to
+  // EXTRA_VIEW_LIMIT targetnamed starts.
+  const views = options.maps.map((map) => ({ name: map + "-spawn", map, command: "map " + map }))
+    .concat(await extraViews(options.maps));
+  const extras = views.filter((view) => view.extra);
+  if (extras.length) ok("extra view(s): " + extras.map((view) => view.command).join(", "));
+  const shots = {}; // view -> variant -> { image, png, jpeg, laplacian, luma, pngLines }
+  const droppedViews = new Set(); // extra views the game would not load
   const fetches = {}; // variant -> resource timing entries for pak9.pak
   const engineState = {}; // variant -> { pak9InEngine, cvars }
 
@@ -1052,22 +1189,37 @@ async function runWith(ctx, options, dirs) {
     ok("engine: r_retexturing " + cvars.r_retexturing +
       ", gl_texturemode " + cvars.gl_texturemode + ", vid_gamma " + cvars.vid_gamma);
 
-    for (const map of options.maps) {
+    for (const view of views) {
+      if (droppedViews.has(view.name)) continue;
       const since = mark();
-      await game.changeMap("map " + map, map);
+      try {
+        await game.changeMap(view.command, view.map);
+      } catch (error) {
+        // An extra view is optional: if it will not load on its first try, drop
+        // it and the rest of the run carries on with the spawn views.
+        if (view.extra && !shots[view.name]) {
+          note("dropping the extra view " + view.name + " (" + error.message + ")");
+          droppedViews.add(view.name);
+          continue;
+        }
+        throw error;
+      }
       await game.command("cl_gun 0");
       await game.command("crosshair 0");
       // Freeze the world: a Strogg's idle animation or a blinking light keeps
       // changing the same view between shots, and on demo2 that noise alone
       // moved the Laplacian by more than the pak9 art did. With timescale 0
-      // the two shots of the SAME art become identical, so everything AFTER
+      // the two shots of the SAME art become identical, so everything NEW
       // changes is pak9's -- and the world is still drawn every frame.
       await game.command("timescale 0");
       await game.closeConsole();
       const shot = await shootSteady(page);
-      await fsp.writeFile(path.join(rawDir, map + "-" + variant.key + ".png"), shot.png);
+      // The stored shot is JPEG q90, taken while the world is still frozen; the
+      // numbers below always come from the lossless PNG.
+      const jpeg = variant.store ? await captureJpeg(page) : null;
+      await fsp.writeFile(path.join(rawDir, view.name + "-" + variant.key + ".png"), shot.png);
       const frames = shot.frames.map((value) => Number(value.toFixed(2)));
-      note(map + " " + variant.key + " settled after " + frames.length + " frame(s) (Laplacian " +
+      note(view.name + " " + variant.key + " settled after " + frames.length + " frame(s) (Laplacian " +
         frames.join(" → ") + ", last frame-to-frame mean |diff| " + shot.lastDelta.meanAbsDiff.toFixed(3) + ")");
       await game.openConsole();
       await game.command("timescale 1"); // let the next map load move again
@@ -1078,12 +1230,13 @@ async function runWith(ctx, options, dirs) {
       await sleep(1500);
       const imageList = lines.slice(listSince).map((line) => line.text);
       const imageListPng = imageList.filter((text) => /\.png\b/i.test(text));
-      await fsp.writeFile(path.join(rawDir, map + "-" + variant.key + "-imagelist.txt"), imageList.join("\n") + "\n");
+      await fsp.writeFile(path.join(rawDir, view.name + "-" + variant.key + "-imagelist.txt"), imageList.join("\n") + "\n");
       const pngLines = lines.slice(since).map((line) => line.text).filter((text) => /\.png\b/i.test(text));
       const image = shot.image;
-      (shots[map] || (shots[map] = {}))[variant.key] = {
+      (shots[view.name] || (shots[view.name] = {}))[variant.key] = {
         image,
         png: shot.png,
+        jpeg,
         bytes: shot.png.length,
         laplacian: laplacianEnergy(image),
         meanLuma: meanLuma(image),
@@ -1096,10 +1249,23 @@ async function runWith(ctx, options, dirs) {
           textureSample: imageList.filter((text) => /textures\//i.test(text)).slice(0, 8),
         },
       };
-      ok(map + ": " + variant.key + " " + SHOT_W + "x" + SHOT_H + ", Laplacian " + laplacianEnergy(image).toFixed(2) +
+      ok(view.name + ": " + variant.key + " " + SHOT_W + "x" + SHOT_H + ", Laplacian " + laplacianEnergy(image).toFixed(2) +
         ", imagelist " + imageList.length + " line(s)" +
         (imageListPng.length ? ", " + imageListPng.length + " naming .png" : "") +
         (pngLines.length ? ", " + pngLines.length + " .png console line(s)" : ""));
+      // `map <map>$<targetname>` only means something if the engine honoured the
+      // start. A view that is the spawn view pixel for pixel is dropped; the
+      // console is open and timescale is back at 1, so the next view carries on.
+      const spawnShot = view.extra && shots[view.map + "-spawn"] && shots[view.map + "-spawn"][variant.key];
+      if (spawnShot) {
+        const delta = meanAbsDiff(spawnShot.image, image);
+        if (delta.meanAbsDiff <= EQUAL_EPS) {
+          note("dropping the extra view " + view.name + ": it is the spawn view (mean |diff| " +
+            delta.meanAbsDiff.toFixed(3) + "), so `" + view.command + "` did not honour the targetname");
+          droppedViews.add(view.name);
+          delete shots[view.name];
+        }
+      }
     }
     await stopChild(server.child, 3000).catch(() => {});
   }
@@ -1107,118 +1273,193 @@ async function runWith(ctx, options, dirs) {
   // -- 4. Numbers and the side-by-sides --------------------------------------
   step("Compare and compose");
   const report = {
-    schema: 1,
+    schema: 2,
     generatedAt: new Date().toISOString(),
     engine: browser.version.product,
     chrome,
+    prevRevision: options.prev,
     pak: {
       pristine: { source: pristine.source, bytes: pristine.pak.length },
+      prev: { pak0: prevSizes["pak0.pak"], pak9: prevSizes["pak9.pak"], pak9Entries: prevPak9Names.length },
       pak9: { bytes: pak9.length, entries: pak9Names.length, first: pak9Names[0] },
     },
     pak9Fetch: fetches,
     engineState,
-    maps: [],
+    views: [],
   };
   const failures = [];
+  const jobs = []; // composites: { entry, field, base, spec }
 
-  for (const map of options.maps) {
-    const set = shots[map];
-    assert(set && set.before && set.after && set.retexturingOff, "the shots for " + map + " are incomplete");
-    const afterVsOff = meanAbsDiff(set.after.image, set.retexturingOff.image);
-    const beforeVsAfter = meanAbsDiff(set.before.image, set.after.image);
+  for (const view of views) {
+    if (droppedViews.has(view.name)) continue;
+    const set = shots[view.name];
+    assert(set && set.prev && set.after && set.retexturingOff, "the shots for " + view.name + " are incomplete");
+    // NEW and OFF are the same page and the same two archives, with only
+    // r_retexturing flipped: their difference is the pak9 art, and nothing
+    // else. The floor it has to clear is the temporal noise -- how much the
+    // SAME view of the SAME art moves between settled frames -- because the
+    // material pass also redrew pak0's 1x WALs, so BEFORE vs OFF now measures
+    // two changes (reported, but not a lower bound). PREV vs NEW is this
+    // checkout's change.
+    const newVsOff = meanAbsDiff(set.after.image, set.retexturingOff.image);
+    const prevVsNew = meanAbsDiff(set.prev.image, set.after.image);
+    const prevVsOff = meanAbsDiff(set.prev.image, set.retexturingOff.image);
     const beforeVsOff = meanAbsDiff(set.before.image, set.retexturingOff.image);
-    // AFTER and retexturing-off are the same page and the same two archives,
-    // with only r_retexturing flipped: their difference is the pak9 art, and
-    // nothing else. BEFORE vs retexturing-off is the yardstick -- the original
-    // WALs against the 1x pictures the shipped pak0 carries -- i.e. how much a
-    // replacement of this scene's textures moves this view at all. A pak9 shot
-    // that does not beat twice that has changed nothing the eye would notice.
-    const floor = Math.max(EQUAL_EPS, 2 * beforeVsOff.meanAbsDiff);
+    const noise = Math.max(0.001, set.prev.settleDelta, set.after.settleDelta, set.retexturingOff.settleDelta);
+    // A change the eye would see (0.5 mean |diff|) and well clear of the
+    // same-view jitter; at least some pixels actually moved off their old
+    // colour; and the Laplacian lifted. A pak the engine never read changes
+    // zero pixels and leaves the Laplacian alone (two settled frames of the
+    // same art are within 0.2 of each other by construction, so 0.5 sits above
+    // anything jitter alone can produce).
+    const floor = Math.max(0.5, 2 * noise);
     const lapGap = set.after.laplacian - set.retexturingOff.laplacian;
-    const drawn = afterVsOff.meanAbsDiff > floor && Math.abs(lapGap) > 0.1;
-    const signalToNoise = afterVsOff.meanAbsDiff / Math.max(beforeVsOff.meanAbsDiff, 0.001);
+    const drawnShare = newVsOff.differingPixels / newVsOff.pixels;
+    const drawn = newVsOff.meanAbsDiff > floor && drawnShare > 0.0001 && Math.abs(lapGap) > 0.1;
+    const signalToNoise = newVsOff.meanAbsDiff / noise;
+    const equal = prevVsNew.meanAbsDiff <= EQUAL_EPS;
     if (!drawn) {
-      failures.push(map + ": the AFTER shot does not stand clear of the r_retexturing 0 shot (mean |diff| " +
-        afterVsOff.meanAbsDiff.toFixed(3) + " against a " + floor.toFixed(3) + " threshold, Laplacian gap " +
-        lapGap.toFixed(2) + "), so the engine did not draw the pak9 art");
+      failures.push(view.name + ": the NEW shot does not stand clear of the OFF shot (mean |diff| " +
+        newVsOff.meanAbsDiff.toFixed(3) + " against the " + floor.toFixed(3) + " noise floor; " +
+        (drawnShare * 100).toFixed(2) + "% of pixels differ; Laplacian gap " + lapGap.toFixed(2) +
+        "), so the engine did not draw the pak9 art");
     }
-    const caption = "AFTER vs r_retexturing 0 (pak9): mean |Δ| " + afterVsOff.meanAbsDiff.toFixed(2) +
-      " (" + afterVsOff.differingPixels + " px) · BEFORE vs retex-off (the 1x art swap): mean |Δ| " +
-      beforeVsOff.meanAbsDiff.toFixed(2) + " (" + beforeVsOff.differingPixels + " px) · " +
-      signalToNoise.toFixed(1) + "× · Laplacian BEFORE " + set.before.laplacian.toFixed(1) +
-      " / AFTER " + set.after.laplacian.toFixed(1) + " / retex-off " + set.retexturingOff.laplacian.toFixed(1);
+    if (equal) {
+      note(view.name + ": PREV and NEW are equal (mean |diff| " + prevVsNew.meanAbsDiff.toFixed(3) +
+        " at or below " + EQUAL_EPS + "): this view keeps the same pixels, which is a note, not a failure");
+    }
+    const numbers = (diff) => "mean |Δ| " + diff.meanAbsDiff.toFixed(2) + " (" + diff.differingPixels + " px)";
+    const caption = "NEW vs OFF (pak9): " + numbers(newVsOff) + " · PREV vs NEW (this change): " +
+      numbers(prevVsNew) + " · BEFORE vs OFF (the material pass on pak0's 1x art): " + numbers(beforeVsOff) + " · " +
+      signalToNoise.toFixed(1) + "× · Laplacian PREV " + set.prev.laplacian.toFixed(1) +
+      " / NEW " + set.after.laplacian.toFixed(1) + " / OFF " + set.retexturingOff.laplacian.toFixed(1);
     log("");
-    log("  " + map);
-    log("    mean |diff| AFTER vs r_retexturing 0: " + afterVsOff.meanAbsDiff.toFixed(3) +
-      "  (" + afterVsOff.differingPixels + " of " + afterVsOff.pixels + " pixels differ by more than 8)");
-    log("    mean |diff| BEFORE vs AFTER:          " + beforeVsAfter.meanAbsDiff.toFixed(3) +
-      "  (" + beforeVsAfter.differingPixels + " of " + beforeVsAfter.pixels + " pixels differ by more than 8)");
-    log("    mean |diff| BEFORE vs retex-off:     " + beforeVsOff.meanAbsDiff.toFixed(3) +
-      "  (" + beforeVsOff.differingPixels + " pixels differ) — the yardstick: the original WALs against the shipped pak0's 1x art");
-    log("    signal / yardstick: " + signalToNoise.toFixed(1) + "×  (AFTER vs retex-off over BEFORE vs retex-off)");
-    log("    Laplacian energy: BEFORE " + set.before.laplacian.toFixed(2) +
-      " · AFTER " + set.after.laplacian.toFixed(2) +
-      " · retex-off " + set.retexturingOff.laplacian.toFixed(2) +
-      "  (pak9 gap " + lapGap.toFixed(2) + ")");
+    log("  " + view.name + (view.extra ? "  (`" + view.command + "`)" : ""));
+    log("    mean |diff| NEW vs OFF:      " + newVsOff.meanAbsDiff.toFixed(3) +
+      "  (" + newVsOff.differingPixels + " of " + newVsOff.pixels + " pixels differ by more than 8)");
+    log("    mean |diff| PREV vs NEW:     " + prevVsNew.meanAbsDiff.toFixed(3) +
+      "  (" + prevVsNew.differingPixels + " pixels differ)" + (equal ? "  — equal" : ""));
+    log("    mean |diff| PREV vs OFF:     " + prevVsOff.meanAbsDiff.toFixed(3) +
+      "  (" + prevVsOff.differingPixels + " pixels differ)");
+    log("    mean |diff| BEFORE vs OFF:   " + beforeVsOff.meanAbsDiff.toFixed(3) +
+      "  (" + beforeVsOff.differingPixels + " pixels differ) — informational, not a bound");
+    log("    signal / noise: " + signalToNoise.toFixed(1) + "×  (NEW vs OFF over the same-view temporal noise " +
+      noise.toFixed(3) + "; the bar is max(0.5, 2× noise) = " + floor.toFixed(3) + "), " +
+      (drawnShare * 100).toFixed(2) + "% of pixels differ");
+    log("    Laplacian energy: PREV " + set.prev.laplacian.toFixed(2) +
+      " · NEW " + set.after.laplacian.toFixed(2) +
+      " · OFF " + set.retexturingOff.laplacian.toFixed(2) + "  (pak9 gap " + lapGap.toFixed(2) + ")");
+    log("    mean luma: PREV " + set.prev.meanLuma.toFixed(2) + " · NEW " + set.after.meanLuma.toFixed(2) +
+      " · OFF " + set.retexturingOff.meanLuma.toFixed(2));
     const pngLines = set.after.pngLines;
     log("    engine console .png lines: " + (pngLines.length ? pngLines.length : "none"));
-    for (const line of pngLines.slice(0, 6)) log("      " + line);
     const listPng = set.after.imageList;
     log("    imagelist: " + listPng.lines + " line(s)" + (listPng.png.length ? ", " + listPng.png.length + " naming .png" : ""));
-    for (const line of listPng.textureSample.slice(0, 3)) log("      " + line);
 
-    const compositeName = map + "-before-after.png";
-    const composite = await compose(browser.cdp, map, set.before.png, set.after.png, caption);
-    fs.writeFileSync(path.join(outDir, compositeName), composite);
-    ok("side-by-side: " + compositeName + " (" + formatBytes(composite.length) + ")");
-
-    report.maps.push({
-      map,
-      composite: compositeName,
-      before: { laplacian: round(set.before.laplacian), meanLuma: round(set.before.meanLuma), bytes: set.before.bytes },
-      after: { laplacian: round(set.after.laplacian), meanLuma: round(set.after.meanLuma), bytes: set.after.bytes },
-      retexturingOff: {
-        laplacian: round(set.retexturingOff.laplacian),
-        meanLuma: round(set.retexturingOff.meanLuma),
-        bytes: set.retexturingOff.bytes,
+    const stats = (shot) => ({ laplacian: round(shot.laplacian), meanLuma: round(shot.meanLuma), bytes: shot.bytes });
+    const diffStats = (diff) => ({
+      meanAbsDiff: round(diff.meanAbsDiff, 4), differingPixels: diff.differingPixels, pixels: diff.pixels,
+    });
+    const entry = {
+      view: view.name,
+      map: view.map,
+      command: view.command,
+      files: {
+        prev: view.name + "-PREV.jpg", new: view.name + "-NEW.jpg", off: view.name + "-OFF.jpg",
+        prevNew: null, beforeAfter: null,
       },
+      prev: stats(set.prev),
+      new: stats(set.after),
+      off: stats(set.retexturingOff),
+      before: stats(set.before),
       diff: {
-        afterVsRetexturingOff: { meanAbsDiff: round(afterVsOff.meanAbsDiff, 4), differingPixels: afterVsOff.differingPixels, pixels: afterVsOff.pixels },
-        beforeVsAfter: { meanAbsDiff: round(beforeVsAfter.meanAbsDiff, 4), differingPixels: beforeVsAfter.differingPixels, pixels: beforeVsAfter.pixels },
-        beforeVsRetexturingOff: { meanAbsDiff: round(beforeVsOff.meanAbsDiff, 4), differingPixels: beforeVsOff.differingPixels, pixels: beforeVsOff.pixels },
+        prevVsNew: diffStats(prevVsNew),
+        newVsOff: diffStats(newVsOff),
+        prevVsOff: diffStats(prevVsOff),
+        beforeVsOff: diffStats(beforeVsOff),
       },
+      prevVsNewEqual: equal,
       signalToNoise: round(signalToNoise, 2),
       laplacianGap: round(lapGap, 3),
-      reference: "AFTER vs r_retexturing 0 flips only r_retexturing on the same two archives, so it is " +
-        "the pak9 art alone; BEFORE vs r_retexturing 0 is the original WALs against the shipped pak0's " +
-        "1x art, and the pak9 change stands " + signalToNoise.toFixed(1) + "x above that",
+      reference: "NEW vs OFF flips only r_retexturing on the same two archives, so it is the pak9 art " +
+        "alone and stands " + signalToNoise.toFixed(1) + "x above the same-view temporal noise " +
+        noise.toFixed(3) + "; BEFORE vs OFF also includes the material pass's redraw of pak0's 1x WALs, " +
+        "so it is reported but is no longer a lower bound; PREV vs NEW is this checkout's change",
       temporalNoise: {
-        before: round(set.before.settleDelta, 4),
-        after: round(set.after.settleDelta, 4),
-        retexturingOff: round(set.retexturingOff.settleDelta, 4),
+        prev: round(set.prev.settleDelta, 4),
+        new: round(set.after.settleDelta, 4),
+        off: round(set.retexturingOff.settleDelta, 4),
         note: "mean |diff| between the last two settled frames of the same view",
       },
-      consolePngLines: {
-        before: set.before.pngLines,
-        after: set.after.pngLines,
-        retexturingOff: set.retexturingOff.pngLines,
-      },
+      consolePngLines: { prev: set.prev.pngLines, new: set.after.pngLines, off: set.retexturingOff.pngLines },
       imagelist: {
-        before: { lines: set.before.imageList.lines, png: set.before.imageList.png },
-        after: { lines: set.after.imageList.lines, png: set.after.imageList.png },
-        retexturingOff: { lines: set.retexturingOff.imageList.lines, png: set.retexturingOff.imageList.png },
+        prev: { lines: set.prev.imageList.lines, png: set.prev.imageList.png },
+        new: { lines: set.after.imageList.lines, png: set.after.imageList.png },
+        off: { lines: set.retexturingOff.imageList.lines, png: set.retexturingOff.imageList.png },
       },
       verdict: drawn
-        ? "pak9 art drawn (AFTER changes the view " + signalToNoise.toFixed(1) + "x as much as the 1x art swap does)"
-        : "pak9 art NOT provably drawn (AFTER does not stand clear of r_retexturing 0)",
+        ? "pak9 art drawn (NEW moves the view " + signalToNoise.toFixed(1) + "x the settled-frame noise, Laplacian " +
+          (lapGap >= 0 ? "+" : "") + lapGap.toFixed(2) + ")"
+        : "pak9 art NOT provably drawn (NEW does not stand clear of OFF)",
+    };
+    report.views.push(entry);
+
+    jobs.push({
+      entry, field: "prevNew", base: view.name + "-prev-new",
+      spec: {
+        title: view.name + " — PREV | NEW",
+        subtitle: "left: the previous team's archives at " + options.prev +
+          " · right: this checkout's baseq2/pak0.pak + pak9.pak (material pass, 4x art through r_retexturing)",
+        left: { png: set.prev.png, label: "PREV", note: "baseq2/pak0.pak + pak9.pak at " + options.prev },
+        right: { png: set.after.png, label: "NEW", note: "baseq2/pak0.pak + pak9.pak from the material pass" },
+        caption,
+      },
     });
+    if (!view.extra) {
+      jobs.push({
+        entry, field: "beforeAfter", base: view.map + "-before-after",
+        spec: {
+          title: view.map + " — BEFORE | AFTER",
+          subtitle: "left: pak0.pak only (the demo's original WAL art) · right: pak0.pak + pak9.pak (4x PNG art through r_retexturing)",
+          left: { png: set.before.png, label: "BEFORE", note: "baseq2/pak0.pak, no pak9.pak" },
+          right: { png: set.after.png, label: "AFTER", note: "baseq2/pak0.pak + pak9.pak" },
+          caption,
+        },
+      });
+    }
   }
 
+  // The singles: JPEG q90 of the identical frozen view. The metrics above come
+  // from the lossless PNGs, which never leave the scratch folder.
+  for (const entry of report.views) {
+    const set = shots[entry.view];
+    for (const [variant, field] of [["prev", "prev"], ["after", "new"], ["retexturingOff", "off"]]) {
+      fs.writeFileSync(path.join(outDir, entry.files[field]), set[variant].jpeg);
+    }
+  }
+
+  const writeComposites = async (scale, format) => {
+    for (const job of jobs) {
+      const name = job.base + (format === "jpeg" ? ".jpg" : ".png");
+      const previous = job.entry.files[job.field];
+      if (previous && previous !== name) fs.rmSync(path.join(outDir, previous), { force: true });
+      const bytes = await compose(browser.cdp, job.spec, scale, format);
+      fs.writeFileSync(path.join(outDir, name), bytes);
+      job.entry.files[job.field] = name;
+      ok("side-by-side: " + name + " (" + formatBytes(bytes.length) + ")");
+    }
+  };
+  await writeComposites(1, "png");
+
   report.summary = {
+    views: report.views.length,
     maps: options.maps.length,
-    drawn: options.maps.length - failures.length,
+    drawn: report.views.length - failures.length,
     failures,
-    retexturing: "r_retexturing on; the off shot is the same archive through the URL query app.js appends",
+    droppedViews: [...droppedViews],
+    retexturing: "r_retexturing on; OFF is the same archive through the URL query app.js appends",
+    compositeScale: 1,
+    compositeFormat: "png",
     outputBytes: 0,
   };
   const shotsJson = path.join(outDir, "shots.json");
@@ -1228,26 +1469,37 @@ async function runWith(ctx, options, dirs) {
   writeReport();
   report.summary.outputBytes = outputSize(outDir);
 
-  // The output folder must stay under 8 MB: recompose the side-by-sides smaller
-  // if the first pass was too heavy (the shots themselves are never scaled).
+  // The output folder must stay under 12 MiB: recompose the side-by-sides
+  // smaller if the first pass was too heavy (the shots themselves are never
+  // scaled), and encode them as JPEG q90 if even that is not enough.
   if (report.summary.outputBytes > OUTPUT_LIMIT) {
-    note("the output is " + formatBytes(report.summary.outputBytes) + ", over the 8 MiB ceiling; recomposing at 3/4 size");
-    for (const entry of report.maps) {
-      const set = shots[entry.map];
-      const small = await compose(browser.cdp, entry.map, set.before.png, set.after.png, "scaled 3/4 for size — see shots.json", 0.75);
-      fs.writeFileSync(path.join(outDir, entry.composite), small);
-    }
+    note("the output is " + formatBytes(report.summary.outputBytes) + ", over the 12 MiB ceiling; recomposing at 3/4 size");
+    report.summary.compositeScale = 0.75;
+    await writeComposites(0.75, "png");
+    writeReport();
     report.summary.outputBytes = outputSize(outDir);
   }
-  writeReport();
-  report.summary.outputBytes = outputSize(outDir);
   if (report.summary.outputBytes > OUTPUT_LIMIT) {
-    note("the output is still " + formatBytes(report.summary.outputBytes) + " after scaling; the ceiling is " + formatBytes(OUTPUT_LIMIT));
+    note("the output is still " + formatBytes(report.summary.outputBytes) + "; encoding the side-by-sides as JPEG q" +
+      JPEG_QUALITY + " too");
+    report.summary.compositeScale = 1;
+    report.summary.compositeFormat = "jpeg";
+    await writeComposites(1, "jpeg");
+    writeReport();
+    report.summary.outputBytes = outputSize(outDir);
   }
+  if (report.summary.outputBytes > OUTPUT_LIMIT) {
+    note("the output is still " + formatBytes(report.summary.outputBytes) + " over the " + formatBytes(OUTPUT_LIMIT) + " ceiling");
+  }
+  // Write once more so the figure travels in the file it measures.
+  report.summary.outputBytes = outputSize(outDir);
+  writeReport();
 
   step("Summary");
-  log("  " + report.summary.drawn + "/" + report.summary.maps + " maps show the pak9 art; output " +
+  log("  " + report.summary.drawn + "/" + report.summary.views + " views show the pak9 art (" +
+    report.summary.maps + " map(s), PREV from " + options.prev + "); output " +
     formatBytes(report.summary.outputBytes) + " in " + path.relative(ROOT, outDir) + "/");
+  if (droppedViews.size) log("  dropped extra view(s): " + [...droppedViews].join(", "));
   for (const failure of failures) log("  FAIL " + failure);
   if (options.json) log(JSON.stringify(report, null, 2));
   return failures.length ? 1 : 0;
