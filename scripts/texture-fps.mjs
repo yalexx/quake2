@@ -1322,4 +1322,138 @@ async function main() {
   }
 }
 
-process.exitCode = await main();
+// RTX review uses the same real-CDP renderer gate, screenshots, diff parser,
+// CPU snapshots and GPU-completion timer as the texture review above.
+export async function reviewRTX({ shotsOnly = false, deploymentOnly = false } = {}) {
+  const args = process.argv.slice(2);
+  const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key)+1] : fallback;
+  const live = option('--live', 'http://127.0.0.1:4231/');
+  const CDP = option('--cdp', 'http://127.0.0.1:9222').replace(/\/$/, '');
+  const out = path.resolve(option('--out', path.join(ROOT,'docs/texture-review/rtx')));
+  fs.mkdirSync(out,{recursive:true});
+  const report = { at:new Date().toISOString(), url:live, source:await sha1File(path.join(ROOT,'rtx-renderer.js')), method:'Visible Chrome at CDP '+CDP+', hardware GLES3; same paused camera per mode. Capped clear cadence and separate MainLoop work including gl.finish. No uncapped claim.', maps:[], deployment:[] };
+  let cdp, control;
+  try {
+    const targets=await fetch(CDP+'/json/list').then(r=>r.json());
+    const target=targets.find(t=>t.type==='page' && t.url.startsWith(live.split('?')[0].replace(/\/$/,''))) || targets.find(t=>t.type==='page' && t.url==='about:blank');
+    if(!target) throw new Error('Open the requested URL in the dedicated CDP 9222 browser first');
+    cdp=new RawCdp(target.webSocketDebuggerUrl); await cdp.open();
+    await cdp.send('Network.enable');
+    await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+    // The benchmark must not overwrite the owner's autosaves or bindings.
+    cdp.handlers.add(message=>{
+      if(message.method!=='Fetch.requestPaused') return;
+      const {requestId,request}=message.params;
+      cdp.send('Fetch.fulfillRequest',{requestId,responseCode:request.method==='GET'?200:204,
+        responseHeaders:[{name:'Content-Type',value:'application/json'},{name:'Access-Control-Allow-Origin',value:'*'}],
+        ...(request.method==='GET'?{body:Buffer.from('{"files":[]}').toString('base64')}:{})}).catch(()=>{});
+    });
+    await cdp.send('Fetch.enable',{patterns:[{urlPattern:'*/userdata/*'}]});
+    await cdp.send('Page.enable');
+    await cdp.send('Emulation.setDeviceMetricsOverride',{width:TARGET_W,height:TARGET_H,deviceScaleFactor:1,mobile:false});
+    await cdp.send('Page.bringToFront');
+    const evaluate=expression=>pageEval(cdp,expression);
+    const shot=async()=>Buffer.from((await cdp.send('Page.captureScreenshot',{format:'png'})).data,'base64');
+    const boot=async(url)=>{
+      await navigate(cdp,url);
+      await waitBoot(cdp,'RTX gameplay');
+      if(control) await control.close();
+      control=new QuakeControl({cdpUrl:CDP,gameUrlMark:new URL(live).host});
+    };
+    if(deploymentOnly) {
+      for(const url of [live,'http://127.0.0.1:3005/apps/quake2/']) {
+        const entry={url,files:[],rendered:false}; report.deployment.push(entry);
+        for(const file of ['index.html','app.js','style.css','rtx-renderer.js','rtx-materials.js','engine/index.js','engine/ref_gles3.wasm','baseq2/pak9.pak']) {
+          const local=await sha1File(path.join(ROOT,file)),served=await sha1Served(new URL(file,url).href);
+          entry.files.push({file,local:local.sha1,served:served.sha1,matches:local.sha1===served.sha1,status:served.status});
+        }
+        // Verify ClawBox's plain user-facing entry. A login redirect in the
+        // dedicated profile is recorded as unverified, never as a render pass.
+        await navigate(cdp,url===live ? url+'?+map&demo1&+set&r_mode&-1&+set&r_customwidth&1366&+set&r_customheight&768' : url);
+        try {
+          await waitBoot(cdp,url,45000);
+          for(let n=0;n<20;n++) {
+            if(await evaluate('!!window.quake2RTX?.status().postDraws')) break;
+            await sleep(500);
+          }
+          entry.runtime=await evaluate('({look:quake2RTX.status(),canvas:[canvas.width,canvas.height],pak9:FS.stat("/baseq2/pak9.pak").size})');
+          entry.rendered=entry.runtime.look.postDraws>0 && entry.runtime.look.worldDraws>0 && entry.files.every(f=>f.matches);
+          fs.writeFileSync(path.join(out,url===live?'served-direct.png':'served-clawbox.png'),await shot());
+        } catch(error) { entry.error=String(error); entry.landed=await evaluate('location.href'); }
+      }
+    } else {
+      const maps=option('--maps','demo1,demo2,demo3').split(',');
+      if(maps.some(map=>!['demo1','demo2','demo3'].includes(map))) throw new Error('Unknown demo map');
+      for(const map of maps) {
+        console.log('RTX review '+map);
+        await boot(live+'?+map&'+map+'&+set&r_mode&-1&+set&r_customwidth&1366&+set&r_customheight&768&+set&cheats&1&+set&cl_maxfps&120');
+        const renderer=await evaluate(RENDERER);
+        const vid=await readCvarDurable({control,mark:new URL(live).host},CDP,'vid_renderer');
+        checkRenderer(map,renderer,vid);
+        if(/swiftshader|llvmpipe|software/i.test(renderer.renderer)) throw new Error('Software GPU is not performance evidence');
+        report.renderer=renderer;
+        await control.command('god; notarget; con_notifytime 0; cl_gun 0; crosshair 1; timescale 1; scr_showpause 0; bind F10 pause',{tail:5});
+        await control.tap('F10');
+        await sleep(1500);
+        await evaluate('document.getElementById("render-settings").style.visibility="hidden"');
+        const item={map,views:[],performance:[]};report.maps.push(item);
+        const camera=await evaluate('quake2Engine.read()');
+        item.camera=camera;
+        if(!args.includes('--measure-only')) {
+        const pictures={};
+        for(const mode of ['off','performance','high','off-restored']) {
+          await evaluate(`quake2RTX.set(${!mode.startsWith('off')},${JSON.stringify(mode==='high'?'high':'performance')})`);
+          await sleep(250);
+          pictures[mode]=await shot();
+          const file=map+'-'+mode+'.png';fs.writeFileSync(path.join(out,file),pictures[mode]);
+          item.views.push({mode,file,status:await evaluate('quake2RTX.status()')});
+        }
+        item.difference=imageDiff(pictures.off,pictures.performance);
+        item.reversible=imageDiff(pictures.off,pictures['off-restored']);
+        fs.writeFileSync(path.join(out,map+'-before-after.png'),composePair(map,'OFF',pictures.off,'RTX PERFORMANCE',pictures.performance));
+        if(item.difference.meanAbsDiff<1) throw new Error(map+': effect did not visibly reach the frame');
+        if(item.reversible.meanAbsDiff>0.5) throw new Error(map+': original frame was not restored');
+        }
+        if(!shotsOnly) {
+          await control.tap('F10');
+          await control.command('cl_gun 1',{tail:2});
+          await evaluate(HOOK);
+          // Measure clear-to-clear cadence separately from GPU-completion work.
+          await evaluate(`(()=>{const original=GLctx.clear.bind(GLctx);window.__rtxIntervals=[];let last=0;GLctx.clear=function(...a){const now=performance.now();if(last)__rtxIntervals.push(now-last);last=now;return original(...a)}})()`);
+          for(const mode of ['off','performance','high']) {
+            await evaluate(`quake2RTX.set(${mode!=='off'},${JSON.stringify(mode==='high'?'high':'performance')})`);
+            await sleep(1500);
+            const before=cpuSnapshot(),load=loadReading();
+            await evaluate('window.__rtxIntervals.length=0'); await evaluate(RESET);
+            await sleep(8000);
+            const sample=await evaluate(SAMPLE),intervals=await evaluate('__rtxIntervals.slice()');
+            const busy=busyShareBetween(before,cpuSnapshot());
+            await evaluate(WORK_START);await sleep(3000);const work=await evaluate(WORK_STOP);
+            const measured={mode,fps:round(sample.frames/sample.seconds),frameIntervalMs:{median:round(medianOf(intervals)),p95:round(percentileOf(intervals,.95))},
+              work:workSummary(work.durations,work.gpu,work.timer,work.gpuSkipped),load,cpuBusyShare:busy,status:await evaluate('quake2RTX.status()')};
+            item.performance.push(measured); console.log(map+' '+mode+': '+measured.fps+' FPS, p95 '+measured.frameIntervalMs.p95+' ms');
+          }
+        }
+        if(item.views.some(v=>v.status.failures.length || !v.status.supported || (!v.mode.startsWith('off') && !v.status.postDraws))) throw new Error('Renderer hook failure');
+        const finalStatus=await evaluate('quake2RTX.status()');
+        if(finalStatus.failures.length || !finalStatus.supported || !finalStatus.postDraws) throw new Error('No working raster composite');
+      }
+    }
+    report.ok=deploymentOnly ? report.deployment.every(d=>d.rendered) : true;
+  } catch(error) { report.ok=false; report.error=String(error); console.error(error); }
+  finally {
+    if(control) await control.close().catch(()=>{});
+    if(cdp) {
+      // Keep the disposable userdata interceptor active through pagehide.
+      await cdp.send('Page.navigate',{url:'about:blank'}).catch(()=>{});
+      cdp.close();
+    }
+    fs.writeFileSync(path.join(out,deploymentOnly?'deployment.json':shotsOnly?'shots.json':'fps.json'),JSON.stringify(report,null,2)+'\n');
+  }
+  return report.ok?0:1;
+}
+
+
+if (path.resolve(process.argv[1] || '') === fileURLToPath(import.meta.url)) {
+  process.exitCode = process.argv.includes('--rtx') ? await reviewRTX() : await main();
+}
