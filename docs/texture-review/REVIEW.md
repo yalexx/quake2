@@ -1,4 +1,44 @@
-# 4x texture set — contact sheets and review
+# 4x texture set — review
+
+## Round 2 — the material pass (298 textures, this round)
+
+The material pass is in the shipped archives: 298 textures instead of 270,
+`baseq2/pak9.pak` 25,031,035 → 41,201,057 bytes, all 298 pass
+`node scripts/hires-art.mjs --check`, and
+`node scripts/texture-pack.mjs --check` reports `524 packed (524 identical to
+the original), 79 without art, 8 skipped, 0 failed`. The full account — the
+material recipes and their counts,
+the gates, what shipped, the three in-game spawn views, real-Chrome FPS on
+ANGLE/Intel UHD 620, the conventions considered and the weakest remaining
+materials — is in [REALISM.md](REALISM.md).
+
+- In-game pairs: [demo1](ingame/demo1-spawn-prev-new.png),
+  [demo2](ingame/demo2-spawn-prev-new.png),
+  [demo3](ingame/demo3-spawn-prev-new.png); real Chrome:
+  [demo1 NEW](ingame/real/demo1-NEW.png) /
+  [OFF](ingame/real/demo1-OFF.png) /
+  [PREV](ingame/real/demo1-PREV.png), and
+  [demo2 NEW](ingame/real/demo2-NEW.png) /
+  [OFF](ingame/real/demo2-OFF.png).
+- Real-Chrome FPS at 1366x768: NEW 74.97 fps vs OFF 74.92 (ratio 1.001), PREV
+  74.96 — every variant is pinned at the display cap (75.8 Hz measured for
+  NEW), so the recorded reference of 34 vs 73 fps (0.47) did not reproduce;
+  see REALISM.md §4.
+- Checks run for this round: `node scripts/tex-check.mjs` — "checked 603
+  pictures of 611 entries: 524 with art (42.2 MB), 298 of them at 4x (39.3 MB),
+  79 without, 0 the wrong size, 0 unreadable, 0 unclaimed, 15 source
+  picture(s), 8 sprite(s) drawn from their frames";
+  `node scripts/texture-pack.mjs --check` — "524 packed (524 identical to the
+  original), 79 without art, 8 skipped, 0 failed", both archives left alone.
+
+---
+
+## Round 1 — the faithful set (270 textures, previous round)
+
+> This is the previous round's review, kept as written. Its numbers, sheets and
+> dispositions describe the faithful 4x upscale; the material pass above has
+> since redrawn 272 of those textures and added 28 more, for 298. The round-1
+> contact sheets remain in `docs/texture-review/sheets/`.
 
 The 270 demo textures that carry replacement art were drawn at 4x, put on contact
 sheets together with the demo original and the art that was shipped before this
@@ -6,7 +46,7 @@ work, read as a set, and checked against the gates. Two textures were drawn with
 the wrong recipe and were re-drawn; everything else is byte-identical to what
 `scripts/hires-art.mjs` produced before this review.
 
-## The sheets
+### The sheets
 
     docs/texture-review/sheets/e1u1-01.png … e1u1-22.png   (253 textures, 12 rows a page)
     docs/texture-review/sheets/e1u2-01.png                  (9)
@@ -27,7 +67,7 @@ art's luminance; a red frame means the mean luminance moved by more than 1.5 of
 
 The sheets are 21 MB in total.
 
-## Coverage
+### Coverage
 
 `baseq2/pak0.pak` holds 303 WALs. 270 of them have replacement art. 249 of the
 270 had replacement art before this work; the other 21 are animation frames and
@@ -47,7 +87,7 @@ keep drawing the 1x art from pak0. `textureTargets()` only aims at textures that
 already have a PNG, so bringing them in is a change of scope for the generator,
 not a repair of the set that was reviewed here.
 
-## Flags and dispositions
+### Flags and dispositions
 
 | Texture | What was seen | Evidence | Disposition |
 | --- | --- | --- | --- |
@@ -67,7 +107,7 @@ scale, well inside gate 2 (±2), and the texture is two flat colours, so it is
 documented rather than papered over by tuning one knob until the swatch turns
 grey.
 
-## Per group
+### Per group
 
 Nothing was flagged in e1u2, e1u3, e2u1 or e2u2: nine, four, three and one
 texture, all clean on every gate and consistent under the vision pass. e1u1
@@ -91,7 +131,7 @@ changes. Limits: Pearson ≥ 0.97, `meanAbsRgb` ≤ 6, luminance bias ≤ 2, sea
 `wsupprt1_14` at 1.1366, and the highest is `pip01_1` at 1.767. Hue is stable
 across the set: the largest mean-hue move is **1.1°**.
 
-## What "better" means in this review
+### What "better" means in this review
 
 - **Fidelity to the demo.** Every row's cell 1 and cell 5 are the same picture at
   1x: Pearson ≥ 0.994 and a mean absolute RGB error of at most 1.62 of 255 mean
@@ -116,9 +156,16 @@ across the set: the largest mean-hue move is **1.1°**.
 
 ## Reproduce
 
-    node scripts/hires-art.mjs            # redraw the 270; reports how many changed
-    node scripts/hires-art.mjs --check    # measure the art on disk; writes hires-report.json
-    node scripts/texture-sheet.mjs        # rebuild the 26 pages and set-luminance.png
+    node scripts/hires-art.mjs            # draw the 298 through the material pass; a second run writes nothing
+    node scripts/texture-pack.mjs         # rebuild baseq2/pak0.pak and baseq2/pak9.pak
+    node scripts/texture-shots.mjs        # headless PREV/NEW/OFF pairs into docs/texture-review/ingame/
+    node scripts/texture-fps.mjs          # real-Chrome FPS and screenshots into docs/texture-review/ingame/real/
 
-`--check` after the two changes: **270 pass, 0 fail**. `hires-report.json` records
-the recipe, the class parameters, and the two overrides with the reason for each.
+Checking after the fact: `node scripts/hires-art.mjs --check` (298 pass, 0
+fail), `node scripts/texture-pack.mjs --check` (524 of 524 identical, 0 failed),
+`node scripts/tex-check.mjs` (0 the wrong size, 0 unreadable, 0 unclaimed).
+The round-1 contact sheets are built with `node scripts/texture-sheet.mjs`;
+they were not rebuilt for this round. For the round-1 set, `--check` reported
+**270 pass, 0 fail** at the time, and the round-1 entries in
+`hires-report.json` record that recipe, its class parameters and the two
+overrides.
