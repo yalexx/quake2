@@ -1,44 +1,108 @@
 # 4x texture set — review
 
-## Round 2 — the material pass (298 textures, this round)
+## Round 3 — the weakest-ten tuning and the frame-time measurement (298 textures, this round)
 
-The material pass is in the shipped archives: 298 textures instead of 270,
+This round leaves the material recipes alone and tunes the ten weakest materials
+from Round 2 — 14 textures, because `+0…+4comp10_1` is an animation family — with
+per-entry knobs in `MATERIAL_TUNING` (`scripts/hires-art.mjs`). No global
+`MATERIAL_PARAMS` knob and no gate changed, and every other entry redraws byte
+for byte. All 14 improved (`tuning.json.summary`: `improved: 14, unchanged: [],
+passed: 14, failed: 0`); none was left unchanged.
+
+**What shipped** (`repack.json`, before = `7e21a48`, the Round 2 archives):
+`baseq2/pak9.pak` **41,201,057 → 41,216,186 B** (+15,129 B, same 298 PNGs,
+41,197,102 bytes of PNG); `baseq2/pak0.pak` **47,498,591 B unchanged in size**
+(the blob changed — the tuned 1x WALs are packed too); raw art 82,808,832 B, so
+the PNGs are 2.01x smaller. A second `hires-art` and `texture-pack` run wrote
+nothing.
+
+**Key numbers** (`tuning.json`, and `hires-report.json` after the full run):
+`wsupprt1_14` detail 1.010x → 1.214x and `meanAbsRgb` 6.4409 → 3.8265;
+`grnx2_5` detail 1.520x → 1.645x; `grnx3_3` seam 0.3100 → 0.2497 (limit
+0.3128); `metal11_3` hue 2.5433° → 2.0266° (limit 3°); `florr1_2` `meanAbsRgb`
+5.0122 → 3.7591; `+0btshoot2` `meanAbsRgb` 4.9447 → 4.3278; `color1_2` chroma
+88 → 86 (limit 93.2); `+0…+4comp10_1` chroma 97/98/98/97/97 → 94/94/95/94/94;
+`wgrate1_8` luminance bias 0.9465 → 0.0219; `pip01_1` Pearson 0.9008 → 0.9359.
+The gate table, knobs and the recomputed new weakest margins are in
+[REALISM.md](REALISM.md) §6.
+
+**Real-Chrome demo3 pair:** [NEW](ingame/real/demo3-NEW.png) /
+[OFF](ingame/real/demo3-OFF.png) /
+[labelled NEW vs OFF](ingame/real/demo3-NEW-vs-OFF.png) /
+[PREV vs NEW](ingame/real/demo3-PREV-vs-NEW.png). From
+[ingame/real/fps.json](ingame/real/fps.json), NEW vs OFF is `meanAbsDiff` 1.009
+over 1,417 changed pixels with a 0.043 settle floor (ratio 23.46), while
+PREV vs NEW is 0.042 (ratio 0.97) — the tuning is at the noise floor in this
+view. One caveat read from the frames: the OFF frame shows a soldier and HUD
+health 95, NEW shows neither and health 100, so the real NEW/OFF frames are not
+the same game state and part of the 1,417 pixels is the soldier and HUD; the
+headless demo3 pair is state-matched. The frames are described in
+[REALISM.md](REALISM.md) §4.
+
+**Performance, one answer:** headroom **12.04 ms/frame** of the 13.141 ms
+display budget, with NEW costing **−0.3 ms/frame vs OFF (−21.4%)**. Capped fps
+is pinned at 74.96 (NEW) / 74.98 (OFF) against a 76.1 Hz rAF, so the cap hides
+the headroom; the uncapped loop raised the median to 298.44 / 298.38 fps and
+the runner's `gl.finish` timing measured the work per frame (1.1 / 1.4 ms). The
+report's own load record says the machine was busy (load 5.56 before Chrome,
+peaking 8.39; 16 of 54 windows over the busy threshold) and warns the timings
+are not representative of an idle box, so the headroom is indicative. See
+[REALISM.md](REALISM.md) §4. The earlier frame-rate reference was withdrawn
+(`fps.json.reference`).
+
+**Checks run for this round** (all passed, run once):
+
+- `node scripts/tex-check.mjs` — "checked 603 pictures of 611 entries: 524 with
+  art (42.2 MB), 298 of them at 4x (39.3 MB), 79 without, 0 the wrong size,
+  0 unreadable, 0 unclaimed, 15 source picture(s), 8 sprite(s) drawn from their
+  frames".
+- `node scripts/texture-pack.mjs --check` — "524 packed (524 identical to the
+  original), 79 without art, 8 skipped, 0 failed"; "left alone
+  baseq2/pak0.pak: 45.3 MB, 1106 entries, 524 replaced"; "left alone
+  baseq2/pak9.pak: 39.3 MB, 298 hires picture(s), 39.3 MB of PNG".
+- `node scripts/hires-art.mjs --check` — "checked 298 textures: 298 pass,
+  0 fail ... 27602944 px, 39.3 MB PNG".
+- `node scripts/tex-lib-test.mjs` — all 51 checks passed;
+  `node scripts/texture-pack-test.mjs` — all 67 checks passed;
+  `node scripts/material-classes-test.mjs` — all 74 checks passed;
+  `node scripts/material-lib-test.mjs` — all 77 checks passed.
+
+---
+
+## Round 2 — the material pass (298 textures, previous round)
+
+> Kept as the Round 2 record. Its archives (`7e21a48`, pak9 41,201,057 B) are
+> now Round 3's PREV; the round-3 tuning changed 14 pictures and the shipped
+> pak9 is 41,216,186 B. The in-game pairs and real-Chrome screenshots were
+> recaptured at the same paths for Round 3, so the images there now describe the
+> current archives. The round-2 capped-fps reading is superseded by Round 3's
+> work-per-frame measurement; the old frame-rate reference was withdrawn (see
+> REALISM.md §4).
+
+The material pass shipped: 298 textures instead of 270,
 `baseq2/pak9.pak` 25,031,035 → 41,201,057 bytes, all 298 pass
 `node scripts/hires-art.mjs --check`, and
 `node scripts/texture-pack.mjs --check` reports `524 packed (524 identical to
 the original), 79 without art, 8 skipped, 0 failed`. The full account — the
-material recipes and their counts,
-the gates, what shipped, the three in-game spawn views, real-Chrome FPS on
-ANGLE/Intel UHD 620, the conventions considered and the weakest remaining
-materials — is in [REALISM.md](REALISM.md).
+material recipes and their counts, the gates, what shipped, the three in-game
+spawn views, real-Chrome FPS on ANGLE/Intel UHD 620, the conventions considered
+and the weakest remaining materials — is in [REALISM.md](REALISM.md).
 
-- In-game pairs: [demo1](ingame/demo1-spawn-prev-new.png),
-  [demo2](ingame/demo2-spawn-prev-new.png),
-  [demo3](ingame/demo3-spawn-prev-new.png); real Chrome:
-  [demo1 NEW](ingame/real/demo1-NEW.png) /
-  [OFF](ingame/real/demo1-OFF.png) /
-  [PREV](ingame/real/demo1-PREV.png), and
-  [demo2 NEW](ingame/real/demo2-NEW.png) /
-  [OFF](ingame/real/demo2-OFF.png).
-- Real-Chrome FPS at 1366x768: NEW 74.97 fps vs OFF 74.92 (ratio 1.001), PREV
-  74.96 — every variant is pinned at the display cap (75.8 Hz measured for
-  NEW), so the recorded reference of 34 vs 73 fps (0.47) did not reproduce;
-  see REALISM.md §4.
-- Checks run for this round: `node scripts/tex-check.mjs` — "checked 603
-  pictures of 611 entries: 524 with art (42.2 MB), 298 of them at 4x (39.3 MB),
-  79 without, 0 the wrong size, 0 unreadable, 0 unclaimed, 15 source
-  picture(s), 8 sprite(s) drawn from their frames";
-  `node scripts/texture-pack.mjs --check` — "524 packed (524 identical to the
-  original), 79 without art, 8 skipped, 0 failed", both archives left alone.
+- Round 2's headless pairs (demo1, demo2, demo3) and real-Chrome frames live in
+  `docs/texture-review/ingame/`; Round 3 recaptured the same paths and links
+  them from its section above.
+- Round 3 replaces the capped-fps comparison with an uncapped work-per-frame
+  measurement; the round-2 frame-rate reference was withdrawn.
 
 ---
 
-## Round 1 — the faithful set (270 textures, previous round)
+## Round 1 — the faithful set (270 textures, two rounds ago)
 
-> This is the previous round's review, kept as written. Its numbers, sheets and
-> dispositions describe the faithful 4x upscale; the material pass above has
-> since redrawn 272 of those textures and added 28 more, for 298. The round-1
-> contact sheets remain in `docs/texture-review/sheets/`.
+> This is the round-1 review, kept as written. Its numbers, sheets and
+> dispositions describe the faithful 4x upscale; the material pass (Round 2)
+> has since redrawn 272 of those textures and added 28 more, for 298, and
+> Round 3 has tuned 14 of them. The round-1 contact sheets remain in
+> `docs/texture-review/sheets/`.
 
 The 270 demo textures that carry replacement art were drawn at 4x, put on contact
 sheets together with the demo original and the art that was shipped before this
@@ -156,16 +220,29 @@ across the set: the largest mean-hue move is **1.1°**.
 
 ## Reproduce
 
-    node scripts/hires-art.mjs            # draw the 298 through the material pass; a second run writes nothing
-    node scripts/texture-pack.mjs         # rebuild baseq2/pak0.pak and baseq2/pak9.pak
-    node scripts/texture-shots.mjs        # headless PREV/NEW/OFF pairs into docs/texture-review/ingame/
-    node scripts/texture-fps.mjs          # real-Chrome FPS and screenshots into docs/texture-review/ingame/real/
+    node scripts/hires-art.mjs                      # draw the 298; a second run writes nothing
+    node scripts/texture-pack.mjs                   # rebuild baseq2/pak0.pak and baseq2/pak9.pak
+    node scripts/texture-shots.mjs --prev 7e21a48   # headless PREV/NEW/OFF pairs into docs/texture-review/ingame/
+    node scripts/texture-fps.mjs --prev 7e21a48     # real Chrome: frame time, screenshots, diff pairs into .../ingame/real/
+
+`texture-shots.mjs` takes `--maps demo1,demo2,demo3` (default), `--out <dir>`
+(default `docs/texture-review/ingame/`) and `--prev <rev>` (default `b6c2a4f`,
+so pass `7e21a48` to reproduce this round's PREV). `texture-fps.mjs` takes
+`--maps demo1,demo2,demo3` (default), `--out <dir>` (default
+`docs/texture-review/ingame/real/`), `--cdp <url>` (default
+`http://127.0.0.1:9222`), `--live <url>` (default `http://127.0.0.1:4231`),
+`--prev <rev>` and `--keep`; it drives the already-open browser and game, and it
+fails loudly if the renderer is not gles3/WebGL2. Both scripts default to
+`b6c2a4f` for PREV, which is the pre-material archive, not this round's
+starting point.
 
 Checking after the fact: `node scripts/hires-art.mjs --check` (298 pass, 0
-fail), `node scripts/texture-pack.mjs --check` (524 of 524 identical, 0 failed),
-`node scripts/tex-check.mjs` (0 the wrong size, 0 unreadable, 0 unclaimed).
-The round-1 contact sheets are built with `node scripts/texture-sheet.mjs`;
-they were not rebuilt for this round. For the round-1 set, `--check` reported
+fail), `node scripts/texture-pack.mjs --check` (524 of 524 identical, 0 failed,
+both archives left alone), `node scripts/tex-check.mjs` (0 the wrong size, 0
+unreadable, 0 unclaimed), and `tex-lib-test` / `texture-pack-test` /
+`material-classes-test` / `material-lib-test` (51 / 67 / 74 / 77 checks). The
+round-1 contact sheets are built with `node scripts/texture-sheet.mjs`; they
+were not rebuilt for Round 2 or Round 3. For the round-1 set, `--check` reported
 **270 pass, 0 fail** at the time, and the round-1 entries in
 `hires-report.json` record that recipe, its class parameters and the two
 overrides.
