@@ -14,6 +14,88 @@ source is named at each claim. §6's ordering is one arithmetic pass over
 script. Every visual statement cites a committed screenshot. Where a step was
 not run, it says so.
 
+## What to look at
+
+The thing the owner opens is the ClawBox app:
+**http://127.0.0.1:3005/apps/quake2/**, which answers HTTP 200 with the game page
+(`id="canvas"`). In this box's game-profile Chrome it currently redirects to
+`:3005/login` (no valid ClawBox session there), so the real-Chrome picture
+checks below are made on the same build at **http://127.0.0.1:4231/**, which
+serves the identical archives and draws gles3 on WebGL2 through ANGLE at a
+1366x768 buffer. §7 has both results.
+
+**The new art, one URL per map** (each loads with `r_retexturing 1` and no view
+weapon, so the surfaces are what you see):
+
+- <http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0>
+- <http://127.0.0.1:4231/?+map&demo2&+set&cl_gun&0&+set&crosshair&0>
+- <http://127.0.0.1:4231/?+map&demo3&+set&cl_gun&0&+set&crosshair&0>
+
+or from the game's console: `map demo1`, `map demo2`, `map demo3` (the console
+route is verified in `docs/texture-review/ingame/final/e2e.json`:
+`consoleMap.readback` reads `demo2` after typing `map demo2`).
+
+**The OFF comparison** is the same URL with `&+set&r_retexturing&0` appended:
+
+- <http://127.0.0.1:4231/?+map&demo1&+set&r_retexturing&0>
+
+This URL form is the one the committed OFF shots use (§3, §4). The console
+toggle was also tried: typing `r_retexturing 0` reads back `0` and the frame
+changes (`e2e.json`, `consoleOff`), so it takes, but the pictures cited here are
+the URL-form ones.
+
+**Views worth seeing.** The audit (`docs/texture-review/AUDIT.md`, data in
+`ingame/audit/audit.json`) planned a legal eye for each of the twenty most-drawn
+textures. Load the map, put the eye on the spot with the engine's single-player
+`teleport x y z` (URL form: append `&+set&cheats&1` before `+map`, e.g.
+`http://127.0.0.1:4231/?+set&cheats&1&+map&demo2`; typing `cheats 1` on the
+console does not take), and turn with the arrow keys -- this build ignores
+pitch look on keyboard and bridge mouse, so the floor and ceiling spots are
+framed level (AUDIT.md, "Pitch").
+
+| what you see | map | teleport command | view |
+| --- | --- | --- | --- |
+| slatted wall, the most-drawn texture | demo2 | `teleport 480 -1648 166` | wall |
+| metal ceiling panel | demo2 | `teleport 681 -1783 -120` | ceiling |
+| grated wall | demo2 | `teleport 588 -1760 124` | wall |
+| riveted metal wall | demo1 | `teleport 160 -608 -20` | wall |
+| rock face with light break | demo1 | `teleport 674 -379 195` | wall, pitch -10 |
+| corridor floor | demo1 | `teleport -1957 1779 120` | floor |
+| green-slat floor | demo1 | `teleport -1495 1529 -8` | floor |
+| grate floor | demo3 | `teleport 319 -142 -497` | wall, pitch -14 |
+| sky brush | demo1 | `teleport -58 1245 679` | ceiling |
+
+Each row's NEW/OFF pair is in `ingame/audit/` and its verdict in AUDIT.md; all
+twenty were judged `ok`, and six artefacts suspected in NEW were found in OFF
+too (no `MATERIAL_TUNING` row changed).
+
+### What still has no art
+
+`node scripts/tex-check.mjs --json` prints `entries: 611`, `artTargets: 603`,
+`withArt: 524`, `missing: 79`. The 8-entry gap between `entries` and
+`artTargets` is `drawnFromFrames`: `sprites/s_explod.sp2` and its seven
+siblings are sprite *scripts* that name their frames and have no pixels of their
+own, so they are counted as entries but are not art targets. The 79 are, by
+what they are (`missingNames`, 79 names):
+
+- **5 never-drawn WALs** -- `textures/e1u1/clip.wal`, `textures/e1u1/clip_mon.wal`,
+  `textures/e1u1/hint.wal`, `textures/e1u1/origin.wal`, `textures/e1u3/clip.wal`.
+  Collision, hint and origin brushes: the engine never draws them as surfaces,
+  and `hires-report.json.coverage.excluded` lists them as excluded.
+- **6 env cubemaps** -- `env/unit1_{rt,ft,lf,bk,up,dn}.pcx`, the six faces of
+  the reflection cube map. They are sampled as a reflection, not drawn as a
+  surface; this pass has no cubemap recipe.
+- **66 menu/UI pics** -- `pics/*.pcx`: HUD and inventory icons (`pics/i_*`,
+  `pics/a_*`, `pics/p_*`, `pics/k_*`), weapon icons (`pics/w_*`), menu cursors
+  (`pics/m_cursor*.pcx`), `pics/help`, `pics/net`, `pics/turtle`, `pics/ch1-3`,
+  `pics/field_3`, `pics/i_help.pcx`, and `pics/colormap.pcx` (the palette source,
+  not a picture).
+  This pass covers world surfaces only; the UI is out of scope.
+- **2 sprite frames** -- `sprites/s_bubble_0.pcx` and `sprites/s_bubble_1.pcx`,
+  frames of `sprites/s_bubble.sp2`. Sprite frames are drawn by the engine's
+  sprite path, not by the world texture path this pass redraws; they are the
+  only sprite frames left unsupplied.
+
 ## 1. What changed
 
 The previous round enlarged each demo WAL with a faithful 4x filter: the
@@ -124,9 +206,13 @@ engine never draws as surfaces: `textures/e1u1/clip.wal`,
 `textures/e1u1/origin.wal` and `textures/e1u3/clip.wal`.
 `hires-report.json.coverage.excluded` lists the four names (`clip`, `clip_mon`,
 `hint`, `origin`; `clip` appears in both e1u1 and e1u3).
-`node scripts/tex-check.mjs` reports 524 of 611 manifest entries with art; the
-other 79 are those 5 WALs plus non-WAL pictures outside this pass's scope (env
-cubemaps, menu/UI pics, a couple of sprite frames).
+`node scripts/tex-check.mjs --json` prints `entries: 611`, `artTargets: 603`,
+`withArt: 524`, `missing: 79`: 524 of the 603 art targets carry art and the
+other 79 are the 5 WALs above plus non-WAL pictures outside this pass's scope
+(6 env cubemaps, 66 menu/UI pics, 2 sprite frames — listed by kind and name in
+"What to look at" above). The 8 entries that are not art targets are the
+`drawnFromFrames` SP2 sprite scripts, which name their frames and hold no
+pixels of their own.
 
 ## 2. What shipped
 
@@ -150,6 +236,13 @@ second `node scripts/texture-pack.mjs` writes nothing (`repack.json.commands`).
 Everything shipped came from `node scripts/hires-art.mjs` followed by
 `node scripts/texture-pack.mjs`; no pak or `assets/textures/manifest.json` was
 edited by hand.
+
+The audit round that followed (`AUDIT.md`, step 1 of this goal) changed no art
+file and neither archive -- every suspected defect turned out to be in the OFF
+picture too. On disk now: `baseq2/pak0.pak` **47,498,591 B**
+(sha1 `3fce7386fe188b9176984bec676e950123aa6280`) and `baseq2/pak9.pak`
+**41,216,186 B** (sha1 `e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d`), the sizes
+this round shipped.
 
 ## 3. In-game evidence
 
@@ -393,6 +486,71 @@ Still with **no art at all**: `textures/e1u1/clip.wal`,
 collision, hint and origin brushes; they are never drawn as surfaces, so
 giving them art would add bytes and no picture.
 
+## 7. End-to-end check of what the owner opens
+
+`node scripts/e2e-check.mjs` (committed) writes
+`docs/texture-review/ingame/final/e2e.json` and its screenshots. It ran after
+the audit round; the archives on disk are the ones in §2.
+
+**HTTP.** Both entry points answer, with the game page and not an error or login
+page: `http://127.0.0.1:3005/apps/quake2/` returns **200**,
+`text/html; charset=utf-8`, and its body contains `id="canvas"`;
+`http://127.0.0.1:4231/` returns **200**, `text/html; charset=utf-8`, and its
+body contains `id="canvas"`.
+
+**Served archives.** Fetching both archives through both origins gives this
+checkout's bytes:
+
+| origin | `baseq2/pak0.pak` | `baseq2/pak9.pak` |
+| --- | --- | --- |
+| `:3005/apps/quake2/` | 47,498,591 B, sha1 `3fce7386…` | 41,216,186 B, sha1 `e2f2a6ef…` |
+| `:4231/` | 47,498,591 B, sha1 `3fce7386…` | 41,216,186 B, sha1 `e2f2a6ef…` |
+
+Both equal the local files, so `:4231` (the main checkout's service) is serving
+the same archives this worktree ships — the merged work has reached the served
+folder. The service was not restarted.
+
+**Real Chrome.** In the open window (CDP `http://127.0.0.1:9222`), the `:4231`
+load `?+map&demo1…` booted and passed every check, with the renderer string read
+from the page itself: `ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2),
+OpenGL ES 3.2)`, WebGL2, `vid_renderer gles3`, drawing buffer **1366x768**,
+`baseq2/pak9.pak` in the engine FS **41,216,186 B**, and `mapname` `demo1`.
+Screenshot: `ingame/final/e2e-live4231-demo1.png`. The console checks
+(`r_retexturing 0` read back `0` and changed the frame; `map demo2` loaded
+demo2) are `e2e-live4231-r_retexturing-0-console.png` and
+`e2e-live4231-console-map-demo2.png`. The tab was left on
+`http://127.0.0.1:4231/`.
+
+**The app URL does not boot in this window.** In real Chrome,
+`http://127.0.0.1:3005/apps/quake2/` redirects to
+`http://127.0.0.1:3005/login?redirect=%2Fapps%2Fquake2%2F`: the game-profile
+Chrome has no valid ClawBox session, so no canvas ever appears there
+(`e2e.json.chrome.app3005.finalUrl`, screenshot
+`ingame/final/e2e-app3005-login.png`). The HTTP checks above still hold — the
+proxy serves the app page with `id="canvas"` to a request without a browser
+session — but **no renderer claim is made for the app URL in a browser**, and
+no login was attempted. The `:4231` evidence above is the real-Chrome evidence
+for what the game draws.
+
+Load while this ran: `e2e.json.load` — the box was busy (readings 5.2-6.1 on
+8 cores), so the run waited between readings.
+
+**Frame time.** `node scripts/texture-fps.mjs --out docs/texture-review/ingame/final
+--prev 9d9d725` re-measured on the shipped archives (`9d9d725` is the archives
+before the audit round, which changed neither pak). Result:
+**headroom 11.88 ms/frame**, work per frame **1.4 ms NEW vs 1.5 ms OFF**
+(`costMs` −0.1, −6.7%), capped medians 74.99 / 74.93 fps, uncapped **308.13**
+NEW vs **337.78** OFF. Against `ingame/real/fps.json` (12.04 ms headroom at a
+76.1 Hz cap, 1.1 ms NEW vs 1.4 ms OFF, uncapped ~298 fps) the verdict holds:
+no added work measurable at 1366x768 and about 12 ms/frame spare under the cap.
+The load warning fired again: *"the machine was busy before Chrome work
+started: load average 6.72 (1 min) on 8 cores, above half the core count; frame
+timings from this run are not representative of an idle box"*, and every one of
+the 54 recorded windows was above the threshold (peak 8.02). The box never got
+quieter than load 5.2 while this run was going, so no quieter re-run was
+possible before the time budget ran out; both runs are quoted and the numbers
+are read with that qualification.
+
 ## What this evidence does not cover
 
 - The demo3 real-Chrome NEW frame is not the same game state as OFF/PREV (the
@@ -413,4 +571,20 @@ giving them art would add bytes and no picture.
   claims are limited to the real-Chrome frames cited in §4 and the demo3
   headless pair in §3.
 - No art, pak or manifest change was made in this documentation round; the
-  archives are the ones named in §2.
+  archives are the ones named in §2. The audit round (§2) changed no art and
+  no pak either.
+- The §7 frame-time re-run was made on a busy box (load 6.72 before Chrome,
+  peak 8.02, every window over the threshold). The box never fell below load
+  5.2 during the run, so the asked-for quieter re-run could not be made; the
+  §7 numbers are quoted with the report's warning, and the work-per-frame
+  difference of −0.1 ms is inside that noise.
+- The app URL `:3005/apps/quake2/` is verified over HTTP only, not in a browser:
+  the open window's profile redirects it to `/login`, and no login was attempted
+  (no credentials, and changing the device's session is out of scope). Its
+  real-Chrome boot therefore remains unverified; the `:4231` evidence covers the
+  same archives and the same renderer path.
+- The end-to-end check is a snapshot of one moment: HTTP status, served bytes,
+  renderer and canvas size at the time it ran. It says nothing about through-play
+  stability, demo playback, or a different browser or GPU.
+- The server was not restarted to make `:4231` serve the new archives; its
+  sha1 match is evidence it already does.
