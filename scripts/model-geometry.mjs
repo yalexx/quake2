@@ -448,7 +448,7 @@ function makeParts(context) {
   };
   const patches = {
     metal: patch(105, 16),
-    dark: patch(50, 16),
+    dark: patch(48, 16),
     steel: patch(150, 14),
     grip: patch(38, 18),
   };
@@ -567,12 +567,12 @@ function addWeaponHardware(context) {
   const forward = info.filter((t) => t.center[0] > hi[0] - span(0) * 0.16 && t.area > 0.05);
   if (forward.length) {
     const fb = bounds(forward.flatMap((t) => [t.a, t.b, t.c]));
-    const radius = Math.max(1.1, Math.min(fb.size[1], fb.size[2]) * 0.4);
+    const radius = Math.max(0.9, Math.min(fb.size[1], fb.size[2]) * 0.3);
     const half = Math.max(1.4, span(0) * 0.06);
     const center = [hi[0] - half * 0.8, fb.center[1], fb.center[2]];
     // Open rings, not capped discs: the barrel bore has to stay visible.
-    cylinder(sub(center, [half * 0.8, 0, 0]), add(center, [half * 0.8, 0, 0]), radius + 0.22, 10, patches.metal, false);
-    cylinder(add(center, [half * 0.9, 0, 0]), add(center, [half * 1.45, 0, 0]), radius + 0.05, 10, patches.steel, false);
+    cylinder(sub(center, [half * 0.8, 0, 0]), add(center, [half * 0.8, 0, 0]), radius + 0.16, 10, patches.steel, false);
+    cylinder(add(center, [half * 0.9, 0, 0]), add(center, [half * 1.45, 0, 0]), radius + 0.03, 10, patches.steel, false);
     notes.push("muzzle");
   }
 
@@ -586,9 +586,9 @@ function addWeaponHardware(context) {
     const railX1 = tb.center[0] + tb.size[0] * 0.34;
     const railY = tb.center[1];
     const railZ = tb.hi[2] + 0.16;
-    box([(railX0 + railX1) / 2, railY, railZ], [Math.max(1.2, (railX1 - railX0) / 2), 0, 0], [0, 0.5, 0], [0, 0, 0.22], patches.steel);
-    box([railX1 - 0.3, railY, railZ + 0.8], [0.55, 0, 0], [0, 0.62, 0], [0, 0, 0.7], patches.steel);
-    box([railX0 + 0.5, railY, railZ + 0.55], [0.45, 0, 0], [0, 0.5, 0], [0, 0, 0.5], patches.dark);
+    box([(railX0 + railX1) / 2, railY, railZ], [Math.max(1.0, (railX1 - railX0) / 2), 0, 0], [0, 0.36, 0], [0, 0, 0.17], patches.steel);
+    box([railX1 - 0.3, railY, railZ + 0.6], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.6], patches.steel);
+    box([railX0 + 0.5, railY, railZ + 0.42], [0.4, 0, 0], [0, 0.4, 0], [0, 0, 0.4], patches.dark);
     notes.push("rail");
   }
 
@@ -607,7 +607,7 @@ function addWeaponHardware(context) {
     const zHalf = Math.max(0.65, sb.size[2] * 0.11);
     // A shallow housing plate ties the ribs to the receiver, so they read as
     // louvres in a panel rather than three rods stuck to the side.
-    box([sb.center[0], sideY + sideSign * 0.06, sb.center[2]], [xHalf, 0, 0], [0, 0.1, 0], [0, 0, zHalf], patches.metal);
+    box([sb.center[0], sideY + sideSign * 0.06, sb.center[2]], [xHalf, 0, 0], [0, 0.1, 0], [0, 0, zHalf], patches.steel);
     for (let i = 0; i < 2; i++) {
       const z = sb.center[2] - zHalf * 0.42 + i * zHalf * 0.84;
       box([sb.center[0], sideY + sideSign * 0.19, z], [xHalf * 0.9, 0, 0], [0, 0.14, 0], [0, 0, 0.16], patches.dark);
@@ -650,7 +650,7 @@ function addWeaponHardware(context) {
   }
   tube(cablePoints, 0.42, 6, patches.dark);
   for (const index of [0, cablePoints.length - 1]) {
-    box(cablePoints[index], [0.62, 0, 0], [0, 0.62, 0], [0, 0, 0.5], patches.metal);
+    box(cablePoints[index], [0.62, 0, 0], [0, 0.62, 0], [0, 0, 0.5], patches.steel);
   }
   notes.push("cable");
 
@@ -766,16 +766,23 @@ export function findQuietPatch(skin, targetLuma, size = 14, step = 2) {
   let best = { score: Infinity, x: 0, y: 0, size, mean: targetLuma, sd: 0 };
   for (let y = 0; y + size <= skin.height; y += step) {
     for (let x = 0; x + size <= skin.width; x += step) {
-      let sum = 0, sum2 = 0, n = 0;
+      let sum = 0, sum2 = 0, n = 0, sr = 0, sg = 0, sb = 0;
       for (let dy = 0; dy < size; dy += 2) {
         for (let dx = 0; dx < size; dx += 2) {
-          const l = lumaAt(skin, x + dx, y + dy);
+          const i = (Math.min(skin.height - 1, y + dy) * skin.width + Math.min(skin.width - 1, x + dx)) * 4;
+          const r = skin.data[i], g = skin.data[i + 1], b = skin.data[i + 2];
+          const l = 0.2126 * r + 0.7152 * g + 0.0722 * b;
           sum += l; sum2 += l * l; n++;
+          sr += r; sg += g; sb += b;
         }
       }
       const mean = sum / n;
       const sd = Math.sqrt(Math.max(0, sum2 / n - mean * mean));
-      const score = sd + Math.abs(mean - targetLuma) * 0.35;
+      // Prefer quiet, near-neutral patches: the skin atlases also hold the
+      // player's brightly painted hands, and a rail cut from those reads as
+      // painted wood instead of metal.
+      const saturation = (Math.max(sr, sg, sb) - Math.min(sr, sg, sb)) / n / 255;
+      const score = sd + Math.abs(mean - targetLuma) * 0.35 + saturation * 60;
       if (score < best.score) best = { score, x, y, size, mean, sd };
     }
   }
