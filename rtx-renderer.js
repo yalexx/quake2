@@ -3,17 +3,15 @@
 (() => {
   'use strict';
   const canvas = document.getElementById('canvas');
-  const panel = document.getElementById('render-settings');
-  const toggle = document.getElementById('rtx-toggle');
-  const quality = document.getElementById('rtx-quality');
   const status = document.getElementById('rtx-status');
+  const lightingButtons = Array.from(document.querySelectorAll('[data-lighting]'));
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('quake2-raster-look') || '{}'); } catch (_) { /* opaque iframe */ }
   const params = new URLSearchParams(location.hash.slice(1));
   let enabled = params.has('rtx') ? params.get('rtx') !== 'off' : saved.enabled !== false;
   let preset = params.get('quality') || saved.quality || 'performance';
   if (!['performance', 'high'].includes(preset)) preset = 'performance';
-  const report = { version: 'raster-1', worldShaders: 0, postShaders: 0, matchedTextures: 0,
+  const report = { version: 'raster-1', worldShaders: 0, postShaders: 0, modelShaders: 0, matchedTextures: 0,
     materials: {}, failures: [], postDraws: 0, worldDraws: 0, supported: false };
   let gl, current, textureUnit = 0, dirty = true, sceneDirty = false, composite = null;
   const textures = new WeakMap(), programs = new Map(), shaders = new WeakMap(), bound = [];
@@ -23,23 +21,28 @@
     stone: [0.02, 0.92, 0], crate: [0.08, 0.85, 0], wood: [0, 0.94, 0],
     organic: [0.03, 0.8, 0], sign: [0.08, 0.65, 0], flat: [0, 1, 0]
   };
+  function statusText() {
+    return report.failures.length ? 'Original renderer · effect unavailable' :
+      !report.supported ? 'Requires the GLES3 renderer' :
+      !enabled ? 'Original lighting' :
+      preset === 'high' ? 'Raster lighting · High · no ray tracing' : 'Raster lighting · Performance · no ray tracing';
+  }
   function update() {
     dirty = true;
-    toggle.checked = enabled;
-    quality.value = preset;
-    quality.disabled = !enabled;
-    status.textContent = report.failures.length ? 'Original renderer · effect unavailable' :
-      !report.supported ? 'Requires the GLES3 renderer' : enabled ? 'Raster lighting · no ray tracing' : 'Original lighting';
+    const active = enabled ? preset : 'off';
+    for (const button of lightingButtons) button.setAttribute('aria-pressed', String(button.dataset.lighting === active));
+    if (status) status.textContent = statusText();
     try { localStorage.setItem('quake2-raster-look', JSON.stringify({ enabled, quality: preset })); } catch (_) { /* optional persistence */ }
   }
   function mode() { return enabled && report.supported && !report.failures.length ? (preset === 'high' ? 2 : 1) : 0; }
-  toggle.addEventListener('change', () => { enabled = toggle.checked; update(); });
-  quality.addEventListener('change', () => { preset = quality.value; update(); });
-  // Keep game keyboard handlers from seeing controls, without stealing gameplay keys.
-  panel.addEventListener('keydown', event => event.stopPropagation());
-  panel.addEventListener('keyup', event => event.stopPropagation());
-  for (const type of ['mousedown','mouseup','click']) panel.addEventListener(type, event => event.stopPropagation());
-  document.addEventListener('pointerlockchange', () => { panel.hidden = document.pointerLockElement === canvas; });
+  for (const button of lightingButtons) {
+    button.addEventListener('click', () => {
+      const value = button.dataset.lighting;
+      enabled = value !== 'off';
+      if (value === 'high' || value === 'performance') preset = value;
+      update();
+    });
+  }
   window.quake2RTX = {
     set(on, level = preset) { enabled = !!on; preset = level === 'high' ? 'high' : 'performance'; update(); return this.status(); },
     status() { return { ...report, enabled: mode() > 0, quality: preset, mode: mode(),
@@ -117,6 +120,34 @@ vec3 q2Finish(vec3 c, vec2 uv) {
   return clamp(c + glow*0.16*(1.0-c),0.0,1.0);
 }
 `;
+  // q2ModelShade: the shader the engine draws every MD2 model with (weapons,
+  // enemies, items) supplies only a texture and a transform -- no normal, no
+  // light. The relief it paints has to come from the albedo itself, so this
+  // derives a tangent-space normal from the skin's own luminance gradient,
+  // adds a key-lit relief term and a restrained painted-metal sheen, then
+  // leaves the engine's gamma and alpha path untouched. Gated by q2Model, which
+  // is 0 whenever the raster look is off, so Off restores the original shader.
+  const modelFunctions = `
+uniform float q2Model;
+vec3 q2ModelShade(vec3 albedo, vec2 uv) {
+  float h = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+  // Texture gradient -> a bump normal in the skin's own tangent frame. The
+  // clamp keeps a hard texel edge from becoming a spike.
+  float dhx = clamp(dFdx(h), -0.35, 0.35);
+  float dhy = clamp(dFdy(h), -0.35, 0.35);
+  vec3 n = normalize(vec3(-dhx * 2.4, -dhy * 2.4, 1.0));
+  vec3 l = normalize(vec3(-0.42, -0.55, 0.72));
+  float diff = max(dot(n, l), 0.0);
+  float spec = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 26.0);
+  float lum = clamp(h * 1.8, 0.0, 1.0);
+  vec3 tint = mix(vec3(0.74, 0.82, 1.0), vec3(1.08, 0.99, 0.84), lum);
+  albedo *= 0.93 + 0.16 * diff;
+  albedo += tint * spec * (0.05 + 0.13 * lum);
+  float edge = clamp(length(vec2(dhx, dhy)) * 1.8, 0.0, 0.45);
+  albedo += tint * edge * 0.08;
+  return albedo;
+}
+`;
   function transform(source, type) {
     if (type === gl.VERTEX_SHADER && source.includes('passWorldCoord = worldCoord.xyz;') && source.includes('passNormal')) {
       source = source.replace('void main()', 'out vec3 q2ViewDirection;\nvoid main()');
@@ -126,6 +157,12 @@ vec3 q2Finish(vec3 c, vec2 uv) {
     if (type === gl.FRAGMENT_SHADER && source.includes('outColor = lmTex*texel;') && source.includes('passWorldCoord')) {
       return { kind: 'world', source: source.replace('void main()', worldFunctions+'\nvoid main()')
         .replace('outColor = lmTex*texel;', 'outColor = lmTex*texel; if (q2RTX > 0.5) outColor.rgb = q2Surface(texel.rgb,lmTex.rgb);') };
+    }
+    if (type === gl.FRAGMENT_SHADER && source.includes('outColor.a = texel.a*alpha;')
+        && source.includes('outColor.rgb = pow(texel.rgb, vec3(gamma));') && !source.includes('lightmap') && !source.includes('passColor')) {
+      return { kind: 'model', source: source.replace('void main()', modelFunctions + '\nvoid main()')
+        .replace('outColor.rgb = pow(texel.rgb, vec3(gamma));',
+          'if (q2Model > 0.5) texel.rgb = q2ModelShade(texel.rgb, passTexCoord); outColor.rgb = pow(texel.rgb, vec3(gamma));') };
     }
     if (type === gl.FRAGMENT_SHADER && source.includes('uniform vec4 v_blend;') && source.includes('outColor = res;')) {
       const uv = source.includes('vec2 uv =') ? 'uv' : 'passTexCoord';
@@ -170,11 +207,13 @@ vec3 q2Finish(vec3 c, vec2 uv) {
       }
       const modeLocation = gl.getUniformLocation(program,'q2RTX');
       const materialLocation = gl.getUniformLocation(program,'q2Material');
+      const modelLocation = gl.getUniformLocation(program,'q2Model');
       const is2D = gl.getAttachedShaders(program).some(shader => /uniform\s+uni2D\b/.test(shaders.get(shader)?.original || ''));
-      const kind = materialLocation ? 'world' : modeLocation ? 'post' : is2D ? 'ui' : 'original';
-      programs.set(program,{ kind, modeLocation, materialLocation, lastMode: -1, lastTexture: null });
+      const kind = materialLocation ? 'world' : modeLocation ? 'post' : modelLocation ? 'model' : is2D ? 'ui' : 'original';
+      programs.set(program,{ kind, modeLocation, materialLocation, modelLocation, lastMode: -1, lastModel: -1, lastTexture: null });
       if (kind === 'world') report.worldShaders++;
       if (kind === 'post') report.postShaders++;
+      if (kind === 'model') report.modelShaders = (report.modelShaders || 0) + 1;
       report.supported = report.worldShaders > 0 && report.postShaders > 0;
       update();
     };
@@ -201,6 +240,15 @@ vec3 q2Finish(vec3 c, vec2 uv) {
       if (current?.kind === 'ui' && sceneDirty) {
         sceneDirty = false;
         if (mode() && !gl.getParameter(gl.FRAMEBUFFER_BINDING)) finishScene();
+      }
+      if (current?.kind === 'model') {
+        // The model shader has no q2RTX uniform of its own (adding one would
+        // make it look like the post-program to the classifier); q2Model carries
+        // the same on/off and is what gates q2ModelShade in the fragment.
+        const value = mode() > 0 ? 1 : 0;
+        if (current.lastModel !== value) { gl.uniform1f(current.modelLocation,value); current.lastModel = value; }
+        sceneDirty = true;
+        return;
       }
       if (!current || !current.modeLocation) return;
       const value = mode();

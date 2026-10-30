@@ -6,28 +6,101 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx2">
+<link rel="stylesheet" href="style.css?v=ui3">
 </head>
 <body>
+<!-- Boot: a dark plate with the mark and one thin progress rule. -->
 <div id="loading" role="status" aria-live="polite">
+  <div class="boot-mark"><span>QUAKE</span><b>II</b></div>
+  <div class="boot-rule"><div id="progress" hidden><div id="progress-bar"></div></div></div>
   <div id="status">Loading…</div>
-  <div id="progress" hidden><div id="progress-bar"></div></div>
   <div id="detail"></div>
 </div>
+
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
-<details id="render-settings">
-  <summary>Lighting</summary>
-  <label class="render-switch"><span>RTX-style</span><input id="rtx-toggle" type="checkbox" checked aria-label="RTX-style lighting On or Off"></label>
-  <label>Quality <select id="rtx-quality"><option value="performance">Performance</option><option value="high">High</option></select></label>
-  <small id="rtx-status">Raster lighting · no ray tracing</small>
-  <small>Esc releases the mouse. Off restores original lighting. Original art: console <code>r_retexturing 0; vid_restart</code>.</small>
-</details>
+
+<!-- The interface layer: near-black translucent panels, 1px rules and a muted
+     amber accent. It sits above the canvas but never takes a click during play. -->
+<div id="ui">
+  <div id="hud-band" aria-hidden="true"></div>
+  <button id="options-chip" type="button">Options</button>
+  <div id="banner" role="status" aria-live="polite" hidden><span id="banner-text"></span></div>
+  <div id="prompt" hidden><span>Click to capture the mouse</span></div>
+
+  <div id="menu-layer" hidden>
+    <div class="menu-scrim"></div>
+    <section id="menu" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+      <header class="menu-head">
+        <h1 id="menu-title"><span class="mark-quake">Quake</span><span class="mark-two">II</span></h1>
+        <p class="menu-meta">BaseQ2 <i>·</i> single player</p>
+      </header>
+
+      <div class="menu-view" data-view="main">
+        <nav class="menu-list" aria-label="Main menu">
+          <button type="button" data-action="resume"><span class="label">Resume</span><span class="hint">Esc</span></button>
+          <button type="button" data-action="newgame"><span class="label">New Game</span><span class="hint">›</span></button>
+          <button type="button" data-action="options"><span class="label">Options</span><span class="hint">›</span></button>
+          <button type="button" data-action="controls"><span class="label">Controls</span><span class="hint">›</span></button>
+          <button type="button" data-action="quit"><span class="label">Quit</span><span class="hint">›</span></button>
+        </nav>
+      </div>
+
+      <div class="menu-view" data-view="newgame" hidden>
+        <p class="view-title">New Game</p>
+        <nav class="menu-list" aria-label="Choose a mission">
+          <button type="button" data-action="map" data-map="demo1"><span class="label">Outer Base</span><span class="hint">demo1</span></button>
+          <button type="button" data-action="map" data-map="demo2"><span class="label">Installation</span><span class="hint">demo2</span></button>
+          <button type="button" data-action="map" data-map="demo3"><span class="label">Security Complex</span><span class="hint">demo3</span></button>
+          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
+        </nav>
+      </div>
+
+      <div class="menu-view" data-view="options" hidden>
+        <p class="view-title">Options</p>
+        <div class="field">
+          <span class="field-label">Lighting</span>
+          <div class="segmented" role="group" aria-label="Lighting mode">
+            <button type="button" data-lighting="off">Off</button>
+            <button type="button" data-lighting="performance">Performance</button>
+            <button type="button" data-lighting="high">High</button>
+          </div>
+        </div>
+        <div class="field field-note">
+          <span class="field-label">Renderer</span>
+          <small id="rtx-status">Raster lighting · no ray tracing</small>
+        </div>
+        <p class="field-help">Off returns every light to the engine's original shading. Performance and High add the RTX-style material and model pass; High adds dynamic-light highlights and bloom.</p>
+        <nav class="menu-list menu-list-sub" aria-label="Options">
+          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
+        </nav>
+      </div>
+
+      <div class="menu-view" data-view="controls" hidden>
+        <p class="view-title">Controls</p>
+        <dl class="keys">
+          <div><dt>Move</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dd></div>
+          <div><dt>Look</dt><dd>Mouse</dd></div>
+          <div><dt>Fire</dt><dd>Left mouse</dd></div>
+          <div><dt>Weapons</dt><dd><kbd>1</kbd>–<kbd>0</kbd> · wheel</dd></div>
+          <div><dt>Jump</dt><dd><kbd>Space</kbd></dd></div>
+          <div><dt>Menu</dt><dd><kbd>Esc</kbd></dd></div>
+        </dl>
+        <nav class="menu-list menu-list-sub" aria-label="Controls">
+          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
+        </nav>
+      </div>
+
+      <footer class="menu-foot"><span>↑ ↓ select</span><span>Enter open</span><span>Esc resume</span></footer>
+    </section>
+  </div>
+</div>
+
 <!-- Live engine state, read out of the WASM memory. Loaded first and inert at
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
 <script src="engine-state.js"></script>
 <script src="rtx-materials.js?v=rtx2"></script>
-<script src="rtx-renderer.js?v=rtx2"></script>
-<script src="app.js?v=rtx2"></script>
+<script src="rtx-renderer.js?v=ui3"></script>
+<script src="app.js?v=ui3"></script>
 </body>
 </html>
