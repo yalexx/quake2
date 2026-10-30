@@ -1,0 +1,324 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-30T00:34:48.753Z",
+  "reference": {
+    "fps": 34,
+    "offFps": 73,
+    "ratio": 0.47,
+    "set": "previous team's archives at b6c2a4f"
+  },
+  "environment": {
+    "servedPak9": {
+      "contentLength": 41201057,
+      "localBytes": 41201057,
+      "matches": true
+    },
+    "renderer": {
+      "webgl2": true,
+      "vendor": "Google Inc. (Intel)",
+      "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+      "drawingBuffer": [
+        1366,
+        768
+      ],
+      "inner": [
+        1248,
+        668
+      ],
+      "dpr": 1,
+      "visible": "visible"
+    },
+    "measuredDrawingBuffer": "1366x768",
+    "pak9InEngine": 41201057,
+    "displayRefreshHz": 75.8,
+    "method": "GLctx.clear calls (one per rendered frame) plus the engine's MainLoop_runner requestAnimationFrame callback, in the live page; 5 s warm-up then 3 x 10 s standing still at spawn, median; HTTP cache disabled"
+  },
+  "variants": {
+    "NEW": {
+      "base": "http://127.0.0.1:4231/",
+      "pak9InEngine": 41201057,
+      "renderer": {
+        "webgl2": true,
+        "vendor": "Google Inc. (Intel)",
+        "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+        "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "drawingBuffer": [
+          1366,
+          768
+        ],
+        "inner": [
+          1248,
+          668
+        ],
+        "dpr": 1,
+        "visible": "visible"
+      },
+      "cvars": {
+        "r_retexturing": "1",
+        "vid_renderer": "gles3"
+      },
+      "maps": {
+        "demo1": {
+          "url": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo1-NEW.png",
+          "format": "png",
+          "bytes": 1055725,
+          "settleDiff": 0.467,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.017,
+              "fps": 74.97
+            },
+            {
+              "frames": 751,
+              "engineRaf": 752,
+              "seconds": 10.029,
+              "fps": 74.88
+            },
+            {
+              "frames": 753,
+              "engineRaf": 753,
+              "seconds": 10.036,
+              "fps": 75.03
+            }
+          ],
+          "medianFps": 74.97
+        },
+        "demo2": {
+          "url": "http://127.0.0.1:4231/?+map&demo2&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo2-NEW.png",
+          "format": "png",
+          "bytes": 1148569,
+          "settleDiff": 23.619,
+          "settleNote": "two frozen frames still differed by 23.62 (this spawn has a live enemy and a damage flash); the frame is a real in-game view, but not pixel-identical across variants",
+          "samples": [
+            {
+              "frames": 747,
+              "engineRaf": 747,
+              "seconds": 10.002,
+              "fps": 74.69
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.011,
+              "fps": 74.92
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.019,
+              "fps": 74.96
+            }
+          ],
+          "medianFps": 74.92
+        }
+      },
+      "displayRefreshHz": 75.8
+    },
+    "OFF": {
+      "base": "http://127.0.0.1:4231/",
+      "pak9InEngine": 41201057,
+      "renderer": {
+        "webgl2": true,
+        "vendor": "Google Inc. (Intel)",
+        "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+        "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "drawingBuffer": [
+          1366,
+          768
+        ],
+        "inner": [
+          1248,
+          668
+        ],
+        "dpr": 1,
+        "visible": "visible"
+      },
+      "cvars": {
+        "r_retexturing": "0",
+        "vid_renderer": "gles3"
+      },
+      "maps": {
+        "demo1": {
+          "url": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&r_retexturing&0",
+          "screenshot": "docs/texture-review/ingame/real/demo1-OFF.png",
+          "format": "png",
+          "bytes": 950270,
+          "settleDiff": 0.376,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.038,
+              "fps": 74.92
+            },
+            {
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.041,
+              "fps": 74.89
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.011,
+              "fps": 75.02
+            }
+          ],
+          "medianFps": 74.92
+        },
+        "demo2": {
+          "url": "http://127.0.0.1:4231/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&r_retexturing&0",
+          "screenshot": "docs/texture-review/ingame/real/demo2-OFF.png",
+          "format": "png",
+          "bytes": 1091811,
+          "settleDiff": 33.643,
+          "settleNote": "two frozen frames still differed by 33.64 (this spawn has a live enemy and a damage flash); the frame is a real in-game view, but not pixel-identical across variants",
+          "samples": [
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.008,
+              "fps": 75.04
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.018,
+              "fps": 74.97
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.026,
+              "fps": 74.9
+            }
+          ],
+          "medianFps": 74.97
+        }
+      },
+      "displayRefreshHz": 74.3
+    },
+    "PREV": {
+      "base": "http://127.0.0.1:43867/",
+      "pak9InEngine": 25031035,
+      "renderer": {
+        "webgl2": true,
+        "vendor": "Google Inc. (Intel)",
+        "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+        "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "drawingBuffer": [
+          1366,
+          768
+        ],
+        "inner": [
+          1248,
+          668
+        ],
+        "dpr": 1,
+        "visible": "visible"
+      },
+      "cvars": {
+        "r_retexturing": "1",
+        "vid_renderer": "gles3"
+      },
+      "maps": {
+        "demo1": {
+          "url": "http://127.0.0.1:43867/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo1-PREV.png",
+          "format": "png",
+          "bytes": 951154,
+          "settleDiff": 0.184,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 749,
+              "engineRaf": 749,
+              "seconds": 10.008,
+              "fps": 74.84
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.019,
+              "fps": 74.96
+            },
+            {
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.027,
+              "fps": 75
+            }
+          ],
+          "medianFps": 74.96
+        },
+        "demo2": {
+          "url": "http://127.0.0.1:43867/?+map&demo2&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo2-PREV.png",
+          "format": "png",
+          "bytes": 1090991,
+          "settleDiff": 0.051,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.003,
+              "fps": 74.98
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.013,
+              "fps": 75.01
+            },
+            {
+              "frames": 749,
+              "engineRaf": 749,
+              "seconds": 10.021,
+              "fps": 74.74
+            }
+          ],
+          "medianFps": 74.98
+        }
+      },
+      "displayRefreshHz": 75.6
+    }
+  },
+  "comparison": {
+    "map": "demo1",
+    "newFps": 74.97,
+    "offFps": 74.92,
+    "ratio": 1.001,
+    "muchWorse": false,
+    "prevFps": 74.96,
+    "referenceNote": "the previous set measured 74.96 fps at this view today, against the recorded reference 34 fps; the display's own rAF fires at 75.8/s and every variant is pinned at that cap, so this view cannot show a cost"
+  },
+  "tuning": {
+    "triggered": false,
+    "reason": "NEW 74.97 fps vs OFF 74.92 fps (ratio 1.001) is not under 29 fps or 0.40; no tuning applied"
+  },
+  "recommendations": [
+    {
+      "what": "keep the shipped pak9",
+      "why": "no measurable frame-rate cost at 1366x768",
+      "numbers": {
+        "newFps": 74.97,
+        "offFps": 74.92,
+        "ratio": 1.001
+      }
+    }
+  ],
+  "restore": {
+    "url": "http://127.0.0.1:4231/",
+    "r_retexturing": "1",
+    "consoleOpen": false
+  },
+  "finishedAt": "2026-10-30T00:40:05.686Z"
+}
