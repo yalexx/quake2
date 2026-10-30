@@ -1,0 +1,405 @@
+{
+ "generatedAt": "2026-10-30T01:31:14Z",
+ "baselineCommit": "7e21a48",
+ "how": "Each entry's material pass is redrawn with a per-entry row from MATERIAL_TUNING (scripts/hires-art.mjs), merged over MATERIAL_PARAMS[material] by applyMaterial({params}). No global knob and no gate was changed; every other entry draws byte for byte what it drew before. The full 298-entry hires-art run checks every gate and the full texture-pack run ships the pictures into pak0/pak9.",
+ "entries": [
+  {
+   "name": "textures/e1u1/wsupprt1_14.wal",
+   "material": "lamp",
+   "knobs": {
+    "glow": 0.55,
+    "grain": 0.15
+   },
+   "why": "lamp: least detail of any material entry (1.01x the smooth floor) and the largest colour move (meanAbsRgb 6.44 of 10). The bloom was most of that colour move and almost none of the detail; a quarter less glow (0.55) and a finer grain (0.05 -> 0.15) take meanAbsRgb to 3.83 and detail to 1.21x",
+   "metrics": [
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 4.5342,
+     "beforeRatio": 1.01,
+     "after": 5.448,
+     "afterRatio": 1.2135,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "meanAbsRgb",
+     "limit": "<= 10",
+     "before": 6.4409,
+     "after": 3.8265,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/grnx2_5.wal",
+   "material": "metal",
+   "knobs": {
+    "grain": 0.32
+   },
+   "why": "metal: detail 1.520x, only 1.3% above the 1.5x floor; a finer grain (0.24 -> 0.32) lifts it to 1.65x without touching the relief that drives the seam",
+   "metrics": [
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 3.4553,
+     "beforeRatio": 1.5201,
+     "after": 3.7388,
+     "afterRatio": 1.6448,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/grnx3_3.wal",
+   "material": "metal",
+   "knobs": {
+    "grain": 0.3
+   },
+   "why": "metal: detail 1.545x and the highest seam-to-base ratio of the grnx family (0.31 against the base's 0.2285). The same finer grain (0.24 -> 0.30) lifts detail to 1.65x and pulls the seam ratio down to 0.2497",
+   "metrics": [
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 3.7332,
+     "beforeRatio": 1.5451,
+     "after": 3.9907,
+     "afterRatio": 1.6516,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "seam",
+     "limit": "<= base x 1.15 + 0.05",
+     "before": 0.31,
+     "after": 0.2497,
+     "allowance": 0.3128,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u2/metal11_3.wal",
+   "material": "rust",
+   "knobs": {
+    "normals": 4,
+    "wear": 0.2,
+    "grungeDesat": 0.08
+   },
+   "why": "rust: largest hue shift in the set (2.5433° of 3°) with only 0.006 of the 0.007 bright share left. The shift came from desaturation leaving low-chroma pixels to quantise badly; less relief (7.5 -> 4), less chipped-edge desaturation (0.5 -> 0.2) and a gentler grunge pull to grey (0.15 -> 0.08) take hue to 2.03° and bright share to 0.0049",
+   "metrics": [
+    {
+     "metric": "hueShift",
+     "limit": "<= 3 degrees on source chroma > 8",
+     "before": 2.5433,
+     "after": 2.0266,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "brightShare",
+     "limit": "<= base + 0.005",
+     "before": 0.006,
+     "after": 0.0049,
+     "allowance": 0.007,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/florr1_2.wal",
+   "material": "stone",
+   "knobs": {
+    "ao": 0.25,
+    "grunge": 0.95,
+    "grain": 0.32,
+    "edge": 0.55
+   },
+   "why": "stone: meanAbsRgb 5.0122, the second-largest colour move in the set, at 3.25x detail. Less cavity darkening, a lighter grime pull and a softer edge highlight take it to 3.76; a finer grain (0.24 -> 0.32) keeps detail above its old 4.83 at 4.97 (3.35x the 1.5x floor)",
+   "metrics": [
+    {
+     "metric": "meanAbsRgb",
+     "limit": "<= 10",
+     "before": 5.0122,
+     "after": 3.7591,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 4.8268,
+     "beforeRatio": 3.2537,
+     "after": 4.9744,
+     "afterRatio": 3.3532,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+0btshoot2.wal",
+   "material": "tech",
+   "knobs": {
+    "normals": 3,
+    "grunge": 0.5
+   },
+   "why": "tech: meanAbsRgb 4.9447, hue 1.9925° and a bright-pixel share already at its 0.013. Softer relief (6 -> 3) and less grime (0.7 -> 0.5) take rgb to 4.33, hue to 1.81° and bright share to 0.0128. The toggle partner +abtshoot2 is not an animation frame and keeps its own art",
+   "metrics": [
+    {
+     "metric": "meanAbsRgb",
+     "limit": "<= 10",
+     "before": 4.9447,
+     "after": 4.3278,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "hueShift",
+     "limit": "<= 3 degrees on source chroma > 8",
+     "before": 1.9925,
+     "after": 1.8117,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "brightShare",
+     "limit": "<= base + 0.005",
+     "before": 0.013,
+     "after": 0.0128,
+     "allowance": 0.0187,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/color1_2.wal",
+   "material": "rust",
+   "knobs": {
+    "edge": 0.15,
+    "desat": 0.01,
+    "grain": 0.36
+   },
+   "why": "rust: 99th-percentile chroma 88 against an allowance of 93.2 (94.4%). The edge highlight was the main chroma source: a softer edge (0.45 -> 0.15) and 1% more pull toward each pixel's own grey take it to 86 (92.3%), and a finer grain (0.32 -> 0.36) keeps detail at 4.85 (2.91x)",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 88,
+     "after": 86,
+     "allowance": 93.2,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+0comp10_1.wal",
+   "material": "tech",
+   "knobs": {
+    "edge": 0.2,
+    "desat": 0.012
+   },
+   "why": "tech animation family: chroma 97 against the 103.1 allowance. One recipe for all five frames: the edge highlight was most of the chroma, so edge 0.45 -> 0.2 with 1.2% more pull toward grey takes it to 94, and the colour move drops too (meanAbsRgb 2.43 -> 2.35)",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 97,
+     "after": 94,
+     "allowance": 103.1,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+1comp10_1.wal",
+   "material": "tech",
+   "knobs": {
+    "edge": 0.2,
+    "desat": 0.012
+   },
+   "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 94",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 98,
+     "after": 94,
+     "allowance": 103.1,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+2comp10_1.wal",
+   "material": "tech",
+   "knobs": {
+    "edge": 0.2,
+    "desat": 0.012
+   },
+   "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 95",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 98,
+     "after": 95,
+     "allowance": 103.1,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+3comp10_1.wal",
+   "material": "tech",
+   "knobs": {
+    "edge": 0.2,
+    "desat": 0.012
+   },
+   "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 97,
+     "after": 94,
+     "allowance": 103.1,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/+4comp10_1.wal",
+   "material": "tech",
+   "knobs": {
+    "edge": 0.2,
+    "desat": 0.012
+   },
+   "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94",
+   "metrics": [
+    {
+     "metric": "chroma99",
+     "limit": "<= base x 1.1 + 3",
+     "before": 97,
+     "after": 94,
+     "allowance": 103.1,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/wgrate1_8.wal",
+   "material": "rust",
+   "knobs": {
+    "bias": -1,
+    "grain": 0.38
+   },
+   "why": "rust: largest luminance bias among material entries (0.9465 of 2) with detail at 1.589x. The bias was inherited from the faithful base's own mean, so the mean guard now aims one level lower (bias -1) and the grain goes finer (0.32 -> 0.38): bias 0.022, detail 1.68x",
+   "metrics": [
+    {
+     "metric": "meanLuminanceBias",
+     "limit": "<= 2",
+     "before": 0.9465,
+     "after": 0.0219,
+     "direction": "lower",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 6.5809,
+     "beforeRatio": 1.5887,
+     "after": 6.9506,
+     "afterRatio": 1.6779,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  },
+  {
+   "name": "textures/e1u1/pip01_1.wal",
+   "material": "rust",
+   "knobs": {
+    "normals": 3,
+    "grain": 0.34,
+    "edge": 0.36
+   },
+   "why": "rust: lowest Pearson correlation in the set (0.9008 against the 0.9 floor). Most of the structure the pass imposed was relief the source did not have: relief 7.5 -> 3 with a slightly finer grain (0.32 -> 0.34) and a softer edge lifts r to 0.9359 with detail at 4.55, above its old 4.54 (4.88x)",
+   "metrics": [
+    {
+     "metric": "pearson",
+     "limit": ">= 0.9",
+     "before": 0.9008,
+     "after": 0.9359,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    },
+    {
+     "metric": "detailEnergy",
+     "limit": ">= base x 1.5 (lamp: >= base x 1.0, the smooth floor)",
+     "before": 4.5407,
+     "beforeRatio": 4.8652,
+     "after": 4.5548,
+     "afterRatio": 4.8803,
+     "direction": "higher",
+     "moved": true,
+     "pass": true
+    }
+   ],
+   "pass": true
+  }
+ ],
+ "summary": {
+  "listedWeaknesses": 10,
+  "entries": 14,
+  "improved": 14,
+  "unchanged": [],
+  "passed": 14,
+  "failed": 0
+ }
+}

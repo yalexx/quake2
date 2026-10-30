@@ -1,0 +1,4239 @@
+{
+  "generatedAt": "2026-10-30T04:38:14.679Z",
+  "generator": "scripts/texture-audit.mjs",
+  "selection": {
+    "rule": "sum manifest maps[].textures[].uses per wal across demo1/demo2/demo3; ties by name; an entry with no pak9 art is skipped and the next taken; an entry with no drawable world face is skipped the same way",
+    "considered": 313,
+    "entries": [
+      {
+        "index": 1,
+        "rank": 1,
+        "name": "e1u1/support1_1",
+        "uses": {
+          "demo1": 226,
+          "demo2": 1396,
+          "demo3": 289
+        },
+        "total": 1911,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 2,
+        "rank": 2,
+        "name": "e1u1/flat1_2",
+        "uses": {
+          "demo1": 611,
+          "demo2": 316,
+          "demo3": 975
+        },
+        "total": 1902,
+        "map": "demo3",
+        "mapNote": null
+      },
+      {
+        "index": 3,
+        "rank": 3,
+        "name": "e1u1/metal3_3",
+        "uses": {
+          "demo1": 0,
+          "demo2": 920,
+          "demo3": 237
+        },
+        "total": 1157,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 4,
+        "rank": 4,
+        "name": "e1u1/ggrat4_4",
+        "uses": {
+          "demo1": 192,
+          "demo2": 523,
+          "demo3": 317
+        },
+        "total": 1032,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 5,
+        "rank": 5,
+        "name": "e1u1/metal2_1",
+        "uses": {
+          "demo1": 588,
+          "demo2": 132,
+          "demo3": 257
+        },
+        "total": 977,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 6,
+        "rank": 6,
+        "name": "e1u1/rocks19_1",
+        "uses": {
+          "demo1": 471,
+          "demo2": 114,
+          "demo3": 358
+        },
+        "total": 943,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 7,
+        "rank": 7,
+        "name": "e1u1/floor3_1",
+        "uses": {
+          "demo1": 312,
+          "demo2": 142,
+          "demo3": 254
+        },
+        "total": 708,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 8,
+        "rank": 8,
+        "name": "e1u1/metal3_5",
+        "uses": {
+          "demo1": 357,
+          "demo2": 68,
+          "demo3": 275
+        },
+        "total": 700,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 9,
+        "rank": 9,
+        "name": "e1u1/grnx2_9",
+        "uses": {
+          "demo1": 342,
+          "demo2": 287,
+          "demo3": 67
+        },
+        "total": 696,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 10,
+        "rank": 10,
+        "name": "e1u1/grate1_4",
+        "uses": {
+          "demo1": 184,
+          "demo2": 68,
+          "demo3": 438
+        },
+        "total": 690,
+        "map": "demo3",
+        "mapNote": null
+      },
+      {
+        "index": 11,
+        "rank": 11,
+        "name": "e1u1/wgrate1_4",
+        "uses": {
+          "demo1": 0,
+          "demo2": 507,
+          "demo3": 170
+        },
+        "total": 677,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 12,
+        "rank": 12,
+        "name": "e1u2/basic1_7",
+        "uses": {
+          "demo1": 146,
+          "demo2": 258,
+          "demo3": 180
+        },
+        "total": 584,
+        "map": "demo1",
+        "mapNote": "most uses are in demo2, which draws it only on inline brush-entity models; captured in demo1"
+      },
+      {
+        "index": 13,
+        "rank": 14,
+        "name": "e1u1/metal3_2",
+        "uses": {
+          "demo1": 114,
+          "demo2": 186,
+          "demo3": 208
+        },
+        "total": 508,
+        "map": "demo3",
+        "mapNote": null
+      },
+      {
+        "index": 14,
+        "rank": 16,
+        "name": "e1u1/metal1_8",
+        "uses": {
+          "demo1": 89,
+          "demo2": 162,
+          "demo3": 164
+        },
+        "total": 415,
+        "map": "demo3",
+        "mapNote": null
+      },
+      {
+        "index": 15,
+        "rank": 17,
+        "name": "e1u1/grate2_2",
+        "uses": {
+          "demo1": 260,
+          "demo2": 12,
+          "demo3": 134
+        },
+        "total": 406,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 16,
+        "rank": 18,
+        "name": "e1u1/sky1",
+        "uses": {
+          "demo1": 214,
+          "demo2": 111,
+          "demo3": 79
+        },
+        "total": 404,
+        "map": "demo1",
+        "mapNote": null
+      },
+      {
+        "index": 17,
+        "rank": 19,
+        "name": "e1u1/bluwter",
+        "uses": {
+          "demo1": 102,
+          "demo2": 227,
+          "demo3": 58
+        },
+        "total": 387,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 18,
+        "rank": 20,
+        "name": "e1u1/grate2_1",
+        "uses": {
+          "demo1": 116,
+          "demo2": 0,
+          "demo3": 251
+        },
+        "total": 367,
+        "map": "demo3",
+        "mapNote": null
+      },
+      {
+        "index": 19,
+        "rank": 21,
+        "name": "e1u1/grate2_5",
+        "uses": {
+          "demo1": 77,
+          "demo2": 202,
+          "demo3": 48
+        },
+        "total": 327,
+        "map": "demo2",
+        "mapNote": null
+      },
+      {
+        "index": 20,
+        "rank": 22,
+        "name": "e1u1/grate1_3",
+        "uses": {
+          "demo1": 96,
+          "demo2": 123,
+          "demo3": 92
+        },
+        "total": 311,
+        "map": "demo2",
+        "mapNote": null
+      }
+    ],
+    "skipped": [
+      {
+        "name": "e1u1/FLAT1_2",
+        "wal": "textures/e1u1/FLAT1_2.wal",
+        "rank": 13,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 508
+        },
+        "total": 508,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/FLAT1_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/trigger",
+        "wal": "textures/e1u1/trigger.wal",
+        "rank": 15,
+        "uses": {
+          "demo1": 156,
+          "demo2": 154,
+          "demo3": 146
+        },
+        "total": 456,
+        "kind": "no-drawn-world-face",
+        "why": "not drawn on a world face in demo1/demo2/demo3 (its faces are on inline brush-entity models only -- trigger volumes and the like -- or it has none)"
+      },
+      {
+        "name": "e1u1/METAL1_5",
+        "wal": "textures/e1u1/METAL1_5.wal",
+        "rank": 67,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 74
+        },
+        "total": 74,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/METAL1_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/GRATE1_4",
+        "wal": "textures/e1u1/GRATE1_4.wal",
+        "rank": 101,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 37
+        },
+        "total": 37,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/GRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/FLOOR3_1",
+        "wal": "textures/e1u1/FLOOR3_1.wal",
+        "rank": 129,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 22
+        },
+        "total": 22,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/FLOOR3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/GGRATE9_2",
+        "wal": "textures/e1u1/GGRATE9_2.wal",
+        "rank": 134,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 17
+        },
+        "total": 17,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/GGRATE9_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/GRATE2_5",
+        "wal": "textures/e1u1/GRATE2_5.wal",
+        "rank": 163,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 10
+        },
+        "total": 10,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/GRATE2_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/BOX3_1",
+        "wal": "textures/e1u1/BOX3_1.wal",
+        "rank": 175,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 8
+        },
+        "total": 8,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/BOX3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/wGRATE1_4",
+        "wal": "textures/e1u1/wGRATE1_4.wal",
+        "rank": 188,
+        "uses": {
+          "demo1": 0,
+          "demo2": 3,
+          "demo3": 4
+        },
+        "total": 7,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/wGRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/BOX3_4",
+        "wal": "textures/e1u1/BOX3_4.wal",
+        "rank": 230,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 2
+        },
+        "total": 2,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/BOX3_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/clip",
+        "wal": "textures/e1u1/clip.wal",
+        "rank": 293,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "pak9 holds no textures/e1u1/clip.png"
+      },
+      {
+        "name": "e1u1/clip_mon",
+        "wal": "textures/e1u1/clip_mon.wal",
+        "rank": 294,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "pak9 holds no textures/e1u1/clip_mon.png"
+      },
+      {
+        "name": "e1u1/COLOR1_7",
+        "wal": "textures/e1u1/COLOR1_7.wal",
+        "rank": 295,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "the pak holds no textures/e1u1/COLOR1_7.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+      },
+      {
+        "name": "e1u1/hint",
+        "wal": "textures/e1u1/hint.wal",
+        "rank": 303,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "pak9 holds no textures/e1u1/hint.png"
+      },
+      {
+        "name": "e1u1/origin",
+        "wal": "textures/e1u1/origin.wal",
+        "rank": 307,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "pak9 holds no textures/e1u1/origin.png"
+      },
+      {
+        "name": "e1u3/clip",
+        "wal": "textures/e1u3/clip.wal",
+        "rank": 312,
+        "uses": {
+          "demo1": 0,
+          "demo2": 0,
+          "demo3": 0
+        },
+        "total": 0,
+        "kind": "no-pak9-art",
+        "why": "pak9 holds no textures/e1u3/clip.png"
+      }
+    ]
+  },
+  "identity": {
+    "checkout": {
+      "pak0": {
+        "bytes": 47498591,
+        "sha1": "3fce7386fe188b9176984bec676e950123aa6280"
+      },
+      "pak9": {
+        "bytes": 41216186,
+        "sha1": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+      }
+    },
+    "live": {
+      "base": "http://127.0.0.1:4231",
+      "pak0.pak": {
+        "status": 200,
+        "bytes": 49951322,
+        "sha1": "b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab"
+      },
+      "pak9.pak": {
+        "status": 404,
+        "bytes": 9,
+        "sha1": null
+      }
+    },
+    "served": {
+      "base": "http://127.0.0.1:43833",
+      "pak0.pak": {
+        "status": 200,
+        "bytes": 47498591,
+        "sha1": "3fce7386fe188b9176984bec676e950123aa6280"
+      },
+      "pak9.pak": {
+        "status": 200,
+        "bytes": 41216186,
+        "sha1": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+      }
+    },
+    "scratch": true
+  },
+  "load": {
+    "cores": 8,
+    "start": [
+      7.55,
+      6.73,
+      6.41
+    ],
+    "end": [
+      5.28,
+      5.72,
+      5.97
+    ]
+  },
+  "entries": [
+    {
+      "index": 1,
+      "rank": 1,
+      "entry": "e1u1/support1_1",
+      "wal": "textures/e1u1/support1_1.wal",
+      "uses": {
+        "demo1": 226,
+        "demo2": 1396,
+        "demo3": 289
+      },
+      "totalUses": 1911,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 6248,
+        "texinfo": 128,
+        "area": 12288,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 1,
+          "z": 0
+        },
+        "centroid": {
+          "x": 480,
+          "y": -1776,
+          "z": 197.33
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 480,
+          "y": -1648,
+          "z": 197.33
+        },
+        "yaw": -90,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 480 -1648 166",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/01-e1u1_support1_1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/01-e1u1_support1_1-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/01-e1u1_support1_1-NEW.jpg",
+          "bytes": 98993,
+          "teleport": "teleport 480 -1648 166",
+          "teleportFirst": "teleport 480 -1648 197",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 31.73
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 480 -1648 197"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 480.06,
+            "y": -1647.94,
+            "z": 198.06
+          },
+          "anglesAfter": {
+            "yaw": -90.37,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 2.24,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/01-e1u1_support1_1-OFF.jpg",
+          "bytes": 87346,
+          "teleport": "teleport 480 -1648 166",
+          "teleportFirst": "teleport 480 -1648 197",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 31.73
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 480 -1648 197"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 480.06,
+            "y": -1647.94,
+            "z": 198.06
+          },
+          "anglesAfter": {
+            "yaw": -90.36,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 2.22,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the vertical seam in the slatted wall repeats in OFF too (the art's own tile grid)"
+    },
+    {
+      "index": 2,
+      "rank": 2,
+      "entry": "e1u1/flat1_2",
+      "wal": "textures/e1u1/flat1_2.wal",
+      "uses": {
+        "demo1": 611,
+        "demo2": 316,
+        "demo3": 975
+      },
+      "totalUses": 1902,
+      "map": "demo3",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 8621,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 1175,
+        "texinfo": 57,
+        "area": 13312,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": 1332,
+          "y": 1390.67,
+          "z": -864
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 1452,
+          "y": 1390.67,
+          "z": -792
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 139.9,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 1452 1390 -824",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/02-e1u1_flat1_2-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/02-e1u1_flat1_2-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/02-e1u1_flat1_2-NEW.jpg",
+          "bytes": 118911,
+          "teleport": "teleport 1452 1390 -824",
+          "teleportFirst": "teleport 1452 1391 -792",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.4,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1452 1391 -792"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1452.06,
+            "y": 1390.06,
+            "z": -791.94
+          },
+          "anglesAfter": {
+            "yaw": -180,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/02-e1u1_flat1_2-OFF.jpg",
+          "bytes": 108555,
+          "teleport": "teleport 1452 1390 -824",
+          "teleportFirst": "teleport 1452 1391 -792",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.4,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1452 1391 -792"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1452.06,
+            "y": 1390.06,
+            "z": -791.94
+          },
+          "anglesAfter": {
+            "yaw": -180,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 3,
+      "rank": 3,
+      "entry": "e1u1/metal3_3",
+      "wal": "textures/e1u1/metal3_3.wal",
+      "uses": {
+        "demo1": 0,
+        "demo2": 920,
+        "demo3": 237
+      },
+      "totalUses": 1157,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 6260,
+        "texinfo": 7,
+        "area": 39424,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "centroid": {
+          "x": 530.29,
+          "y": -1782.86,
+          "z": -32
+        },
+        "numedges": 7
+      },
+      "camera": {
+        "origin": {
+          "x": 680.29,
+          "y": -1782.86,
+          "z": -88
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "ceiling",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 681 -1783 -120",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/03-e1u1_metal3_3-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/03-e1u1_metal3_3-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/03-e1u1_metal3_3-NEW.jpg",
+          "bytes": 68488,
+          "teleport": "teleport 681 -1783 -120",
+          "teleportFirst": "teleport 680 -1783 -88",
+          "teleportOffset": {
+            "x": -0.22,
+            "y": -0.08,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 680 -1783 -88"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 681.06,
+            "y": -1782.94,
+            "z": -87.94
+          },
+          "anglesAfter": {
+            "yaw": 178.92,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 1.08,
+            "rounds": 3,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/03-e1u1_metal3_3-OFF.jpg",
+          "bytes": 58358,
+          "teleport": "teleport 681 -1783 -120",
+          "teleportFirst": "teleport 680 -1783 -88",
+          "teleportOffset": {
+            "x": -0.22,
+            "y": -0.08,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 680 -1783 -88"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 681.06,
+            "y": -1782.94,
+            "z": -87.94
+          },
+          "anglesAfter": {
+            "yaw": 178.14,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 1.86,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 4,
+      "rank": 4,
+      "entry": "e1u1/ggrat4_4",
+      "wal": "textures/e1u1/ggrat4_4.wal",
+      "uses": {
+        "demo1": 192,
+        "demo2": 523,
+        "demo3": 317
+      },
+      "totalUses": 1032,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 6231,
+        "texinfo": 19,
+        "area": 4608,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": -1,
+          "y": 0,
+          "z": 0
+        },
+        "centroid": {
+          "x": 716,
+          "y": -1760,
+          "z": 156
+        },
+        "numedges": 4
+      },
+      "camera": {
+        "origin": {
+          "x": 588,
+          "y": -1760,
+          "z": 156
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 588 -1760 124",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/04-e1u1_ggrat4_4-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/04-e1u1_ggrat4_4-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/04-e1u1_ggrat4_4-NEW.jpg",
+          "bytes": 67961,
+          "teleport": "teleport 588 -1760 124",
+          "teleportFirst": "teleport 588 -1760 156",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 588 -1760 156"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 588.06,
+            "y": -1759.94,
+            "z": 156.06
+          },
+          "anglesAfter": {
+            "yaw": -356.15,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": -3.85,
+            "rounds": 2,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/04-e1u1_ggrat4_4-OFF.jpg",
+          "bytes": 55973,
+          "teleport": "teleport 588 -1760 124",
+          "teleportFirst": "teleport 588 -1760 156",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 588 -1760 156"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 588.06,
+            "y": -1759.94,
+            "z": 156.06
+          },
+          "anglesAfter": {
+            "yaw": -1.14,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 1.14,
+            "rounds": 2,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 5,
+      "rank": 5,
+      "entry": "e1u1/metal2_1",
+      "wal": "textures/e1u1/metal2_1.wal",
+      "uses": {
+        "demo1": 588,
+        "demo2": 132,
+        "demo3": 257
+      },
+      "totalUses": 977,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 3428,
+        "texinfo": 0,
+        "area": 51968,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "centroid": {
+          "x": 112,
+          "y": -512,
+          "z": 12
+        },
+        "numedges": 4
+      },
+      "camera": {
+        "origin": {
+          "x": 160,
+          "y": -608,
+          "z": 12
+        },
+        "yaw": 116.57,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 107.3,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 160 -608 -20",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/05-e1u1_metal2_1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/05-e1u1_metal2_1-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/05-e1u1_metal2_1-NEW.jpg",
+          "bytes": 75369,
+          "teleport": "teleport 160 -608 -20",
+          "teleportFirst": "teleport 160 -608 12",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 160 -608 12"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 160.06,
+            "y": -607.94,
+            "z": 12.06
+          },
+          "anglesAfter": {
+            "yaw": 116.31,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": -1.65,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/05-e1u1_metal2_1-OFF.jpg",
+          "bytes": 60614,
+          "teleport": "teleport 160 -608 -20",
+          "teleportFirst": "teleport 160 -608 12",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 160 -608 12"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 160.06,
+            "y": -607.94,
+            "z": 12.06
+          },
+          "anglesAfter": {
+            "yaw": 116.33,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": -1.65,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the tiling grid read as a seam is the original texture's own grid, visible in OFF"
+    },
+    {
+      "index": 6,
+      "rank": 6,
+      "entry": "e1u1/rocks19_1",
+      "wal": "textures/e1u1/rocks19_1.wal",
+      "uses": {
+        "demo1": 471,
+        "demo2": 114,
+        "demo3": 358
+      },
+      "totalUses": 943,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 2844,
+        "texinfo": 35,
+        "area": 24490.9,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0.11,
+          "y": 0.98,
+          "z": -0.18
+        },
+        "centroid": {
+          "x": 660,
+          "y": -504,
+          "z": 104
+        },
+        "numedges": 4
+      },
+      "camera": {
+        "origin": {
+          "x": 674.72,
+          "y": -378.9,
+          "z": 81.25
+        },
+        "yaw": -96.71,
+        "pitch": -10.24,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 674 -379 195",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/06-e1u1_rocks19_1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/06-e1u1_rocks19_1-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/06-e1u1_rocks19_1-NEW.jpg",
+          "bytes": 156226,
+          "teleport": "teleport 674 -379 195",
+          "teleportFirst": "teleport 675 -379 81",
+          "teleportOffset": {
+            "x": 0.34,
+            "y": -0.04,
+            "z": -113.44
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 675 -379 81"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 575.19,
+            "y": -424.56,
+            "z": -73.81
+          },
+          "anglesAfter": {
+            "yaw": -92.72,
+            "pitch": 88.99
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -2.1,
+            "rounds": 2,
+            "method": "keys"
+          },
+          "pitchTarget": -10.24,
+          "pitchAfter": 88.99,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 40,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/06-e1u1_rocks19_1-OFF.jpg",
+          "bytes": 138145,
+          "teleport": "teleport 674 -379 196",
+          "teleportFirst": "teleport 675 -379 81",
+          "teleportOffset": {
+            "x": 0.34,
+            "y": -0.04,
+            "z": -115.07
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 675 -379 81"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 575.06,
+            "y": -424.44,
+            "z": -73.81
+          },
+          "anglesAfter": {
+            "yaw": -96.16,
+            "pitch": 88.99
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": 1.27,
+            "rounds": 2,
+            "method": "keys"
+          },
+          "pitchTarget": -10.24,
+          "pitchAfter": 88.99,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 40,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the light break on the rock face is the map's brush/lightmap split, identical in OFF"
+    },
+    {
+      "index": 7,
+      "rank": 7,
+      "entry": "e1u1/floor3_1",
+      "wal": "textures/e1u1/floor3_1.wal",
+      "uses": {
+        "demo1": 312,
+        "demo2": 142,
+        "demo3": 254
+      },
+      "totalUses": 708,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 5024,
+        "texinfo": 108,
+        "area": 31616,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": -1956.44,
+          "y": 1628.44,
+          "z": 96
+        },
+        "numedges": 9
+      },
+      "camera": {
+        "origin": {
+          "x": -1956.44,
+          "y": 1778.44,
+          "z": 152
+        },
+        "yaw": -90,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport -1957 1779 120",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/07-e1u1_floor3_1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/07-e1u1_floor3_1-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/07-e1u1_floor3_1-NEW.jpg",
+          "bytes": 150236,
+          "teleport": "teleport -1957 1779 120",
+          "teleportFirst": "teleport -1956 1778 152",
+          "teleportOffset": {
+            "x": 0.51,
+            "y": -0.38,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -1956 1778 152"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -1956.94,
+            "y": 1779.06,
+            "z": 152.06
+          },
+          "anglesAfter": {
+            "yaw": 267.28,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 2.72,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/07-e1u1_floor3_1-OFF.jpg",
+          "bytes": 132541,
+          "teleport": "teleport -1957 1779 120",
+          "teleportFirst": "teleport -1956 1778 152",
+          "teleportOffset": {
+            "x": 0.51,
+            "y": -0.38,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -1956 1778 152"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -1956.94,
+            "y": 1779.06,
+            "z": 152.06
+          },
+          "anglesAfter": {
+            "yaw": 263.84,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": false,
+            "residual": 6.16,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 8,
+      "rank": 8,
+      "entry": "e1u1/metal3_5",
+      "wal": "textures/e1u1/metal3_5.wal",
+      "uses": {
+        "demo1": 357,
+        "demo2": 68,
+        "demo3": 275
+      },
+      "totalUses": 700,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 1552,
+        "texinfo": 3,
+        "area": 36864,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": 736,
+          "y": 64,
+          "z": -192
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 586,
+          "y": 64,
+          "z": -136
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 586 64 -144",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/08-e1u1_metal3_5-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/08-e1u1_metal3_5-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/08-e1u1_metal3_5-NEW.jpg",
+          "bytes": 133451,
+          "teleport": "teleport 586 64 -144",
+          "teleportFirst": "teleport 586 64 -136",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 8.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 586 64 -136"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 586.06,
+            "y": 64.06,
+            "z": -135.94
+          },
+          "anglesAfter": {
+            "yaw": 3.18,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -3.18,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/08-e1u1_metal3_5-OFF.jpg",
+          "bytes": 113334,
+          "teleport": "teleport 586 64 -144",
+          "teleportFirst": "teleport 586 64 -136",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 8.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 586 64 -136"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 586.06,
+            "y": 64.06,
+            "z": -135.94
+          },
+          "anglesAfter": {
+            "yaw": 0.63,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -0.63,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 9,
+      "rank": 9,
+      "entry": "e1u1/grnx2_9",
+      "wal": "textures/e1u1/grnx2_9.wal",
+      "uses": {
+        "demo1": 342,
+        "demo2": 287,
+        "demo3": 67
+      },
+      "totalUses": 696,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 4512,
+        "texinfo": 113,
+        "area": 7680,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": -1644.8,
+          "y": 1529.6,
+          "z": -32
+        },
+        "numedges": 5
+      },
+      "camera": {
+        "origin": {
+          "x": -1494.8,
+          "y": 1529.6,
+          "z": 24
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport -1495 1529 -8",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/09-e1u1_grnx2_9-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/09-e1u1_grnx2_9-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/09-e1u1_grnx2_9-NEW.jpg",
+          "bytes": 97252,
+          "teleport": "teleport -1495 1529 -8",
+          "teleportFirst": "teleport -1495 1530 24",
+          "teleportOffset": {
+            "x": -0.14,
+            "y": 0.46,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -1495 1530 24"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -1494.94,
+            "y": 1529.06,
+            "z": 24.06
+          },
+          "anglesAfter": {
+            "yaw": 256.07,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": -76.07,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/09-e1u1_grnx2_9-OFF.jpg",
+          "bytes": 111088,
+          "teleport": "teleport -1495 1529 -8",
+          "teleportFirst": "teleport -1495 1530 24",
+          "teleportOffset": {
+            "x": -0.14,
+            "y": 0.46,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -1495 1530 24"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -1494.94,
+            "y": 1530.06,
+            "z": 56.06
+          },
+          "anglesAfter": {
+            "yaw": 270.64,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": -90.64,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 10,
+      "rank": 10,
+      "entry": "e1u1/grate1_4",
+      "wal": "textures/e1u1/grate1_4.wal",
+      "uses": {
+        "demo1": 184,
+        "demo2": 68,
+        "demo3": 438
+      },
+      "totalUses": 690,
+      "map": "demo3",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 8621,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 6128,
+        "texinfo": 54,
+        "area": 19790.9,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0.97,
+          "y": 0,
+          "z": -0.24
+        },
+        "centroid": {
+          "x": 195.33,
+          "y": -141.33,
+          "z": -434.67
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 319.51,
+          "y": -141.33,
+          "z": -465.71
+        },
+        "yaw": 180,
+        "pitch": -14.04,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 319 -142 -497",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/10-e1u1_grate1_4-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/10-e1u1_grate1_4-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/10-e1u1_grate1_4-NEW.jpg",
+          "bytes": 79079,
+          "teleport": "teleport 319 -142 -497",
+          "teleportFirst": "teleport 320 -141 -466",
+          "teleportOffset": {
+            "x": 0.55,
+            "y": 0.4,
+            "z": 31.77
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 320 -141 -466"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 319.06,
+            "y": -141.94,
+            "z": -488.94
+          },
+          "anglesAfter": {
+            "yaw": -103.31,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": -14.04,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 38,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/10-e1u1_grate1_4-OFF.jpg",
+          "bytes": 102694,
+          "teleport": "teleport 319 -142 -497",
+          "teleportFirst": "teleport 320 -141 -466",
+          "teleportOffset": {
+            "x": 0.55,
+            "y": 0.4,
+            "z": 31.77
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 320 -141 -466"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 319.06,
+            "y": -141.94,
+            "z": -482.7
+          },
+          "anglesAfter": {
+            "yaw": 96.7,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": -14.04,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 37,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 11,
+      "rank": 11,
+      "entry": "e1u1/wgrate1_4",
+      "wal": "textures/e1u1/wgrate1_4.wal",
+      "uses": {
+        "demo1": 0,
+        "demo2": 507,
+        "demo3": 170
+      },
+      "totalUses": 677,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 6467,
+        "texinfo": 25,
+        "area": 39424,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "centroid": {
+          "x": 176,
+          "y": -1184,
+          "z": 104
+        },
+        "numedges": 4
+      },
+      "camera": {
+        "origin": {
+          "x": 176,
+          "y": -1312,
+          "z": 104
+        },
+        "yaw": 90,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 176 -1312 162",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/11-e1u1_wgrate1_4-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/11-e1u1_wgrate1_4-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/11-e1u1_wgrate1_4-NEW.jpg",
+          "bytes": 51655,
+          "teleport": "teleport 176 -1312 162",
+          "teleportFirst": "teleport 176 -1312 104",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": -57.81
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 176 -1312 104"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 176.06,
+            "y": -1311.94,
+            "z": 194.06
+          },
+          "anglesAfter": {
+            "yaw": 90.02,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -0.02,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/11-e1u1_wgrate1_4-OFF.jpg",
+          "bytes": 46360,
+          "teleport": "teleport 176 -1312 162",
+          "teleportFirst": "teleport 176 -1312 104",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": -57.81
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 176 -1312 104"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 176.06,
+            "y": -1311.94,
+            "z": 194.06
+          },
+          "anglesAfter": {
+            "yaw": 88.54,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": 1.46,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the smear along the receding slats is mipmap/filtering, identical in OFF"
+    },
+    {
+      "index": 12,
+      "rank": 12,
+      "entry": "e1u2/basic1_7",
+      "wal": "textures/e1u2/basic1_7.wal",
+      "uses": {
+        "demo1": 146,
+        "demo2": 258,
+        "demo3": 180
+      },
+      "totalUses": 584,
+      "map": "demo1",
+      "mapNote": "most uses are in demo2, which draws it only on inline brush-entity models; captured in demo1",
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 1961,
+        "texinfo": 172,
+        "area": 512,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 1,
+          "y": 0,
+          "z": 0
+        },
+        "centroid": {
+          "x": 412,
+          "y": 25.87,
+          "z": -147.2
+        },
+        "numedges": 5
+      },
+      "camera": {
+        "origin": {
+          "x": 508,
+          "y": 25.87,
+          "z": -147.2
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 96,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 508 26 -155",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/12-e1u2_basic1_7-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/12-e1u2_basic1_7-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/12-e1u2_basic1_7-NEW.jpg",
+          "bytes": 14514,
+          "teleport": "teleport 508 26 -155",
+          "teleportFirst": "teleport 508 26 -147",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.19,
+            "z": 8.26
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 508 26 -147"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 508.06,
+            "y": 26.06,
+            "z": -146.94
+          },
+          "anglesAfter": {
+            "yaw": 3.18,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 176.82,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/12-e1u2_basic1_7-OFF.jpg",
+          "bytes": 13022,
+          "teleport": "teleport 508 26 -155",
+          "teleportFirst": "teleport 508 26 -147",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.19,
+            "z": 8.26
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 508 26 -147"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 508.06,
+            "y": 26.06,
+            "z": -146.94
+          },
+          "anglesAfter": {
+            "yaw": 0.63,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 179.37,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the face is 512 u2 and the view is very dark; nothing in the art to judge as broken"
+    },
+    {
+      "index": 13,
+      "rank": 14,
+      "entry": "e1u1/metal3_2",
+      "wal": "textures/e1u1/metal3_2.wal",
+      "uses": {
+        "demo1": 114,
+        "demo2": 186,
+        "demo3": 208
+      },
+      "totalUses": 508,
+      "map": "demo3",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 8621,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 2460,
+        "texinfo": 251,
+        "area": 36864,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": 1228.8,
+          "y": 294.4,
+          "z": -64
+        },
+        "numedges": 5
+      },
+      "camera": {
+        "origin": {
+          "x": 1378.8,
+          "y": 294.4,
+          "z": -8
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 1379 295 -40",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/13-e1u1_metal3_2-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/13-e1u1_metal3_2-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/13-e1u1_metal3_2-NEW.jpg",
+          "bytes": 130058,
+          "teleport": "teleport 1379 295 -40",
+          "teleportFirst": "teleport 1379 294 -8",
+          "teleportOffset": {
+            "x": 0.26,
+            "y": -0.34,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1379 294 -8"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1379.06,
+            "y": 295.06,
+            "z": -7.94
+          },
+          "anglesAfter": {
+            "yaw": -180,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/13-e1u1_metal3_2-OFF.jpg",
+          "bytes": 120189,
+          "teleport": "teleport 1379 295 -40",
+          "teleportFirst": "teleport 1379 294 -8",
+          "teleportOffset": {
+            "x": 0.26,
+            "y": -0.34,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1379 294 -8"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1379.06,
+            "y": 295.06,
+            "z": -7.94
+          },
+          "anglesAfter": {
+            "yaw": -180,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 0,
+            "rounds": 0,
+            "method": null
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the sky cut to grey is the map's own void, present in OFF"
+    },
+    {
+      "index": 14,
+      "rank": 16,
+      "entry": "e1u1/metal1_8",
+      "wal": "textures/e1u1/metal1_8.wal",
+      "uses": {
+        "demo1": 89,
+        "demo2": 162,
+        "demo3": 164
+      },
+      "totalUses": 415,
+      "map": "demo3",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 8621,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 594,
+        "texinfo": 15,
+        "area": 40320,
+        "flags": 0,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": 1926,
+          "y": 1358,
+          "z": -568
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 1776,
+          "y": 1358,
+          "z": -512
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 1776 1358 -520",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/14-e1u1_metal1_8-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/14-e1u1_metal1_8-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/14-e1u1_metal1_8-NEW.jpg",
+          "bytes": 52468,
+          "teleport": "teleport 1776 1358 -520",
+          "teleportFirst": "teleport 1776 1358 -512",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 8.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1776 1358 -512"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1776.06,
+            "y": 1358.06,
+            "z": -511.94
+          },
+          "anglesAfter": {
+            "yaw": -103.31,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 103.31,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/14-e1u1_metal1_8-OFF.jpg",
+          "bytes": 38992,
+          "teleport": "teleport 1776 1358 -520",
+          "teleportFirst": "teleport 1776 1358 -512",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 8.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 1776 1358 -512"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 1776.06,
+            "y": 1358.06,
+            "z": -511.94
+          },
+          "anglesAfter": {
+            "yaw": 96.7,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": -96.7,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok - the floor tile seam lower right is a brush split with misaligned texinfo, present in OFF"
+    },
+    {
+      "index": 15,
+      "rank": 17,
+      "entry": "e1u1/grate2_2",
+      "wal": "textures/e1u1/grate2_2.wal",
+      "uses": {
+        "demo1": 260,
+        "demo2": 12,
+        "demo3": 134
+      },
+      "totalUses": 406,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 2408,
+        "texinfo": 29,
+        "area": 14848,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "centroid": {
+          "x": 99.05,
+          "y": -226.29,
+          "z": 240
+        },
+        "numedges": 7
+      },
+      "camera": {
+        "origin": {
+          "x": 249.05,
+          "y": -226.29,
+          "z": 184
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "ceiling",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 249 -227 152",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/15-e1u1_grate2_2-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/15-e1u1_grate2_2-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/15-e1u1_grate2_2-NEW.jpg",
+          "bytes": 67161,
+          "teleport": "teleport 249 -227 152",
+          "teleportFirst": "teleport 249 -226 184",
+          "teleportOffset": {
+            "x": 0.01,
+            "y": 0.35,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 249 -226 184"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 249.06,
+            "y": -225.94,
+            "z": 216.06
+          },
+          "anglesAfter": {
+            "yaw": 306.89,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": -126.89,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/15-e1u1_grate2_2-OFF.jpg",
+          "bytes": 114143,
+          "teleport": "teleport 249 -227 152",
+          "teleportFirst": "teleport 249 -226 184",
+          "teleportOffset": {
+            "x": 0.01,
+            "y": 0.35,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 249 -226 184"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 249.06,
+            "y": -226.94,
+            "z": 184.06
+          },
+          "anglesAfter": {
+            "yaw": 41.8,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 138.2,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 16,
+      "rank": 18,
+      "entry": "e1u1/sky1",
+      "wal": "textures/e1u1/sky1.wal",
+      "uses": {
+        "demo1": 214,
+        "demo2": 111,
+        "demo3": 79
+      },
+      "totalUses": 404,
+      "map": "demo1",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7393,
+        "matching": 40,
+        "isSky": true
+      },
+      "face": {
+        "index": 3548,
+        "texinfo": 87,
+        "area": 125952,
+        "flags": 5,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "centroid": {
+          "x": -208,
+          "y": 1244.33,
+          "z": 576
+        },
+        "numedges": 12
+      },
+      "camera": {
+        "origin": {
+          "x": -58,
+          "y": 1244.33,
+          "z": 520
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "ceiling",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport -58 1245 679",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/16-e1u1_sky1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/16-e1u1_sky1-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/16-e1u1_sky1-NEW.jpg",
+          "bytes": 26919,
+          "teleport": "teleport -58 1245 679",
+          "teleportFirst": "teleport -58 1244 520",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": -0.27,
+            "z": -158.69
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -58 1244 520"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -57.94,
+            "y": 1244.06,
+            "z": 354.56
+          },
+          "anglesAfter": {
+            "yaw": 0,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 180,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo1",
+          "url": "http://127.0.0.1:43833/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/16-e1u1_sky1-OFF.jpg",
+          "bytes": 27764,
+          "teleport": "teleport -58 1245 661",
+          "teleportFirst": "teleport -58 1244 520",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": -0.27,
+            "z": -140.69
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport -58 1244 520"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": -57.94,
+            "y": 1245.06,
+            "z": 610.19
+          },
+          "anglesAfter": {
+            "yaw": 0.63,
+            "pitch": -15
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 179.37,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": -15,
+          "pitchDriver": {
+            "reached": false,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 1,
+            "from": -15,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 17,
+      "rank": 19,
+      "entry": "e1u1/bluwter",
+      "wal": "textures/e1u1/bluwter.wal",
+      "uses": {
+        "demo1": 102,
+        "demo2": 227,
+        "demo3": 58
+      },
+      "totalUses": 387,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 5716,
+        "texinfo": 127,
+        "area": 46592,
+        "flags": 41,
+        "side": 0,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": 1
+        },
+        "centroid": {
+          "x": 432,
+          "y": -860.44,
+          "z": -164
+        },
+        "numedges": 9
+      },
+      "camera": {
+        "origin": {
+          "x": 582,
+          "y": -860.44,
+          "z": -108
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "floor",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 582 -861 -140",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/17-e1u1_bluwter-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/17-e1u1_bluwter-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/17-e1u1_bluwter-NEW.jpg",
+          "bytes": 100884,
+          "teleport": "teleport 582 -861 -140",
+          "teleportFirst": "teleport 582 -860 -108",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.51,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 582 -860 -108"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 582.06,
+            "y": -860.94,
+            "z": -107.94
+          },
+          "anglesAfter": {
+            "yaw": -176.49,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": -3.51,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/17-e1u1_bluwter-OFF.jpg",
+          "bytes": 89501,
+          "teleport": "teleport 582 -861 -140",
+          "teleportFirst": "teleport 582 -860 -108",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.51,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 582 -860 -108"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 582.06,
+            "y": -860.94,
+            "z": -107.94
+          },
+          "anglesAfter": {
+            "yaw": -178.34,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": -1.66,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 18,
+      "rank": 20,
+      "entry": "e1u1/grate2_1",
+      "wal": "textures/e1u1/grate2_1.wal",
+      "uses": {
+        "demo1": 116,
+        "demo2": 0,
+        "demo3": 251
+      },
+      "totalUses": 367,
+      "map": "demo3",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 8621,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 5740,
+        "texinfo": 164,
+        "area": 39936,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "centroid": {
+          "x": 555.43,
+          "y": -365.71,
+          "z": -256
+        },
+        "numedges": 7
+      },
+      "camera": {
+        "origin": {
+          "x": 405.43,
+          "y": -365.71,
+          "z": -312
+        },
+        "yaw": 0,
+        "pitch": 0,
+        "kind": "ceiling",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 406 -365 -344",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/18-e1u1_grate2_1-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/18-e1u1_grate2_1-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/18-e1u1_grate2_1-NEW.jpg",
+          "bytes": 133464,
+          "teleport": "teleport 406 -365 -344",
+          "teleportFirst": "teleport 405 -366 -312",
+          "teleportOffset": {
+            "x": -0.37,
+            "y": -0.22,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 405 -366 -312"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 406.06,
+            "y": -364.94,
+            "z": -311.94
+          },
+          "anglesAfter": {
+            "yaw": -66.27,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": 66.27,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo3",
+          "url": "http://127.0.0.1:43833/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/18-e1u1_grate2_1-OFF.jpg",
+          "bytes": 112781,
+          "teleport": "teleport 406 -365 -344",
+          "teleportFirst": "teleport 405 -366 -312",
+          "teleportOffset": {
+            "x": -0.37,
+            "y": -0.22,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 405 -366 -312"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 406.06,
+            "y": -364.94,
+            "z": -311.94
+          },
+          "anglesAfter": {
+            "yaw": -289.17,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": false,
+            "residual": -70.83,
+            "rounds": 6,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 19,
+      "rank": 21,
+      "entry": "e1u1/grate2_5",
+      "wal": "textures/e1u1/grate2_5.wal",
+      "uses": {
+        "demo1": 77,
+        "demo2": 202,
+        "demo3": 48
+      },
+      "totalUses": 327,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 204,
+        "texinfo": 188,
+        "area": 14336,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": -1,
+          "z": 0
+        },
+        "centroid": {
+          "x": 96,
+          "y": 2624,
+          "z": 160
+        },
+        "numedges": 6
+      },
+      "camera": {
+        "origin": {
+          "x": 96,
+          "y": 2496,
+          "z": 160
+        },
+        "yaw": 90,
+        "pitch": 0,
+        "kind": "wall",
+        "distance": 128,
+        "pitchNote": "toward the centroid"
+      },
+      "teleportCommand": "teleport 96 2496 276",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/19-e1u1_grate2_5-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/19-e1u1_grate2_5-OFF.jpg"
+      },
+      "landed": false,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/19-e1u1_grate2_5-NEW.jpg",
+          "bytes": 27165,
+          "teleport": "teleport 96 2496 276",
+          "teleportFirst": "teleport 96 2496 160",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": -116.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 96 2496 160"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 96.06,
+            "y": 2496.06,
+            "z": 322.24
+          },
+          "anglesAfter": {
+            "yaw": 91.96,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -1.96,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/19-e1u1_grate2_5-OFF.jpg",
+          "bytes": 25830,
+          "teleport": "teleport 96 2496 283",
+          "teleportFirst": "teleport 96 2496 160",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": -123.19
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 96 2496 160"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 96.06,
+            "y": 2496.06,
+            "z": 318.59
+          },
+          "anglesAfter": {
+            "yaw": 89.06,
+            "pitch": 0
+          },
+          "landed": false,
+          "facing": {
+            "ok": true,
+            "residual": -0.93,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    },
+    {
+      "index": 20,
+      "rank": 22,
+      "entry": "e1u1/grate1_3",
+      "wal": "textures/e1u1/grate1_3.wal",
+      "uses": {
+        "demo1": 96,
+        "demo2": 123,
+        "demo3": 92
+      },
+      "totalUses": 311,
+      "map": "demo2",
+      "mapNote": null,
+      "faceScan": {
+        "worldFaces": 7967,
+        "matching": 40,
+        "isSky": false
+      },
+      "face": {
+        "index": 101,
+        "texinfo": 479,
+        "area": 44800,
+        "flags": 0,
+        "side": 1,
+        "normal": {
+          "x": 0,
+          "y": 0,
+          "z": -1
+        },
+        "centroid": {
+          "x": 104,
+          "y": 2524,
+          "z": 256
+        },
+        "numedges": 8
+      },
+      "camera": {
+        "origin": {
+          "x": 254,
+          "y": 2524,
+          "z": 200
+        },
+        "yaw": 180,
+        "pitch": 0,
+        "kind": "ceiling",
+        "distance": 160.1,
+        "pitchNote": "42 degrees at the face, neighbours in frame"
+      },
+      "teleportCommand": "teleport 254 2524 168",
+      "files": {
+        "NEW": "docs/texture-review/ingame/audit/20-e1u1_grate1_3-NEW.jpg",
+        "OFF": "docs/texture-review/ingame/audit/20-e1u1_grate1_3-OFF.jpg"
+      },
+      "landed": true,
+      "variants": {
+        "NEW": {
+          "variant": "NEW",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1",
+          "file": "docs/texture-review/ingame/audit/20-e1u1_grate1_3-NEW.jpg",
+          "bytes": 157141,
+          "teleport": "teleport 254 2524 168",
+          "teleportFirst": "teleport 254 2524 200",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 254 2524 200"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 254.06,
+            "y": 2524.06,
+            "z": 200.06
+          },
+          "anglesAfter": {
+            "yaw": -180.29,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 0.29,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        },
+        "OFF": {
+          "variant": "OFF",
+          "map": "demo2",
+          "url": "http://127.0.0.1:43833/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&cheats&1&+set&r_retexturing&0",
+          "file": "docs/texture-review/ingame/audit/20-e1u1_grate1_3-OFF.jpg",
+          "bytes": 141084,
+          "teleport": "teleport 254 2524 168",
+          "teleportFirst": "teleport 254 2524 200",
+          "teleportOffset": {
+            "x": 0.06,
+            "y": 0.06,
+            "z": 32.06
+          },
+          "commandsRan": [
+            "notarget",
+            "god",
+            "noclip",
+            "teleport 254 2524 200"
+          ],
+          "echoFound": true,
+          "refused": [],
+          "viewSource": "wasm-memory",
+          "keyDest": 0,
+          "positionAfter": {
+            "x": 254.06,
+            "y": 2524.06,
+            "z": 200.06
+          },
+          "anglesAfter": {
+            "yaw": -181.3,
+            "pitch": 0
+          },
+          "landed": true,
+          "facing": {
+            "ok": true,
+            "residual": 1.3,
+            "rounds": 1,
+            "method": "keys"
+          },
+          "pitchTarget": 0,
+          "pitchAfter": 0,
+          "pitchDriver": {
+            "reached": true,
+            "keys": "q/e",
+            "cl_pitchspeed": 2400,
+            "steps": 0,
+            "from": 0,
+            "binds": [
+              "]bind q +lookup",
+              "]bind e +lookdown",
+              "]cl_pitchspeed 2400"
+            ]
+          },
+          "renderer": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "drawingBuffer": "1366x768",
+            "vidRenderer": "gles3"
+          }
+        }
+      },
+      "verdict": "ok"
+    }
+  ],
+  "checks": {
+    "demo1-NEW": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "1",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    },
+    "demo2-NEW": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "1",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    },
+    "demo3-NEW": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "1",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    },
+    "demo1-OFF": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "0",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    },
+    "demo2-OFF": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "0",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    },
+    "demo3-OFF": {
+      "pak9Bytes": 41216186,
+      "vid_renderer": "gles3",
+      "r_retexturing": "0",
+      "webgl2": true,
+      "unmasked": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "drawingBuffer": "1366x768"
+    }
+  },
+  "renderer": {
+    "webgl2": true,
+    "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+    "drawingBuffer": "1366x768",
+    "vidRenderer": "gles3"
+  },
+  "complete": true,
+  "method": "NEW r_retexturing 1 vs OFF r_retexturing 0, same face, eye, yaw and pitch; JPEG q85",
+  "verdicts": {
+    "1": {
+      "entry": "e1u1/support1_1",
+      "verdict": "ok - the vertical seam in the slatted wall repeats in OFF too (the art's own tile grid)"
+    },
+    "2": {
+      "entry": "e1u1/flat1_2",
+      "verdict": "ok"
+    },
+    "3": {
+      "entry": "e1u1/metal3_3",
+      "verdict": "ok"
+    },
+    "4": {
+      "entry": "e1u1/ggrat4_4",
+      "verdict": "ok"
+    },
+    "5": {
+      "entry": "e1u1/metal2_1",
+      "verdict": "ok - the tiling grid read as a seam is the original texture's own grid, visible in OFF"
+    },
+    "6": {
+      "entry": "e1u1/rocks19_1",
+      "verdict": "ok - the light break on the rock face is the map's brush/lightmap split, identical in OFF"
+    },
+    "7": {
+      "entry": "e1u1/floor3_1",
+      "verdict": "ok"
+    },
+    "8": {
+      "entry": "e1u1/metal3_5",
+      "verdict": "ok"
+    },
+    "9": {
+      "entry": "e1u1/grnx2_9",
+      "verdict": "ok"
+    },
+    "10": {
+      "entry": "e1u1/grate1_4",
+      "verdict": "ok"
+    },
+    "11": {
+      "entry": "e1u1/wgrate1_4",
+      "verdict": "ok - the smear along the receding slats is mipmap/filtering, identical in OFF"
+    },
+    "12": {
+      "entry": "e1u2/basic1_7",
+      "verdict": "ok - the face is 512 u2 and the view is very dark; nothing in the art to judge as broken"
+    },
+    "13": {
+      "entry": "e1u1/metal3_2",
+      "verdict": "ok - the sky cut to grey is the map's own void, present in OFF"
+    },
+    "14": {
+      "entry": "e1u1/metal1_8",
+      "verdict": "ok - the floor tile seam lower right is a brush split with misaligned texinfo, present in OFF"
+    },
+    "15": {
+      "entry": "e1u1/grate2_2",
+      "verdict": "ok"
+    },
+    "16": {
+      "entry": "e1u1/sky1",
+      "verdict": "ok"
+    },
+    "17": {
+      "entry": "e1u1/bluwter",
+      "verdict": "ok"
+    },
+    "18": {
+      "entry": "e1u1/grate2_1",
+      "verdict": "ok"
+    },
+    "19": {
+      "entry": "e1u1/grate2_5",
+      "verdict": "ok"
+    },
+    "20": {
+      "entry": "e1u1/grate1_3",
+      "verdict": "ok"
+    }
+  },
+  "judge": {
+    "method": "every NEW shot opened with its OFF shot; a defect counts only where the NEW shot shows something the OFF shot does not",
+    "defects": 0,
+    "fixed": 0
+  }
+}

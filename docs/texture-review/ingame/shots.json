@@ -1,0 +1,355 @@
+{
+  "schema": 2,
+  "generatedAt": "2026-10-30T01:56:09.913Z",
+  "engine": "Chrome/156.0.8078.47",
+  "chrome": "/usr/bin/google-chrome",
+  "prevRevision": "7e21a48",
+  "pak": {
+    "pristine": {
+      "source": "cache /tmp/quake2-pristine-b86e8878a8e8706595ceebe88b3e6b4c1ba5bcab.pak",
+      "bytes": 49951322
+    },
+    "prev": {
+      "pak0": 47498591,
+      "pak9": 41201057,
+      "pak9Entries": 298
+    },
+    "pak9": {
+      "bytes": 41216186,
+      "entries": 298,
+      "first": "textures/e1u1/metal2_1.png"
+    }
+  },
+  "pak9Fetch": {
+    "before": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 309
+      }
+    ],
+    "beforeInEngine": -1,
+    "prev": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 41201357
+      }
+    ],
+    "prevInEngine": 41201057,
+    "after": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 41216486
+      }
+    ],
+    "afterInEngine": 41216186,
+    "retexturingOff": [
+      {
+        "url": "http://127.0.0.1:4292/apps/quake2/baseq2/pak9.pak",
+        "transferSize": 41216486
+      }
+    ],
+    "retexturingOffInEngine": 41216186
+  },
+  "engineState": {
+    "before": {
+      "pak9InEngine": -1,
+      "cvars": {
+        "r_retexturing": "1",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    },
+    "prev": {
+      "pak9InEngine": 41201057,
+      "cvars": {
+        "r_retexturing": "1",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    },
+    "after": {
+      "pak9InEngine": 41216186,
+      "cvars": {
+        "r_retexturing": "1",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    },
+    "retexturingOff": {
+      "pak9InEngine": 41216186,
+      "cvars": {
+        "r_retexturing": "0",
+        "gl_texturemode": "GL_LINEAR_MIPMAP_LINEAR",
+        "vid_gamma": "1.6"
+      }
+    }
+  },
+  "views": [
+    {
+      "view": "demo1-spawn",
+      "map": "demo1",
+      "command": "map demo1",
+      "files": {
+        "prev": "demo1-spawn-PREV.jpg",
+        "new": "demo1-spawn-NEW.jpg",
+        "off": "demo1-spawn-OFF.jpg",
+        "prevNew": "demo1-spawn-prev-new.png",
+        "beforeAfter": "demo1-before-after.png"
+      },
+      "prev": {
+        "laplacian": 88.89,
+        "meanLuma": 32.79,
+        "bytes": 826702
+      },
+      "new": {
+        "laplacian": 90.93,
+        "meanLuma": 32.81,
+        "bytes": 827545
+      },
+      "off": {
+        "laplacian": 69.31,
+        "meanLuma": 32.92,
+        "bytes": 743164
+      },
+      "before": {
+        "laplacian": 57.16,
+        "meanLuma": 33.06,
+        "bytes": 688903
+      },
+      "diff": {
+        "prevVsNew": {
+          "meanAbsDiff": 0.0232,
+          "differingPixels": 387,
+          "pixels": 786432
+        },
+        "newVsOff": {
+          "meanAbsDiff": 1.1732,
+          "differingPixels": 4469,
+          "pixels": 786432
+        },
+        "prevVsOff": {
+          "meanAbsDiff": 1.1512,
+          "differingPixels": 4083,
+          "pixels": 786432
+        },
+        "beforeVsOff": {
+          "meanAbsDiff": 1.2373,
+          "differingPixels": 1712,
+          "pixels": 786432
+        }
+      },
+      "prevVsNewEqual": true,
+      "signalToNoise": 12.64,
+      "laplacianGap": 21.623,
+      "reference": "NEW vs OFF flips only r_retexturing on the same two archives, so it is the pak9 art alone and stands 12.6x above the same-view temporal noise 0.093; BEFORE vs OFF also includes the material pass's redraw of pak0's 1x WALs, so it is reported but is no longer a lower bound; PREV vs NEW is this checkout's change",
+      "temporalNoise": {
+        "prev": 0.0928,
+        "new": 0.0014,
+        "off": 0.0005,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "prev": [],
+        "new": [],
+        "off": []
+      },
+      "imagelist": {
+        "prev": {
+          "lines": 367,
+          "png": []
+        },
+        "new": {
+          "lines": 367,
+          "png": []
+        },
+        "off": {
+          "lines": 368,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (NEW moves the view 12.6x the settled-frame noise, Laplacian +21.62)"
+    },
+    {
+      "view": "demo2-spawn",
+      "map": "demo2",
+      "command": "map demo2",
+      "files": {
+        "prev": "demo2-spawn-PREV.jpg",
+        "new": "demo2-spawn-NEW.jpg",
+        "off": "demo2-spawn-OFF.jpg",
+        "prevNew": "demo2-spawn-prev-new.png",
+        "beforeAfter": "demo2-before-after.png"
+      },
+      "prev": {
+        "laplacian": 193.97,
+        "meanLuma": 45.05,
+        "bytes": 938290
+      },
+      "new": {
+        "laplacian": 193.07,
+        "meanLuma": 45.02,
+        "bytes": 938174
+      },
+      "off": {
+        "laplacian": 167.78,
+        "meanLuma": 45.07,
+        "bytes": 847752
+      },
+      "before": {
+        "laplacian": 134.31,
+        "meanLuma": 45.19,
+        "bytes": 793410
+      },
+      "diff": {
+        "prevVsNew": {
+          "meanAbsDiff": 0.0509,
+          "differingPixels": 1372,
+          "pixels": 786432
+        },
+        "newVsOff": {
+          "meanAbsDiff": 1.7248,
+          "differingPixels": 20017,
+          "pixels": 786432
+        },
+        "prevVsOff": {
+          "meanAbsDiff": 1.7099,
+          "differingPixels": 20254,
+          "pixels": 786432
+        },
+        "beforeVsOff": {
+          "meanAbsDiff": 1.4376,
+          "differingPixels": 10535,
+          "pixels": 786432
+        }
+      },
+      "prevVsNewEqual": false,
+      "signalToNoise": 22.75,
+      "laplacianGap": 25.292,
+      "reference": "NEW vs OFF flips only r_retexturing on the same two archives, so it is the pak9 art alone and stands 22.8x above the same-view temporal noise 0.076; BEFORE vs OFF also includes the material pass's redraw of pak0's 1x WALs, so it is reported but is no longer a lower bound; PREV vs NEW is this checkout's change",
+      "temporalNoise": {
+        "prev": 0.0696,
+        "new": 0.0467,
+        "off": 0.0758,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "prev": [],
+        "new": [],
+        "off": []
+      },
+      "imagelist": {
+        "prev": {
+          "lines": 368,
+          "png": []
+        },
+        "new": {
+          "lines": 368,
+          "png": []
+        },
+        "off": {
+          "lines": 368,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (NEW moves the view 22.8x the settled-frame noise, Laplacian +25.29)"
+    },
+    {
+      "view": "demo3-spawn",
+      "map": "demo3",
+      "command": "map demo3",
+      "files": {
+        "prev": "demo3-spawn-PREV.jpg",
+        "new": "demo3-spawn-NEW.jpg",
+        "off": "demo3-spawn-OFF.jpg",
+        "prevNew": "demo3-spawn-prev-new.png",
+        "beforeAfter": "demo3-before-after.png"
+      },
+      "prev": {
+        "laplacian": 33.13,
+        "meanLuma": 19.84,
+        "bytes": 582624
+      },
+      "new": {
+        "laplacian": 33.13,
+        "meanLuma": 19.84,
+        "bytes": 582624
+      },
+      "off": {
+        "laplacian": 30.66,
+        "meanLuma": 19.84,
+        "bytes": 474461
+      },
+      "before": {
+        "laplacian": 27.1,
+        "meanLuma": 19.86,
+        "bytes": 427364
+      },
+      "diff": {
+        "prevVsNew": {
+          "meanAbsDiff": 0,
+          "differingPixels": 0,
+          "pixels": 786432
+        },
+        "newVsOff": {
+          "meanAbsDiff": 0.7625,
+          "differingPixels": 282,
+          "pixels": 786432
+        },
+        "prevVsOff": {
+          "meanAbsDiff": 0.7625,
+          "differingPixels": 282,
+          "pixels": 786432
+        },
+        "beforeVsOff": {
+          "meanAbsDiff": 0.5898,
+          "differingPixels": 365,
+          "pixels": 786432
+        }
+      },
+      "prevVsNewEqual": true,
+      "signalToNoise": 762.51,
+      "laplacianGap": 2.467,
+      "reference": "NEW vs OFF flips only r_retexturing on the same two archives, so it is the pak9 art alone and stands 762.5x above the same-view temporal noise 0.001; BEFORE vs OFF also includes the material pass's redraw of pak0's 1x WALs, so it is reported but is no longer a lower bound; PREV vs NEW is this checkout's change",
+      "temporalNoise": {
+        "prev": 0,
+        "new": 0,
+        "off": 0,
+        "note": "mean |diff| between the last two settled frames of the same view"
+      },
+      "consolePngLines": {
+        "prev": [],
+        "new": [],
+        "off": []
+      },
+      "imagelist": {
+        "prev": {
+          "lines": 475,
+          "png": []
+        },
+        "new": {
+          "lines": 475,
+          "png": []
+        },
+        "off": {
+          "lines": 475,
+          "png": []
+        }
+      },
+      "verdict": "pak9 art drawn (NEW moves the view 762.5x the settled-frame noise, Laplacian +2.47)"
+    }
+  ],
+  "summary": {
+    "views": 3,
+    "maps": 3,
+    "drawn": 3,
+    "failures": [],
+    "droppedViews": [
+      "demo1-base2",
+      "demo2-base3b"
+    ],
+    "retexturing": "r_retexturing on; OFF is the same archive through the URL query app.js appends",
+    "compositeScale": 1,
+    "compositeFormat": "png",
+    "outputBytes": 8042086
+  }
+}
