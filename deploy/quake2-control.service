@@ -1,0 +1,41 @@
+# deploy/quake2-control.service -- keep the standalone Quake 2 control API
+# (control/server.mjs, 127.0.0.1:4233) up without a human starting it.
+#
+# It is a systemd USER unit, not a system one: the API needs no root, and it
+# drives the kiosk browser through the same 127.0.0.1 CDP endpoint the desktop
+# uses. Install it as yourself -- see the README ("Keeping the HTTP API up") for
+# the exact commands, including the XDG_RUNTIME_DIR note for a non-session
+# shell.
+#
+# It stays on the loopback: the server binds 127.0.0.1 only, and the control
+# routes are deliberately NOT mounted on the box-proxied app server on 4231,
+# because that path is reachable through the ClawBox proxy.
+
+[Unit]
+Description=Quake 2 control API (HTTP front door to the game the ClawBox browser is showing)
+Documentation=file:%h/Projects/quake2/README.md
+# The API only drives a browser that is already up, so it is useless before the
+# desktop is; nothing it needs is running earlier.
+After=default.target
+
+[Service]
+Type=simple
+# The app folder. %h is this user's home, so the unit travels with the checkout;
+# change both paths if the app lives somewhere else.
+WorkingDirectory=%h/Projects/quake2
+ExecStart=/usr/bin/node control/server.mjs
+# A control API that silently stays down is worse than one that restarts: the
+# browser it drives can be replaced under it (a kiosk restart), and the next
+# request re-resolves the game frame anyway.
+Restart=on-failure
+RestartSec=2
+# The default port, spelled out so the unit says what it opens. Keep it on
+# 127.0.0.1: the server refuses to bind anywhere else, and the box proxy never
+# reaches this port.
+Environment=CONTROL_PORT=4233
+# This process needs to read its own folder and talk to 127.0.0.1 only; it
+# never needs to gain privileges.
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target

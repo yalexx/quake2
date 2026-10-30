@@ -1,0 +1,67 @@
+{
+ "generatedAt": "2026-10-30T01:30:34Z",
+ "prevCommit": "7e21a48",
+ "before": {
+  "pak0": {
+   "bytes": 47498591,
+   "entries": 1106,
+   "wal": 303
+  },
+  "pak9": {
+   "bytes": 41201057,
+   "png": 298
+  }
+ },
+ "after": {
+  "pak0": {
+   "bytes": 47498591,
+   "entries": 1106,
+   "wal": 303
+  },
+  "pak9": {
+   "bytes": 41216186,
+   "png": 298
+  }
+ },
+ "deltaBytes": {
+  "pak0": 0,
+  "pak9": 15129
+ },
+ "hiresArt": {
+  "textures": 298,
+  "passed": 298,
+  "failed": 0,
+  "alreadyIdentical": 298,
+  "pngBytes": 41197102,
+  "materials": {
+   "stone": 21,
+   "metal": 71,
+   "rust": 77,
+   "tech": 68,
+   "crate": 16,
+   "wood": 0,
+   "organic": 2,
+   "lamp": 16,
+   "glass": 1,
+   "sign": 22,
+   "water": 2,
+   "sky": 1,
+   "flat": 1
+  }
+ },
+ "commands": [
+  "node --input-type=module -e \"import fs from 'node:fs';import{readPakDirectory}from'./scripts/texture-lib.mjs';const s=f=>{const b=fs.readFileSync(f),d=readPakDirectory(b),n=[...d.values()].map(e=>e.name.toLowerCase());return{bytes:b.length,entries:d.size,wal:n.filter(x=>x.endsWith('.wal')).length,png:n.filter(x=>x.endsWith('.png')).length}};console.log(JSON.stringify({pak0:s('baseq2/pak0.pak'),pak9:s('baseq2/pak9.pak')}))\"",
+  "node scripts/hires-art.mjs --only wsupprt1_14 --report <scratch>/lamp.json  # and the same for each tuned entry, one at a time",
+  "node scripts/hires-art.mjs  # full run, 298 pass, 0 fail",
+  "node scripts/hires-art.mjs  # second full run; it wrote nothing (298 already identical)",
+  "node scripts/hires-art.mjs --check  # 298 pass, 0 fail",
+  "node scripts/texture-pack.mjs  # 524 packed (510 identical to the original), 0 failed",
+  "node scripts/texture-pack.mjs  # second run; it wrote nothing",
+  "node scripts/texture-pack.mjs --check",
+  "node scripts/tex-check.mjs",
+  "node scripts/tex-lib-test.mjs",
+  "node scripts/texture-pack-test.mjs",
+  "node scripts/material-classes-test.mjs",
+  "node scripts/material-lib-test.mjs"
+ ]
+}
