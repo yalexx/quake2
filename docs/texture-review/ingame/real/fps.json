@@ -1,17 +1,472 @@
 {
-  "schema": 1,
-  "generatedAt": "2026-10-30T00:34:48.753Z",
+  "schema": 2,
+  "generatedAt": "2026-10-30T02:45:26.586Z",
   "reference": {
-    "fps": 34,
-    "offFps": 73,
-    "ratio": 0.47,
-    "set": "previous team's archives at b6c2a4f"
+    "withdrawn": true,
+    "why": "an earlier frame-rate reference was measured while the machine was busy with a coding team; it did not reproduce and is not used in this report"
   },
   "environment": {
+    "load": {
+      "cores": 8,
+      "before": {
+        "load1": 5.56,
+        "load5": 5.11,
+        "load15": 5.53,
+        "cores": 8,
+        "cpuBusy": 0.34
+      },
+      "windows": [
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.15,
+          "cpuBusy": 0.347
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.67,
+          "cpuBusy": 0.264
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.42,
+          "cpuBusy": 0.417
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 6.21,
+          "cpuBusy": 0.309
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.39,
+          "cpuBusy": 0.67
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.67,
+          "cpuBusy": 0.604
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.18,
+          "cpuBusy": 0.483
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.49,
+          "cpuBusy": 0.288
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.49,
+          "cpuBusy": 0.46
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 6.83,
+          "cpuBusy": 0.389
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.78,
+          "cpuBusy": 0.471
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.96,
+          "cpuBusy": 0.509
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.07,
+          "cpuBusy": 0.407
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.98,
+          "cpuBusy": 0.308
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.67,
+          "cpuBusy": 0.27
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 6.42,
+          "cpuBusy": 0.477
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.41,
+          "cpuBusy": 0.39
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.37,
+          "cpuBusy": 0.575
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.37,
+          "cpuBusy": 0.27
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.78,
+          "cpuBusy": 0.405
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 7.32,
+          "cpuBusy": 0.261
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 7.28,
+          "cpuBusy": 0.359
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 7.63,
+          "cpuBusy": 0.505
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 7.58,
+          "cpuBusy": 0.524
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.21,
+          "cpuBusy": 0.265
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.87,
+          "cpuBusy": 0.431
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 7.44,
+          "cpuBusy": 0.397
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 7.23,
+          "cpuBusy": 0.263
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.75,
+          "cpuBusy": 0.722
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.93,
+          "cpuBusy": 0.557
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.39,
+          "cpuBusy": 0.376
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 7.42,
+          "cpuBusy": 0.313
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 7.04,
+          "cpuBusy": 0.438
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 6.81,
+          "cpuBusy": 0.324
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.54,
+          "cpuBusy": 0.565
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.42,
+          "cpuBusy": 0.567
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.36,
+          "cpuBusy": 0.437
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.07,
+          "cpuBusy": 0.329
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.14,
+          "cpuBusy": 0.283
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 6.53,
+          "cpuBusy": 0.555
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.96,
+          "cpuBusy": 0.542
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 7.28,
+          "cpuBusy": 0.404
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.95,
+          "cpuBusy": 0.304
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.81,
+          "cpuBusy": 0.484
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.76,
+          "cpuBusy": 0.35
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 6.33,
+          "cpuBusy": 0.275
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 7.55,
+          "cpuBusy": 0.66
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 7.5,
+          "cpuBusy": 0.51
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.77,
+          "cpuBusy": 0.36
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 7.51,
+          "cpuBusy": 0.273
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.89,
+          "cpuBusy": 0.434
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 8.39,
+          "cpuBusy": 0.383
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 7.87,
+          "cpuBusy": 0.591
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 7.72,
+          "cpuBusy": 0.68
+        }
+      ],
+      "warning": "the machine was busy before Chrome work started: load average 5.56 (1 min) on 8 cores, above half the core count; frame timings from this run are not representative of an idle box",
+      "duringRun": {
+        "windows": 54,
+        "maxLoad1": 8.39,
+        "maxCpuBusy": 0.722,
+        "busyWindows": 16
+      },
+      "after": {
+        "load1": 7.97,
+        "load5": 7.12,
+        "load15": 6.41,
+        "cores": 8
+      }
+    },
     "servedPak9": {
-      "contentLength": 41201057,
-      "localBytes": 41201057,
+      "status": 200,
+      "contentLength": 41216186,
+      "localBytes": 41216186,
+      "sha1Served": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d",
+      "sha1Local": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d",
       "matches": true
+    },
+    "methods": {
+      "cappedFps": true,
+      "workPerFrame": true,
+      "uncappedLoop": "raised the frame count",
+      "gpuTimerQueries": "EXT_disjoint_timer_query_webgl2"
     },
     "renderer": {
       "webgl2": true,
@@ -30,14 +485,14 @@
       "visible": "visible"
     },
     "measuredDrawingBuffer": "1366x768",
-    "pak9InEngine": 41201057,
-    "displayRefreshHz": 75.8,
-    "method": "GLctx.clear calls (one per rendered frame) plus the engine's MainLoop_runner requestAnimationFrame callback, in the live page; 5 s warm-up then 3 x 10 s standing still at spawn, median; HTTP cache disabled"
+    "pak9InEngine": 41216186,
+    "displayRefreshHz": 76.1,
+    "method": "hard renderer checks; one settled screenshot per view (timescale 0); capped fps from GLctx.clear plus MainLoop_runner rAF; work per frame from the runner timed with performance.now and gl.finish; uncapped fps from GLctx.clear with vid_maxfps 0 (clamped to 999) and MainLoop_runner routed through a MessageChannel; GPU ms from EXT_disjoint_timer_query_webgl2 when available; 5 s warm-up then 3 x 10 s at the cap and 2 x 5 s uncapped; HTTP cache disabled"
   },
   "variants": {
     "NEW": {
       "base": "http://127.0.0.1:4231/",
-      "pak9InEngine": 41201057,
+      "pak9InEngine": 41216186,
       "renderer": {
         "webgl2": true,
         "vendor": "Google Inc. (Intel)",
@@ -63,66 +518,305 @@
           "url": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
           "screenshot": "docs/texture-review/ingame/real/demo1-NEW.png",
           "format": "png",
-          "bytes": 1055725,
-          "settleDiff": 0.467,
+          "bytes": 1051665,
+          "settleDiff": 0.029,
           "settleNote": null,
           "samples": [
             {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.017,
-              "fps": 74.97
-            },
-            {
-              "frames": 751,
-              "engineRaf": 752,
-              "seconds": 10.029,
-              "fps": 74.88
-            },
-            {
               "frames": 753,
               "engineRaf": 753,
-              "seconds": 10.036,
-              "fps": 75.03
+              "seconds": 10.037,
+              "fps": 75.02,
+              "load1": 7.15,
+              "load5": 5.52,
+              "cores": 8,
+              "cpuBusy": 0.347
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.005,
+              "fps": 74.96,
+              "load1": 6.67,
+              "load5": 5.47,
+              "cores": 8,
+              "cpuBusy": 0.264
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.015,
+              "fps": 74.89,
+              "load1": 6.42,
+              "load5": 5.46,
+              "cores": 8,
+              "cpuBusy": 0.417
             }
           ],
-          "medianFps": 74.97
+          "medianFps": 74.96,
+          "work": {
+            "frames": 450,
+            "medianMs": 1.1,
+            "p95Ms": 1.5,
+            "minMs": 0.7,
+            "maxMs": 1.7,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 449,
+              "skipped": 0,
+              "medianMs": 2.819,
+              "p95Ms": 2.868
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.21,
+              "load5": 5.44,
+              "cores": 8,
+              "cpuBusy": 0.309
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1413,
+                "loops": 1804,
+                "seconds": 5.032,
+                "fps": 280.77,
+                "queued": 1,
+                "load1": 6.39,
+                "load5": 5.52,
+                "cores": 8,
+                "cpuBusy": 0.67
+              },
+              {
+                "frames": 1500,
+                "loops": 2133,
+                "seconds": 5.026,
+                "fps": 298.44,
+                "queued": 1,
+                "load1": 6.67,
+                "load5": 5.6,
+                "cores": 8,
+                "cpuBusy": 0.604
+              }
+            ],
+            "fps": 298.44,
+            "msPerFrame": 3.351,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
         },
         "demo2": {
           "url": "http://127.0.0.1:4231/?+map&demo2&+set&cl_gun&0&+set&crosshair&0",
           "screenshot": "docs/texture-review/ingame/real/demo2-NEW.png",
           "format": "png",
-          "bytes": 1148569,
-          "settleDiff": 23.619,
-          "settleNote": "two frozen frames still differed by 23.62 (this spawn has a live enemy and a damage flash); the frame is a real in-game view, but not pixel-identical across variants",
+          "bytes": 1191269,
+          "settleDiff": 0.072,
+          "settleNote": null,
           "samples": [
-            {
-              "frames": 747,
-              "engineRaf": 747,
-              "seconds": 10.002,
-              "fps": 74.69
-            },
             {
               "frames": 750,
               "engineRaf": 750,
-              "seconds": 10.011,
-              "fps": 74.92
+              "seconds": 10.009,
+              "fps": 74.93,
+              "load1": 6.18,
+              "load5": 5.58,
+              "cores": 8,
+              "cpuBusy": 0.483
             },
             {
               "frames": 751,
               "engineRaf": 751,
               "seconds": 10.019,
-              "fps": 74.96
+              "fps": 74.96,
+              "load1": 6.49,
+              "load5": 5.66,
+              "cores": 8,
+              "cpuBusy": 0.288
+            },
+            {
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.029,
+              "fps": 74.98,
+              "load1": 6.49,
+              "load5": 5.69,
+              "cores": 8,
+              "cpuBusy": 0.46
             }
           ],
-          "medianFps": 74.92
+          "medianFps": 74.96,
+          "work": {
+            "frames": 451,
+            "medianMs": 1.6,
+            "p95Ms": 2.4,
+            "minMs": 1.1,
+            "maxMs": 7.4,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 450,
+              "skipped": 0,
+              "medianMs": 1.06,
+              "p95Ms": 3.14
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.83,
+              "load5": 5.78,
+              "cores": 8,
+              "cpuBusy": 0.389
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1173,
+                "loops": 1204,
+                "seconds": 5.028,
+                "fps": 233.3,
+                "queued": 1,
+                "load1": 6.78,
+                "load5": 5.82,
+                "cores": 8,
+                "cpuBusy": 0.471
+              },
+              {
+                "frames": 1156,
+                "loops": 1170,
+                "seconds": 5.002,
+                "fps": 231.09,
+                "queued": 1,
+                "load1": 6.96,
+                "load5": 5.88,
+                "cores": 8,
+                "cpuBusy": 0.509
+              }
+            ],
+            "fps": 233.3,
+            "msPerFrame": 4.286,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
+        },
+        "demo3": {
+          "url": "http://127.0.0.1:4231/?+map&demo3&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo3-NEW.png",
+          "format": "png",
+          "bytes": 739682,
+          "settleDiff": 0.043,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 753,
+              "engineRaf": 753,
+              "seconds": 10.037,
+              "fps": 75.03,
+              "load1": 7.07,
+              "load5": 6,
+              "cores": 8,
+              "cpuBusy": 0.407
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.005,
+              "fps": 74.96,
+              "load1": 6.98,
+              "load5": 6.02,
+              "cores": 8,
+              "cpuBusy": 0.308
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.015,
+              "fps": 74.99,
+              "load1": 6.67,
+              "load5": 5.98,
+              "cores": 8,
+              "cpuBusy": 0.27
+            }
+          ],
+          "medianFps": 74.99,
+          "work": {
+            "frames": 450,
+            "medianMs": 1,
+            "p95Ms": 2.7,
+            "minMs": 0.6,
+            "maxMs": 5.5,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 449,
+              "skipped": 0,
+              "medianMs": 3.031,
+              "p95Ms": 3.81
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.42,
+              "load5": 5.95,
+              "cores": 8,
+              "cpuBusy": 0.477
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1947,
+                "loops": 11484,
+                "seconds": 5.003,
+                "fps": 389.18,
+                "queued": 1,
+                "load1": 6.41,
+                "load5": 5.97,
+                "cores": 8,
+                "cpuBusy": 0.39
+              },
+              {
+                "frames": 1691,
+                "loops": 3826,
+                "seconds": 5.026,
+                "fps": 336.42,
+                "queued": 1,
+                "load1": 6.37,
+                "load5": 5.97,
+                "cores": 8,
+                "cpuBusy": 0.575
+              }
+            ],
+            "fps": 389.18,
+            "msPerFrame": 2.57,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
         }
       },
-      "displayRefreshHz": 75.8
+      "displayRefreshHz": 76.1
     },
     "OFF": {
       "base": "http://127.0.0.1:4231/",
-      "pak9InEngine": 41201057,
+      "pak9InEngine": 41216186,
       "renderer": {
         "webgl2": true,
         "vendor": "Google Inc. (Intel)",
@@ -148,66 +842,305 @@
           "url": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0&+set&r_retexturing&0",
           "screenshot": "docs/texture-review/ingame/real/demo1-OFF.png",
           "format": "png",
-          "bytes": 950270,
-          "settleDiff": 0.376,
+          "bytes": 940885,
+          "settleDiff": 0.03,
           "settleNote": null,
           "samples": [
             {
-              "frames": 752,
-              "engineRaf": 752,
-              "seconds": 10.038,
-              "fps": 74.92
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.012,
+              "fps": 74.91,
+              "load1": 7.37,
+              "load5": 6.25,
+              "cores": 8,
+              "cpuBusy": 0.27
             },
             {
               "frames": 752,
               "engineRaf": 752,
-              "seconds": 10.041,
-              "fps": 74.89
+              "seconds": 10.021,
+              "fps": 75.04,
+              "load1": 6.78,
+              "load5": 6.15,
+              "cores": 8,
+              "cpuBusy": 0.405
             },
             {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.011,
-              "fps": 75.02
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.031,
+              "fps": 74.97,
+              "load1": 7.32,
+              "load5": 6.3,
+              "cores": 8,
+              "cpuBusy": 0.261
             }
           ],
-          "medianFps": 74.92
+          "medianFps": 74.97,
+          "work": {
+            "frames": 451,
+            "medianMs": 1.4,
+            "p95Ms": 1.8,
+            "minMs": 0.9,
+            "maxMs": 4.3,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 450,
+              "skipped": 0,
+              "medianMs": 0.988,
+              "p95Ms": 2.665
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 7.28,
+              "load5": 6.32,
+              "cores": 8,
+              "cpuBusy": 0.359
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1453,
+                "loops": 1707,
+                "seconds": 5.021,
+                "fps": 289.39,
+                "queued": 1,
+                "load1": 7.63,
+                "load5": 6.44,
+                "cores": 8,
+                "cpuBusy": 0.505
+              },
+              {
+                "frames": 1500,
+                "loops": 1851,
+                "seconds": 5.027,
+                "fps": 298.38,
+                "queued": 1,
+                "load1": 7.58,
+                "load5": 6.45,
+                "cores": 8,
+                "cpuBusy": 0.524
+              }
+            ],
+            "fps": 298.38,
+            "msPerFrame": 3.351,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
         },
         "demo2": {
           "url": "http://127.0.0.1:4231/?+map&demo2&+set&cl_gun&0&+set&crosshair&0&+set&r_retexturing&0",
           "screenshot": "docs/texture-review/ingame/real/demo2-OFF.png",
           "format": "png",
-          "bytes": 1091811,
-          "settleDiff": 33.643,
-          "settleNote": "two frozen frames still differed by 33.64 (this spawn has a live enemy and a damage flash); the frame is a real in-game view, but not pixel-identical across variants",
+          "bytes": 1068618,
+          "settleDiff": 0.071,
+          "settleNote": null,
           "samples": [
             {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.008,
-              "fps": 75.04
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.023,
+              "fps": 75.03,
+              "load1": 7.21,
+              "load5": 6.44,
+              "cores": 8,
+              "cpuBusy": 0.265
             },
             {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.018,
-              "fps": 74.97
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.031,
+              "fps": 74.97,
+              "load1": 6.87,
+              "load5": 6.4,
+              "cores": 8,
+              "cpuBusy": 0.431
             },
             {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.026,
-              "fps": 74.9
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.001,
+              "fps": 74.99,
+              "load1": 7.44,
+              "load5": 6.53,
+              "cores": 8,
+              "cpuBusy": 0.397
             }
           ],
-          "medianFps": 74.97
+          "medianFps": 74.99,
+          "work": {
+            "frames": 452,
+            "medianMs": 1.5,
+            "p95Ms": 2.3,
+            "minMs": 1.1,
+            "maxMs": 3.4,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 451,
+              "skipped": 0,
+              "medianMs": 0.962,
+              "p95Ms": 3.136
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 7.23,
+              "load5": 6.51,
+              "cores": 8,
+              "cpuBusy": 0.263
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 970,
+                "loops": 970,
+                "seconds": 5.024,
+                "fps": 193.09,
+                "queued": 1,
+                "load1": 6.75,
+                "load5": 6.44,
+                "cores": 8,
+                "cpuBusy": 0.722
+              },
+              {
+                "frames": 1252,
+                "loops": 1381,
+                "seconds": 5.007,
+                "fps": 250.04,
+                "queued": 1,
+                "load1": 6.93,
+                "load5": 6.48,
+                "cores": 8,
+                "cpuBusy": 0.557
+              }
+            ],
+            "fps": 250.04,
+            "msPerFrame": 3.999,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
+        },
+        "demo3": {
+          "url": "http://127.0.0.1:4231/?+map&demo3&+set&cl_gun&0&+set&crosshair&0&+set&r_retexturing&0",
+          "screenshot": "docs/texture-review/ingame/real/demo3-OFF.png",
+          "format": "png",
+          "bytes": 595861,
+          "settleDiff": 0.036,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 753,
+              "engineRaf": 753,
+              "seconds": 10.036,
+              "fps": 75.03,
+              "load1": 7.39,
+              "load5": 6.64,
+              "cores": 8,
+              "cpuBusy": 0.376
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.002,
+              "fps": 74.98,
+              "load1": 7.42,
+              "load5": 6.66,
+              "cores": 8,
+              "cpuBusy": 0.313
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.017,
+              "fps": 74.98,
+              "load1": 7.04,
+              "load5": 6.61,
+              "cores": 8,
+              "cpuBusy": 0.438
+            }
+          ],
+          "medianFps": 74.98,
+          "work": {
+            "frames": 450,
+            "medianMs": 1.1,
+            "p95Ms": 1.5,
+            "minMs": 0.8,
+            "maxMs": 2.1,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 449,
+              "skipped": 0,
+              "medianMs": 0.888,
+              "p95Ms": 2.915
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.81,
+              "load5": 6.57,
+              "cores": 8,
+              "cpuBusy": 0.324
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1696,
+                "loops": 3733,
+                "seconds": 5.031,
+                "fps": 337.11,
+                "queued": 1,
+                "load1": 6.54,
+                "load5": 6.53,
+                "cores": 8,
+                "cpuBusy": 0.565
+              },
+              {
+                "frames": 1753,
+                "loops": 4099,
+                "seconds": 5.019,
+                "fps": 349.25,
+                "queued": 1,
+                "load1": 6.42,
+                "load5": 6.5,
+                "cores": 8,
+                "cpuBusy": 0.567
+              }
+            ],
+            "fps": 349.25,
+            "msPerFrame": 2.863,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
         }
       },
-      "displayRefreshHz": 74.3
+      "displayRefreshHz": 75.6
     },
     "PREV": {
-      "base": "http://127.0.0.1:43867/",
-      "pak9InEngine": 25031035,
+      "base": "http://127.0.0.1:40327/",
+      "pak9InEngine": 41201057,
       "renderer": {
         "webgl2": true,
         "vendor": "Google Inc. (Intel)",
@@ -230,95 +1163,553 @@
       },
       "maps": {
         "demo1": {
-          "url": "http://127.0.0.1:43867/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+          "url": "http://127.0.0.1:40327/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
           "screenshot": "docs/texture-review/ingame/real/demo1-PREV.png",
           "format": "png",
-          "bytes": 951154,
-          "settleDiff": 0.184,
-          "settleNote": null,
-          "samples": [
-            {
-              "frames": 749,
-              "engineRaf": 749,
-              "seconds": 10.008,
-              "fps": 74.84
-            },
-            {
-              "frames": 751,
-              "engineRaf": 751,
-              "seconds": 10.019,
-              "fps": 74.96
-            },
-            {
-              "frames": 752,
-              "engineRaf": 752,
-              "seconds": 10.027,
-              "fps": 75
-            }
-          ],
-          "medianFps": 74.96
-        },
-        "demo2": {
-          "url": "http://127.0.0.1:43867/?+map&demo2&+set&cl_gun&0&+set&crosshair&0",
-          "screenshot": "docs/texture-review/ingame/real/demo2-PREV.png",
-          "format": "png",
-          "bytes": 1090991,
-          "settleDiff": 0.051,
+          "bytes": 1050969,
+          "settleDiff": 0,
           "settleNote": null,
           "samples": [
             {
               "frames": 750,
               "engineRaf": 750,
-              "seconds": 10.003,
-              "fps": 74.98
+              "seconds": 10.009,
+              "fps": 74.93,
+              "load1": 6.36,
+              "load5": 6.49,
+              "cores": 8,
+              "cpuBusy": 0.437
             },
             {
               "frames": 751,
               "engineRaf": 751,
-              "seconds": 10.013,
-              "fps": 75.01
+              "seconds": 10.019,
+              "fps": 74.96,
+              "load1": 6.07,
+              "load5": 6.42,
+              "cores": 8,
+              "cpuBusy": 0.329
             },
             {
-              "frames": 749,
-              "engineRaf": 749,
-              "seconds": 10.021,
-              "fps": 74.74
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.029,
+              "fps": 74.98,
+              "load1": 6.14,
+              "load5": 6.43,
+              "cores": 8,
+              "cpuBusy": 0.283
             }
           ],
-          "medianFps": 74.98
+          "medianFps": 74.96,
+          "work": {
+            "frames": 450,
+            "medianMs": 1.7,
+            "p95Ms": 3,
+            "minMs": 1,
+            "maxMs": 8.1,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 449,
+              "skipped": 0,
+              "medianMs": 1.041,
+              "p95Ms": 2.85
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.53,
+              "load5": 6.5,
+              "cores": 8,
+              "cpuBusy": 0.555
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1337,
+                "loops": 1580,
+                "seconds": 5.018,
+                "fps": 266.45,
+                "queued": 1,
+                "load1": 6.96,
+                "load5": 6.6,
+                "cores": 8,
+                "cpuBusy": 0.542
+              },
+              {
+                "frames": 1564,
+                "loops": 2302,
+                "seconds": 5.029,
+                "fps": 311,
+                "queued": 1,
+                "load1": 7.28,
+                "load5": 6.67,
+                "cores": 8,
+                "cpuBusy": 0.404
+              }
+            ],
+            "fps": 311,
+            "msPerFrame": 3.215,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
+        },
+        "demo2": {
+          "url": "http://127.0.0.1:40327/?+map&demo2&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo2-PREV.png",
+          "format": "png",
+          "bytes": 1190405,
+          "settleDiff": 0.042,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 752,
+              "engineRaf": 752,
+              "seconds": 10.03,
+              "fps": 74.98,
+              "load1": 6.95,
+              "load5": 6.66,
+              "cores": 8,
+              "cpuBusy": 0.304
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.039,
+              "fps": 74.71,
+              "load1": 6.81,
+              "load5": 6.64,
+              "cores": 8,
+              "cpuBusy": 0.484
+            },
+            {
+              "frames": 750,
+              "engineRaf": 750,
+              "seconds": 10.007,
+              "fps": 74.94,
+              "load1": 6.76,
+              "load5": 6.63,
+              "cores": 8,
+              "cpuBusy": 0.35
+            }
+          ],
+          "medianFps": 74.94,
+          "work": {
+            "frames": 452,
+            "medianMs": 1.6,
+            "p95Ms": 2.5,
+            "minMs": 1.1,
+            "maxMs": 4.4,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 451,
+              "skipped": 0,
+              "medianMs": 1.29,
+              "p95Ms": 4.304
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 6.33,
+              "load5": 6.54,
+              "cores": 8,
+              "cpuBusy": 0.275
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1097,
+                "loops": 1181,
+                "seconds": 5.026,
+                "fps": 218.27,
+                "queued": 1,
+                "load1": 7.55,
+                "load5": 6.78,
+                "cores": 8,
+                "cpuBusy": 0.66
+              },
+              {
+                "frames": 1401,
+                "loops": 1640,
+                "seconds": 5.02,
+                "fps": 279.08,
+                "queued": 1,
+                "load1": 7.5,
+                "load5": 6.79,
+                "cores": 8,
+                "cpuBusy": 0.51
+              }
+            ],
+            "fps": 279.08,
+            "msPerFrame": 3.583,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
+        },
+        "demo3": {
+          "url": "http://127.0.0.1:40327/?+map&demo3&+set&cl_gun&0&+set&crosshair&0",
+          "screenshot": "docs/texture-review/ingame/real/demo3-PREV.png",
+          "format": "png",
+          "bytes": 740122,
+          "settleDiff": 0.035,
+          "settleNote": null,
+          "samples": [
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.016,
+              "fps": 74.98,
+              "load1": 7.77,
+              "load5": 6.91,
+              "cores": 8,
+              "cpuBusy": 0.36
+            },
+            {
+              "frames": 751,
+              "engineRaf": 751,
+              "seconds": 10.024,
+              "fps": 74.92,
+              "load1": 7.51,
+              "load5": 6.88,
+              "cores": 8,
+              "cpuBusy": 0.273
+            },
+            {
+              "frames": 753,
+              "engineRaf": 753,
+              "seconds": 10.036,
+              "fps": 75.03,
+              "load1": 6.89,
+              "load5": 6.77,
+              "cores": 8,
+              "cpuBusy": 0.434
+            }
+          ],
+          "medianFps": 74.98,
+          "work": {
+            "frames": 451,
+            "medianMs": 1.2,
+            "p95Ms": 1.7,
+            "minMs": 0.7,
+            "maxMs": 3.9,
+            "gpu": {
+              "extension": "EXT_disjoint_timer_query_webgl2",
+              "frames": 450,
+              "skipped": 0,
+              "medianMs": 1.1,
+              "p95Ms": 3.139
+            },
+            "seconds": 6,
+            "load": {
+              "load1": 8.39,
+              "load5": 7.09,
+              "cores": 8,
+              "cpuBusy": 0.383
+            }
+          },
+          "checks": {
+            "webgl2": true,
+            "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+            "vidRenderer": "gles3",
+            "drawingBuffer": "1366x768"
+          },
+          "uncapped": {
+            "vidMaxFps": "999",
+            "visible": "visible",
+            "samples": [
+              {
+                "frames": 1642,
+                "loops": 3442,
+                "seconds": 5.029,
+                "fps": 326.53,
+                "queued": 1,
+                "load1": 7.87,
+                "load5": 7.04,
+                "cores": 8,
+                "cpuBusy": 0.591
+              },
+              {
+                "frames": 1541,
+                "loops": 2652,
+                "seconds": 5.011,
+                "fps": 307.55,
+                "queued": 1,
+                "load1": 7.72,
+                "load5": 7.02,
+                "cores": 8,
+                "cpuBusy": 0.68
+              }
+            ],
+            "fps": 326.53,
+            "msPerFrame": 3.063,
+            "method": "vid_maxfps 0 (engine clamps to 999) and MainLoop_runner routed through a MessageChannel; GLctx.clear per second"
+          }
         }
       },
-      "displayRefreshHz": 75.6
+      "displayRefreshHz": 75.8
+    }
+  },
+  "pairs": {
+    "demo1": {
+      "map": "demo1",
+      "pairs": {
+        "NEWvsOFF": {
+          "label": "NEW-vs-OFF",
+          "map": "demo1",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.03,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0.029,
+            "b": 0.03
+          },
+          "meanAbsDiff": 1.471,
+          "changedPixels": 5720,
+          "changedShare": 0.0069,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo1-NEW.png",
+            "b": "docs/texture-review/ingame/real/demo1-OFF.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 49.02,
+          "sideBySide": "docs/texture-review/ingame/real/demo1-NEW-vs-OFF.png",
+          "sideBySideBytes": 2929415
+        },
+        "PREVvsNEW": {
+          "label": "PREV-vs-NEW",
+          "map": "demo1",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.029,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0,
+            "b": 0.029
+          },
+          "meanAbsDiff": 0.028,
+          "changedPixels": 481,
+          "changedShare": 0.0006,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo1-PREV.png",
+            "b": "docs/texture-review/ingame/real/demo1-NEW.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 0.96,
+          "sideBySide": "docs/texture-review/ingame/real/demo1-PREV-vs-NEW.png",
+          "sideBySideBytes": 1634835
+        }
+      }
+    },
+    "demo2": {
+      "map": "demo2",
+      "pairs": {
+        "NEWvsOFF": {
+          "label": "NEW-vs-OFF",
+          "map": "demo2",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.072,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0.072,
+            "b": 0.071
+          },
+          "meanAbsDiff": 2.156,
+          "changedPixels": 26291,
+          "changedShare": 0.0315,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo2-NEW.png",
+            "b": "docs/texture-review/ingame/real/demo2-OFF.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 29.95,
+          "sideBySide": "docs/texture-review/ingame/real/demo2-NEW-vs-OFF.png",
+          "sideBySideBytes": 3458996
+        },
+        "PREVvsNEW": {
+          "label": "PREV-vs-NEW",
+          "map": "demo2",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.072,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0.042,
+            "b": 0.072
+          },
+          "meanAbsDiff": 0.065,
+          "changedPixels": 1711,
+          "changedShare": 0.0021,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo2-PREV.png",
+            "b": "docs/texture-review/ingame/real/demo2-NEW.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 0.9,
+          "sideBySide": "docs/texture-review/ingame/real/demo2-PREV-vs-NEW.png",
+          "sideBySideBytes": 1888887
+        }
+      }
+    },
+    "demo3": {
+      "map": "demo3",
+      "pairs": {
+        "NEWvsOFF": {
+          "label": "NEW-vs-OFF",
+          "map": "demo3",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.043,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0.043,
+            "b": 0.036
+          },
+          "meanAbsDiff": 1.009,
+          "changedPixels": 1417,
+          "changedShare": 0.0017,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo3-NEW.png",
+            "b": "docs/texture-review/ingame/real/demo3-OFF.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 23.46,
+          "sideBySide": "docs/texture-review/ingame/real/demo3-NEW-vs-OFF.png",
+          "sideBySideBytes": 1692752
+        },
+        "PREVvsNEW": {
+          "label": "PREV-vs-NEW",
+          "map": "demo3",
+          "settled": true,
+          "diffPair": true,
+          "noiseFloor": 0.043,
+          "noiseFloorSource": "the larger of the two views' steadyShot settleDiff (two frozen frames, frame to frame)",
+          "settleDiff": {
+            "a": 0.035,
+            "b": 0.043
+          },
+          "meanAbsDiff": 0.042,
+          "changedPixels": 1096,
+          "changedShare": 0.0013,
+          "changedPixelThreshold": 8,
+          "pixels": 833664,
+          "source": "lossless PNG screenshots held in memory, before any JPEG fallback",
+          "screenshots": {
+            "a": "docs/texture-review/ingame/real/demo3-PREV.png",
+            "b": "docs/texture-review/ingame/real/demo3-NEW.png",
+            "formats": [
+              "png",
+              "png"
+            ]
+          },
+          "ratio": 0.97,
+          "sideBySide": "docs/texture-review/ingame/real/demo3-PREV-vs-NEW.png",
+          "sideBySideBytes": 1016357
+        }
+      }
     }
   },
   "comparison": {
-    "map": "demo1",
-    "newFps": 74.97,
-    "offFps": 74.92,
-    "ratio": 1.001,
-    "muchWorse": false,
-    "prevFps": 74.96,
-    "referenceNote": "the previous set measured 74.96 fps at this view today, against the recorded reference 34 fps; the display's own rAF fires at 75.8/s and every variant is pinned at that cap, so this view cannot show a cost"
+    "maps": [
+      "demo1",
+      "demo2",
+      "demo3"
+    ],
+    "cappedNew": 74.96,
+    "cappedOff": 74.98,
+    "uncappedNew": 298.44,
+    "uncappedOff": 298.38,
+    "workNewMs": 1.1,
+    "workOffMs": 1.4,
+    "budgetMs": 13.141,
+    "headroomMs": 12.04,
+    "costMs": -0.3,
+    "costPercent": -21.4,
+    "newVsOffCappedRatio": 1,
+    "uncappedRaised": true
+  },
+  "verdict": {
+    "kind": "headroom",
+    "text": "headroom 12.04 ms/frame; NEW costs -0.3 ms/frame vs OFF (-21.4%)",
+    "evidence": [
+      "capped fps is pinned at the display: NEW 74.96 fps, OFF 74.98 fps, display rAF 76.1/s",
+      "work per frame at the cap, GPU completion included (gl.finish): NEW 1.1 ms (p95 2.4), OFF 1.4 ms",
+      "the uncapped loop raised the frame count: NEW 298.44 fps vs 74.96 capped",
+      "display budget 13.141 ms/frame at 76.1 Hz"
+    ]
   },
   "tuning": {
     "triggered": false,
-    "reason": "NEW 74.97 fps vs OFF 74.92 fps (ratio 1.001) is not under 29 fps or 0.40; no tuning applied"
+    "reason": "the measured question is frame work, not capped fps; no cvar tuning was applied"
   },
   "recommendations": [
     {
-      "what": "keep the shipped pak9",
-      "why": "no measurable frame-rate cost at 1366x768",
+      "what": "use the work-per-frame numbers, not capped fps",
+      "why": "every variant is pinned at the display refresh, so capped fps cannot separate them; the uncapped loop and gl.finish timing can",
       "numbers": {
-        "newFps": 74.97,
-        "offFps": 74.92,
-        "ratio": 1.001
+        "workNewMs": 1.1,
+        "workOffMs": 1.4,
+        "budgetMs": 13.141,
+        "headroomMs": 12.04,
+        "uncappedNew": 298.44,
+        "uncappedOff": 298.38
       }
     }
   ],
   "restore": {
     "url": "http://127.0.0.1:4231/",
     "r_retexturing": "1",
+    "scheduling": {
+      "fpsHook": "undefined",
+      "uncapped": "undefined",
+      "nativeRaf": true
+    },
     "consoleOpen": false
   },
-  "finishedAt": "2026-10-30T00:40:05.686Z"
+  "finishedAt": "2026-10-30T02:57:04.811Z"
 }
