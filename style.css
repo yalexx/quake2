@@ -73,3 +73,25 @@ canvas {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+
+#render-settings {
+  position: fixed;
+  top: 14px;
+  right: 16px;
+  z-index: 5;
+  color: #e6e8e8;
+  background: #111719ed;
+  border: 1px solid #53605c;
+  border-radius: 5px;
+  padding: 9px 12px;
+  font: 13px/1.5 system-ui, sans-serif;
+  box-shadow: 0 4px 20px #0008;
+}
+#render-settings[hidden] { display: none; }
+#render-settings summary { cursor: pointer; color: #d2e7d1; }
+#render-settings[open] { width: 242px; }
+#render-settings label { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-top: 12px; }
+#render-settings small { display: block; color: #a9b3b5; margin-top: 12px; }
+#render-settings select { color: #eee; background: #27302d; border: 1px solid #68746c; border-radius: 3px; padding: 5px; }
+#render-settings input { accent-color: #b7d99c; width: 18px; height: 18px; }
+#render-settings :focus-visible { outline: 2px solid #c5ed9e; outline-offset: 3px; }

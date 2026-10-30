@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=rtx2">
 </head>
 <body>
 <div id="loading" role="status" aria-live="polite">
@@ -15,10 +15,19 @@
   <div id="detail"></div>
 </div>
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
+<details id="render-settings">
+  <summary>Lighting</summary>
+  <label class="render-switch"><span>RTX-style</span><input id="rtx-toggle" type="checkbox" checked aria-label="RTX-style lighting On or Off"></label>
+  <label>Quality <select id="rtx-quality"><option value="performance">Performance</option><option value="high">High</option></select></label>
+  <small id="rtx-status">Raster lighting · no ray tracing</small>
+  <small>Esc releases the mouse. Off restores original lighting. Original art: console <code>r_retexturing 0; vid_restart</code>.</small>
+</details>
 <!-- Live engine state, read out of the WASM memory. Loaded first and inert at
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
 <script src="engine-state.js"></script>
-<script src="app.js"></script>
+<script src="rtx-materials.js?v=rtx2"></script>
+<script src="rtx-renderer.js?v=rtx2"></script>
+<script src="app.js?v=rtx2"></script>
 </body>
 </html>

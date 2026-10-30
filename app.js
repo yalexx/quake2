@@ -126,7 +126,7 @@ var Module;
     // the .wal it is about to draw, which is how the 4x wall art in pak9 reaches
     // the game (Yamagi draws it at the WAL's own size). The query string is
     // appended after these, so a URL can still turn it off.
-    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1"];
+    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1"];
     if (window.location.search.length > 1) {
       const extra = window.location.search.substr(1).split("&").filter(Boolean).map(function (arg) {
         try {
