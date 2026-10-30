@@ -1,0 +1,786 @@
+{
+  "at": "2026-10-30T05:45:48.040Z",
+  "load": [
+    {
+      "at": "2026-10-30T05:45:48.040Z",
+      "load1": 5.8,
+      "load5": 5.56,
+      "load15": 5.59,
+      "cores": 8,
+      "busy": 0.37,
+      "waitedS": 0
+    },
+    {
+      "at": "2026-10-30T05:46:19.081Z",
+      "load1": 6.44,
+      "load5": 5.79,
+      "load15": 5.67,
+      "cores": 8,
+      "busy": 0.23,
+      "waitedS": 30
+    },
+    {
+      "at": "2026-10-30T05:47:20.099Z",
+      "load1": 5.89,
+      "load5": 5.71,
+      "load15": 5.65,
+      "cores": 8,
+      "busy": 0.28,
+      "waitedS": 60
+    },
+    {
+      "at": "2026-10-30T05:48:51.125Z",
+      "load1": 5.19,
+      "load5": 5.58,
+      "load15": 5.61,
+      "cores": 8,
+      "busy": 0.25,
+      "waitedS": 90
+    }
+  ],
+  "checks": [
+    {
+      "name": "app3005 HTTP 200",
+      "ok": true,
+      "expected": 200,
+      "actual": "200"
+    },
+    {
+      "name": "app3005 text/html",
+      "ok": true,
+      "expected": "text/html",
+      "actual": "text/html; charset=utf-8"
+    },
+    {
+      "name": "app3005 game page (id='canvas')",
+      "ok": true,
+      "expected": "the game page with id=canvas",
+      "actual": "page holds id='canvas'"
+    },
+    {
+      "name": "live4231 HTTP 200",
+      "ok": true,
+      "expected": 200,
+      "actual": "200"
+    },
+    {
+      "name": "live4231 text/html",
+      "ok": true,
+      "expected": "text/html",
+      "actual": "text/html; charset=utf-8"
+    },
+    {
+      "name": "live4231 game page (id='canvas')",
+      "ok": true,
+      "expected": "the game page with id=canvas",
+      "actual": "page holds id='canvas'"
+    },
+    {
+      "name": "app3005 serves baseq2/pak0.pak byte length",
+      "ok": true,
+      "expected": "47498591",
+      "actual": "47498591"
+    },
+    {
+      "name": "app3005 serves baseq2/pak0.pak sha1",
+      "ok": true,
+      "expected": "3fce7386fe188b9176984bec676e950123aa6280",
+      "actual": "3fce7386fe188b9176984bec676e950123aa6280"
+    },
+    {
+      "name": "app3005 serves baseq2/pak9.pak byte length",
+      "ok": true,
+      "expected": "41216186",
+      "actual": "41216186"
+    },
+    {
+      "name": "app3005 serves baseq2/pak9.pak sha1",
+      "ok": true,
+      "expected": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d",
+      "actual": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+    },
+    {
+      "name": "live4231 serves baseq2/pak0.pak byte length",
+      "ok": true,
+      "expected": "47498591",
+      "actual": "47498591"
+    },
+    {
+      "name": "live4231 serves baseq2/pak0.pak sha1",
+      "ok": true,
+      "expected": "3fce7386fe188b9176984bec676e950123aa6280",
+      "actual": "3fce7386fe188b9176984bec676e950123aa6280"
+    },
+    {
+      "name": "live4231 serves baseq2/pak9.pak byte length",
+      "ok": true,
+      "expected": "41216186",
+      "actual": "41216186"
+    },
+    {
+      "name": "live4231 serves baseq2/pak9.pak sha1",
+      "ok": true,
+      "expected": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d",
+      "actual": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+    },
+    {
+      "name": "CDP http://127.0.0.1:9222 has the open game tab",
+      "ok": true,
+      "expected": "a page target on 4231 or /apps/quake2/",
+      "actual": "tab http://127.0.0.1:3005/login?redirect=%2Fapps%2Fquake2%2F"
+    },
+    {
+      "name": "app3005 real-Chrome checks",
+      "ok": false,
+      "expected": "booted engine with gles3",
+      "actual": "failed: http://127.0.0.1:3005/apps/quake2/ redirected to http://127.0.0.1:3005/login?redirect=%2Fapps%2Fquake2%2F — the open Chrome profile has no valid ClawBox session, so the game never boots there (screenshot e2e-app3005-login.png)"
+    },
+    {
+      "name": "live4231 landed on the game page",
+      "ok": true,
+      "expected": "a URL under http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+      "actual": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0"
+    },
+    {
+      "name": "live4231 WebGL2",
+      "ok": true,
+      "expected": true,
+      "actual": "true"
+    },
+    {
+      "name": "live4231 ANGLE unmasked renderer",
+      "ok": true,
+      "expected": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+      "actual": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)"
+    },
+    {
+      "name": "live4231 vid_renderer gles3",
+      "ok": true,
+      "expected": "gles3",
+      "actual": "gles3"
+    },
+    {
+      "name": "live4231 drawing buffer 1366x768",
+      "ok": true,
+      "expected": "1366x768",
+      "actual": "1366x768"
+    },
+    {
+      "name": "live4231 renderer gate (all of the above)",
+      "ok": true,
+      "expected": "pass",
+      "actual": "pass"
+    },
+    {
+      "name": "live4231 pak9 bytes in the engine FS",
+      "ok": true,
+      "expected": "41216186",
+      "actual": "41216186"
+    },
+    {
+      "name": "live4231 map loaded",
+      "ok": true,
+      "expected": "demo1",
+      "actual": "demo1"
+    },
+    {
+      "name": "console r_retexturing 0 reads back 0",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    {
+      "name": "console r_retexturing 0 changes the frame",
+      "ok": true,
+      "expected": "a different frame",
+      "actual": "frame changed"
+    },
+    {
+      "name": "console r_retexturing 1 restores",
+      "ok": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    {
+      "name": "console map demo2 loads demo2",
+      "ok": true,
+      "expected": "demo2",
+      "actual": "demo2"
+    },
+    {
+      "name": "frame-time report present",
+      "ok": true,
+      "expected": "fps.json",
+      "actual": "docs/texture-review/ingame/final/fps.json"
+    }
+  ],
+  "screenshots": [
+    "e2e-app3005-login.png",
+    "e2e-live4231-demo1.png",
+    "e2e-live4231-r_retexturing-0-console.png",
+    "e2e-live4231-console-map-demo2.png"
+  ],
+  "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+  "frameTime": {
+    "file": "docs/texture-review/ingame/final/fps.json",
+    "summary": {
+      "kind": "headroom",
+      "text": "headroom 11.88 ms/frame; NEW costs -0.1 ms/frame vs OFF (-6.7%)",
+      "evidence": [
+        "capped fps is pinned at the display: NEW 74.99 fps, OFF 74.93 fps, display rAF 75.3/s",
+        "work per frame at the cap, GPU completion included (gl.finish): NEW 1.4 ms (p95 2.1), OFF 1.5 ms",
+        "the uncapped loop raised the frame count: NEW 308.13 fps vs 74.99 capped",
+        "display budget 13.28 ms/frame at 75.3 Hz"
+      ]
+    },
+    "load": {
+      "cores": 8,
+      "before": {
+        "load1": 6.72,
+        "load5": 6.35,
+        "load15": 6.16,
+        "cores": 8,
+        "cpuBusy": 0.367
+      },
+      "windows": [
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.83,
+          "cpuBusy": 0.271
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.4,
+          "cpuBusy": 0.452
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.1,
+          "cpuBusy": 0.33
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 6.02,
+          "cpuBusy": 0.246
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.76,
+          "cpuBusy": 0.591
+        },
+        {
+          "variant": "NEW",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.94,
+          "cpuBusy": 0.54
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.87,
+          "cpuBusy": 0.326
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.87,
+          "cpuBusy": 0.362
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 7.38,
+          "cpuBusy": 0.35
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 6.94,
+          "cpuBusy": 0.271
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 7.67,
+          "cpuBusy": 0.548
+        },
+        {
+          "variant": "NEW",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 8.02,
+          "cpuBusy": 0.507
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.52,
+          "cpuBusy": 0.252
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 7.35,
+          "cpuBusy": 0.399
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.83,
+          "cpuBusy": 0.308
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 6.62,
+          "cpuBusy": 0.238
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 7.4,
+          "cpuBusy": 0.554
+        },
+        {
+          "variant": "NEW",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 7.45,
+          "cpuBusy": 0.508
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.09,
+          "cpuBusy": 0.315
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.76,
+          "cpuBusy": 0.396
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.33,
+          "cpuBusy": 0.309
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 6.28,
+          "cpuBusy": 0.237
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.52,
+          "cpuBusy": 0.511
+        },
+        {
+          "variant": "OFF",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.56,
+          "cpuBusy": 0.52
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.42,
+          "cpuBusy": 0.279
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.26,
+          "cpuBusy": 0.405
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.45,
+          "cpuBusy": 0.357
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 6.23,
+          "cpuBusy": 0.225
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.29,
+          "cpuBusy": 0.525
+        },
+        {
+          "variant": "OFF",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.18,
+          "cpuBusy": 0.543
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 7.64,
+          "cpuBusy": 0.283
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 7.38,
+          "cpuBusy": 0.347
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.79,
+          "cpuBusy": 0.33
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 6.5,
+          "cpuBusy": 0.22
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 6.11,
+          "cpuBusy": 0.556
+        },
+        {
+          "variant": "OFF",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 6.18,
+          "cpuBusy": 0.501
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.42,
+          "cpuBusy": 0.334
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.27,
+          "cpuBusy": 0.272
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 5.99,
+          "cpuBusy": 0.388
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "work",
+          "load1": 5.85,
+          "cpuBusy": 0.29
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 5.67,
+          "cpuBusy": 0.582
+        },
+        {
+          "variant": "PREV",
+          "map": "demo1",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 5.77,
+          "cpuBusy": 0.526
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.32,
+          "cpuBusy": 0.34
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 6.35,
+          "cpuBusy": 0.289
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 6.14,
+          "cpuBusy": 0.452
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "work",
+          "load1": 6.27,
+          "cpuBusy": 0.323
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 5.63,
+          "cpuBusy": 0.7
+        },
+        {
+          "variant": "PREV",
+          "map": "demo2",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 5.82,
+          "cpuBusy": 0.557
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 1,
+          "load1": 6.02,
+          "cpuBusy": 0.359
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 2,
+          "load1": 5.86,
+          "cpuBusy": 0.258
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "capped",
+          "sample": 3,
+          "load1": 5.5,
+          "cpuBusy": 0.415
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "work",
+          "load1": 5.41,
+          "cpuBusy": 0.297
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 1,
+          "load1": 5.94,
+          "cpuBusy": 0.657
+        },
+        {
+          "variant": "PREV",
+          "map": "demo3",
+          "phase": "uncapped",
+          "sample": 2,
+          "load1": 5.86,
+          "cpuBusy": 0.598
+        }
+      ],
+      "warning": "the machine was busy before Chrome work started: load average 6.72 (1 min) on 8 cores, above half the core count; frame timings from this run are not representative of an idle box",
+      "duringRun": {
+        "windows": 54,
+        "maxLoad1": 8.02,
+        "maxCpuBusy": 0.7,
+        "busyWindows": 18
+      },
+      "after": {
+        "load1": 6.33,
+        "load5": 6.26,
+        "load15": 6.27,
+        "cores": 8
+      }
+    }
+  },
+  "notes": [
+    "load 5.80 above 4; waited 30 s",
+    "load 6.44 above 4; waited 60 s",
+    "load 5.89 above 4; waited 90 s"
+  ],
+  "loadVerdict": "STILL BUSY: load1 5.19 > 4; timings may be noisy",
+  "http": {
+    "app3005": {
+      "url": "http://127.0.0.1:3005/apps/quake2/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "hasCanvas": true,
+      "excerpt": "<!doctype html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1\"> <meta name=\"color-scheme\" content=\"dark\"> <title>Quake 2</title> <link rel=\"icon\" href=\"favicon.png\"> <link rel=\"stylesheet\" href=\"style.css\"> </head> <body> <div id=\"loading\" role=\"status\" aria-live=\"polite\"> <div id=\"status\">Loading…</div> <div i",
+      "errorish": false
+    },
+    "live4231": {
+      "url": "http://127.0.0.1:4231/",
+      "status": 200,
+      "type": "text/html; charset=utf-8",
+      "hasCanvas": true,
+      "excerpt": "<!doctype html> <html lang=\"en\"> <head> <meta charset=\"utf-8\"> <meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1\"> <meta name=\"color-scheme\" content=\"dark\"> <title>Quake 2</title> <link rel=\"icon\" href=\"favicon.png\"> <link rel=\"stylesheet\" href=\"style.css\"> </head> <body> <div id=\"loading\" role=\"status\" aria-live=\"polite\"> <div id=\"status\">Loading…</div> <div i",
+      "errorish": false
+    }
+  },
+  "paks": {
+    "app3005": {
+      "baseq2/pak0.pak": {
+        "status": 200,
+        "bytes": 47498591,
+        "type": "application/octet-stream",
+        "sha1": "3fce7386fe188b9176984bec676e950123aa6280"
+      },
+      "baseq2/pak9.pak": {
+        "status": 200,
+        "bytes": 41216186,
+        "type": "application/octet-stream",
+        "sha1": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+      }
+    },
+    "live4231": {
+      "baseq2/pak0.pak": {
+        "status": 200,
+        "bytes": 47498591,
+        "type": "application/octet-stream",
+        "sha1": "3fce7386fe188b9176984bec676e950123aa6280"
+      },
+      "baseq2/pak9.pak": {
+        "status": 200,
+        "bytes": 41216186,
+        "type": "application/octet-stream",
+        "sha1": "e2f2a6efb1a3d06f4711897bc6ef1daf0e228f3d"
+      }
+    }
+  },
+  "liveServedMatchesWorktree": true,
+  "chrome": {
+    "app3005": {
+      "url": "http://127.0.0.1:3005/apps/quake2/",
+      "shots": [],
+      "finalUrl": "http://127.0.0.1:3005/login?redirect=%2Fapps%2Fquake2%2F",
+      "error": "http://127.0.0.1:3005/apps/quake2/ redirected to http://127.0.0.1:3005/login?redirect=%2Fapps%2Fquake2%2F — the open Chrome profile has no valid ClawBox session, so the game never boots there (screenshot e2e-app3005-login.png)"
+    },
+    "live4231": {
+      "url": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+      "shots": [
+        "e2e-live4231-demo1.png",
+        "e2e-live4231-console-map-demo2.png"
+      ],
+      "finalUrl": "http://127.0.0.1:4231/?+map&demo1&+set&cl_gun&0&+set&crosshair&0",
+      "renderer": {
+        "webgl2": true,
+        "vendor": "Google Inc. (Intel)",
+        "renderer": "ANGLE (Intel, Mesa Intel(R) UHD Graphics 620 (KBL GT2), OpenGL ES 3.2)",
+        "glVersion": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+        "drawingBuffer": [
+          1366,
+          768
+        ],
+        "inner": [
+          1248,
+          668
+        ],
+        "dpr": 1,
+        "visible": "visible"
+      },
+      "vidRenderer": "gles3",
+      "pak9InEngine": 41216186,
+      "mapname": "demo1",
+      "consoleOff": {
+        "readback": "0",
+        "frameChanged": true
+      },
+      "consoleMap": {
+        "typed": "map demo2",
+        "from": "demo1",
+        "readback": "demo2"
+      }
+    }
+  },
+  "tabLeftOn": "http://127.0.0.1:4231/",
+  "ok": false
+}
