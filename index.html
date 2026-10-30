@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx3">
+<link rel="stylesheet" href="style.css?v=rtx4">
 </head>
 <body>
 <div id="loading" role="status" aria-live="polite">
@@ -15,6 +15,13 @@
   <div id="detail"></div>
 </div>
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
+<button id="fullscreen-button" type="button" aria-pressed="false" aria-label="Enter full screen" title="Full screen">
+  <span class="fs-icon" aria-hidden="true">&#9974;</span><span class="fs-label">Full screen</span>
+</button>
+<div id="fullscreen-hint" hidden>
+  <p>Full screen is blocked inside the desktop window.</p>
+  <button id="fullscreen-open-window" type="button">Open in its own window</button>
+</div>
 <details id="render-settings">
   <summary>Lighting</summary>
   <label class="render-switch"><span>RTX-style</span><input id="rtx-toggle" type="checkbox" checked aria-label="RTX-style lighting On or Off"></label>
@@ -26,8 +33,9 @@
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
 <script src="engine-state.js"></script>
-<script src="rtx-materials.js?v=rtx3"></script>
-<script src="rtx-renderer.js?v=rtx3"></script>
-<script src="app.js?v=rtx3"></script>
+<script src="rtx-materials.js?v=rtx4"></script>
+<script src="rtx-renderer.js?v=rtx4"></script>
+<script src="app.js?v=rtx4"></script>
+<script src="fullscreen.js?v=rtx4"></script>
 </body>
 </html>
