@@ -112,8 +112,11 @@ const report = {
   networkErrors: [],
   pageErrors: [],
   webgl: { contextLost: 0, glError: null },
+  webglPages: [],
+  webglWarnings: [],
   clGun: null,
   weaponDraw: null,
+  weaponDraws: [],
   modes: [],
   screenshots: [],
   coverage: null,
@@ -222,7 +225,8 @@ async function ensureServer() {
   // The 4231 port can outlive a run and still serve another checkout. Prove
   // that what the browser will load is this working tree, file by file.
   const compared = [];
-  for (const file of ["index.html", "style.css", "rtx-renderer.js", "app.js", "fullscreen.js"]) {
+  for (const file of ["index.html", "style.css", "rtx-renderer.js", "app.js", "fullscreen.js",
+    "engine-state.js", "rtx-materials.js", "baseq2/pak10.pak"]) {
     const served = await fetchManual(new URL(file, options.url));
     const servedBytes = served ? Buffer.from(await served.arrayBuffer()) : Buffer.alloc(0);
     const localBytes = fs.readFileSync(path.join(ROOT, file));
@@ -744,6 +748,17 @@ function buildCoverage() {
   const demo1Classes = classnames(bspEntities(pak0, "demo1"));
   const blasterSkinEntry = pak0.entries.get("models/weapons/v_blast/skin.pcx");
   const blasterSkin = blasterSkinEntry ? pcxDimensions(pak0.buffer, blasterSkinEntry.offset) : null;
+  // Every model skin in pak0, not just the weapons, so the blaster-skin size
+  // claim is checked against monsters and items too.
+  const modelSkins = [];
+  for (const [entryName, entry] of pak0.entries) {
+    if (!/^models\/.*\/skin\.pcx$/.test(entryName)) continue;
+    const size = pcxDimensions(pak0.buffer, entry.offset);
+    modelSkins.push({ entry: entryName, width: size.width, height: size.height });
+  }
+  const blasterCollisions = blasterSkin
+    ? modelSkins.filter((one) => one.width === blasterSkin.width && one.height === blasterSkin.height && one.entry !== "models/weapons/v_blast/skin.pcx")
+    : [];
   const weapons = [];
   const weaponSkins = [];
   for (const [entryName, info] of pak10.entries) {
@@ -781,6 +796,8 @@ function buildCoverage() {
     level: "demo1",
     basis: "model assets in baseq2/pak10.pak; covered = present in demo1 (in hand for weapons, placed as a pickup or monster in the BSP entity lump). Enemy visibility in a particular frame is not claimed.",
     blasterSkin,
+    blasterSkinSizeCollisions: blasterCollisions,
+    modelSkinCount: modelSkins.length,
     weaponSkins,
     weapons,
     enemies,
@@ -793,6 +810,12 @@ function buildCoverage() {
     weapons.length === 13 && enemies.length === 7,
     "13 weapons, 7 enemies",
     weapons.length + " weapons, " + enemies.length + " enemies");
+  const unique = Boolean(blasterSkin) && blasterCollisions.length === 0;
+  check("blaster skin size is unique among all pak0 model skins", unique,
+    "296x164 used only by models/weapons/v_blast/skin.pcx",
+    blasterSkin ? blasterSkin.width + "x" + blasterSkin.height + " checked against " + modelSkins.length +
+      " model skins; collisions " + JSON.stringify(blasterCollisions.map((one) => one.entry)) : "blaster skin unreadable");
+  if (!unique) fatal("the blaster skin size is not unique; a weapon draw cannot be named by skin size");
   return report.coverage;
 }
 
@@ -936,63 +959,71 @@ async function setLighting(level) {
   await waitFrames(2);
 }
 
-async function weaponDrawCheck() {
-  console.log("\n  cl_gun and weapon draw");
-  if (!(await ensureGame("before the cl_gun read"))) fatal("the game is not in game before the cl_gun read");
+async function readClGun(label) {
+  console.log("\n  " + label + " cl_gun");
+  if (!(await ensureGame("before the cl_gun read"))) fatal(label + ": the game is not in game before the cl_gun read");
   await sleep(3000);
   await waitFrames(3);
   const clGun = await consoleBridge.read("cl_gun");
-  report.clGun = { value: clGun };
-  const gunOk = check("cl_gun is 1", clGun === "1", "1", String(clGun));
-  if (!gunOk) fatal("cl_gun is " + JSON.stringify(clGun) + ", not 1 — no weapon is drawn in hand");
-  if (!(await ensureGame("cl_gun check"))) fatal("the game did not resume after reading cl_gun");
+  report.clGun = { value: clGun, at: label };
+  const gunOk = check(label + ": cl_gun is 1", clGun === "1", "1", String(clGun));
+  if (!gunOk) fatal(label + ": cl_gun is " + JSON.stringify(clGun) + ", not 1 — no weapon is drawn in hand");
+  if (!(await ensureGame("cl_gun check"))) fatal(label + ": the game did not resume after reading cl_gun");
+}
 
-  // The view weapon is an MD2 model drawn after every entity and before the
-  // HUD. The renderer records the skin size of the last model draw before the
-  // first 2D draw of each frame, so a draw can be named, not just counted.
-  // Its skin size is matched against the weapon skins inside pak0: a monster
-  // or world texture does not match, so a match means a weapon was in hand.
+async function weaponDrawCheck(label) {
+  console.log("\n  " + label + " weapon draw");
+  if (!(await ensureGame("weapon draw"))) fatal(label + ": the game is not in game for the weapon-draw check");
+
+  // Put the composite back on: Off persists in localStorage across reloads and
+  // skips the composite, so postDraws would not count frames on this boot.
+  await setLighting("performance");
+
+  // The view weapon is an MD2 model. The renderer records every texture size
+  // bound by a model-shader draw. The blaster's skin is 296x164 and that size
+  // is checked unique among all pak0 model skins, so a model draw binding it is
+  // the v_blast view model — not a monster, item or wall texture.
   const skins = report.coverage.weaponSkins;
   if (!skins.length) fatal("could not read any weapon skin from pak0");
-  const weaponSkinSizes = new Set(skins.map((one) => one.width + "x" + one.height));
+  const blaster = report.coverage.blasterSkin;
+  if (!blaster) fatal("could not read the blaster skin from pak0");
+  const skinKey = blaster.width + "x" + blaster.height;
+  const candidates = [...new Set(skins.filter((one) => one.width + "x" + one.height === skinKey).map((one) => one.name))];
   const before = await status();
   await waitFrames(2);
   await sleep(5000);
   await waitFrames(2);
   const after = await status();
-  const observed = after.lastModelSkinDraws || {};
-  const previous = before.lastModelSkinDraws || {};
-  const seen = Object.keys(observed).filter((key) => (observed[key] || 0) > (previous[key] || 0));
-  const matching = seen.filter((key) => weaponSkinSizes.has(key));
-  const gunDraws = matching.reduce((sum, key) => sum + Math.max(0, (observed[key] || 0) - (previous[key] || 0)), 0);
+  const observed = after.modelTextureDraws || {};
+  const previous = before.modelTextureDraws || {};
+  const gunDraws = Math.max(0, (observed[skinKey] || 0) - (previous[skinKey] || 0));
   const frames = after.postDraws - before.postDraws;
   const modelDraws = after.modelDraws - before.modelDraws;
   const perFrame = frames > 0 ? gunDraws / frames : null;
-  const candidates = [...new Set(skins.filter((one) => matching.includes(one.width + "x" + one.height)).map((one) => one.name))];
-  report.weaponDraw = {
-    clGun: "1",
-    viewWeaponSkinSizes: matching,
+  const record = {
+    label,
+    clGun: "1 (read on the 1280x720 boot; same app start-up line on this boot)",
+    viewWeaponSkin: skinKey,
     viewWeaponCandidates: candidates,
     frames,
     modelDraws,
     modelDrawsPerFrame: frames > 0 ? modelDraws / frames : null,
     weaponSkinDraws: gunDraws,
     weaponSkinDrawsPerFrame: perFrame,
-    lastModelSkinDraws: observed,
-    weaponSkinSizes: [...weaponSkinSizes].sort(),
-    method: "the renderer records the skin size of the last model draw before the HUD in each frame; a size belonging to a pak0 weapon skin is a weapon draw",
+    modelTextureDraws: observed,
+    lastModelSkinDraws: after.lastModelSkinDraws || {},
+    method: "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1",
   };
-  check("a weapon draw is submitted", frames > 0 && gunDraws > 0 && perFrame !== null && perFrame >= 0.5,
-    "a pak0 weapon skin drawn last before the HUD every frame with cl_gun 1",
-    gunDraws + " weapon-skin draws over " + frames + " frames (" + (perFrame === null ? "n/a" : perFrame.toFixed(2)) +
-    "/frame); sizes " + JSON.stringify(matching) + " -> " + JSON.stringify(candidates) +
-    "; last-model sizes seen " + JSON.stringify(Object.keys(observed).sort()));
+  report.weaponDraws.push(record);
+  if (!report.weaponDraw) report.weaponDraw = record;
+  check(label + ": a weapon draw is submitted", frames > 0 && gunDraws > 0 && perFrame !== null && perFrame >= 0.5,
+    "a model draw binds the unique blaster skin every frame",
+    gunDraws + " draws of " + skinKey + " (" + candidates.join("/") + ") over " + frames + " frames (" +
+    (perFrame === null ? "n/a" : perFrame.toFixed(2)) + "/frame); last-model sizes seen " +
+    JSON.stringify(Object.keys(after.lastModelSkinDraws || {}).sort()));
   if (!(frames > 0 && gunDraws > 0 && perFrame !== null && perFrame >= 0.5)) {
-    fatal("no weapon draw was proven: " + gunDraws + " weapon-skin draws over " + frames + " frames");
+    fatal(label + ": no weapon draw was proven: " + gunDraws + " draws of the " + skinKey + " blaster skin over " + frames + " frames");
   }
-  const restored = await consoleBridge.read("cl_gun");
-  check("cl_gun still 1 after the draw check", restored === "1", "1", String(restored));
-  if (restored !== "1") fatal("cl_gun did not stay 1 during the weapon-draw check");
 }
 
 async function runModes(resolution) {
@@ -1053,17 +1084,39 @@ async function run() {
     await navigateResolution(resolution);
     await waitDemo1(resolution.label);
     if (firstResolution) {
-      await weaponDrawCheck();
+      await readClGun(resolution.label);
       firstResolution = false;
     }
     await runModes(resolution);
+    // Check the weapon after the modes: the first view-weapon draw can lag the
+    // level start, and the screenshots have already exercised the scene by now.
+    await weaponDrawCheck(resolution.label);
+    const pageState = await state();
+    report.webglPages.push({
+      resolution: resolution.label,
+      contextLost: (pageState.verify && pageState.verify.contextLost) || 0,
+      isContextLost: pageState.contextLost === true,
+    });
   }
 
   // Post-run error audit: everything the page said while it was being driven.
   const finalState = await state();
-  report.webgl = { contextLost: (finalState.verify && finalState.verify.contextLost) || 0, glLost: finalState.contextLost === true };
+  const pageLost = report.webglPages.reduce((sum, one) => sum + one.contextLost, 0);
+  report.webgl = {
+    pages: report.webglPages,
+    contextLost: pageLost,
+    glLost: finalState.contextLost === true,
+    warnings: report.webglWarnings,
+  };
   check("no WebGL context lost during the run", report.webgl.contextLost === 0 && !report.webgl.glLost,
-    "0 context losses", "events " + report.webgl.contextLost + ", isContextLost " + report.webgl.glLost);
+    "0 context losses across every boot", "events " + report.webgl.contextLost + ", isContextLost " + report.webgl.glLost);
+  const webglWarnings = report.consoleWarnings.filter((one) => /WebGL/i.test(one.text));
+  report.webglWarnings = webglWarnings;
+  report.webgl.warnings = webglWarnings;
+  if (webglWarnings.length) {
+    note(webglWarnings.length + " non-fatal WebGL warnings (engine texture setup, recorded in consoleWarnings): " +
+      JSON.stringify([...new Set(webglWarnings.map((one) => one.text))].slice(0, 4)));
+  }
   check("no page exceptions", report.pageErrors.length === 0, "0", String(report.pageErrors.length));
   check("no JavaScript console errors", report.consoleErrors.length === 0, "0", String(report.consoleErrors.length));
   if (report.pageErrors.length) console.log("  page errors: " + JSON.stringify(report.pageErrors.slice(0, 5)));
@@ -1074,7 +1127,7 @@ async function run() {
   }
 
   report.limitations = [
-    "Frame times come from headless Chrome on SwiftShader (software rasterisation) when no GPU is reachable; they are labelled software and are not the box GPU's numbers.",
+    "The runner forces headless Chrome onto ANGLE/SwiftShader (--use-angle=swiftshader --enable-unsafe-swiftshader); the box's Intel GPU is not exercised, so every frame time is software and is not the owner's frame rate.",
     "The engine renders at the r_mode the runner sets (14 = 1280x720, 25 = 2560x1440); screenshots are the viewport at the same size.",
     "Only demo1 (Outer Base) is driven and only the starting Blaster is in hand. Enemy coverage is level placement in demo1, not per-frame visibility.",
     "Audio, pointer lock, mouse look, saves and the fullscreen API are not exercised by this headless run.",

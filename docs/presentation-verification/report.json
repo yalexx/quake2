@@ -1,5 +1,5 @@
 {
-  "at": "2026-10-30T21:08:46.253Z",
+  "at": "2026-10-30T21:41:05.767Z",
   "url": "http://127.0.0.1:4231/apps/quake2/",
   "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-3zv49pxg",
   "node": "v24.22.1",
@@ -18,14 +18,14 @@
     "redirected": false,
     "finalUrl": "http://127.0.0.1:4231/apps/quake2/",
     "type": "text/html; charset=utf-8",
-    "bytes": 6110,
+    "bytes": 6117,
     "filesMatchCheckout": [
       {
         "file": "index.html",
         "same": true,
         "servedStatus": 200,
-        "servedBytes": 6110,
-        "localBytes": 6110
+        "servedBytes": 6117,
+        "localBytes": 6117
       },
       {
         "file": "style.css",
@@ -54,6 +54,27 @@
         "servedStatus": 200,
         "servedBytes": 6812,
         "localBytes": 6812
+      },
+      {
+        "file": "engine-state.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 19873,
+        "localBytes": 19873
+      },
+      {
+        "file": "rtx-materials.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 34706,
+        "localBytes": 34706
+      },
+      {
+        "file": "baseq2/pak10.pak",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 14276256,
+        "localBytes": 14276256
       }
     ]
   },
@@ -64,9 +85,9 @@
   },
   "chrome": {
     "path": "/usr/bin/google-chrome",
-    "debuggingPort": 43455,
+    "debuggingPort": 40667,
     "headless": true,
-    "profile": "/tmp/q2verify-chrome-XbkB9y"
+    "profile": "/tmp/q2verify-chrome-TemB3i"
   },
   "renderer": {
     "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
@@ -78,7 +99,7 @@
   "boot": {
     "label": "1280x720",
     "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
-    "seconds": 3.3,
+    "seconds": 2.1,
     "drawingBuffer": [
       1280,
       720
@@ -118,7 +139,7 @@
     {
       "label": "1280x720",
       "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
-      "seconds": 3.3,
+      "seconds": 2.1,
       "drawingBuffer": [
         1280,
         720
@@ -223,13 +244,19 @@
       "name": "server is serving this checkout",
       "ok": true,
       "expected": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical",
-      "actual": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical"
+      "actual": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js, engine-state.js, rtx-materials.js, baseq2/pak10.pak identical"
     },
     {
       "name": "pak10 covers 13 weapon models and 7 enemy models",
       "ok": true,
       "expected": "13 weapons, 7 enemies",
       "actual": "13 weapons, 7 enemies"
+    },
+    {
+      "name": "blaster skin size is unique among all pak0 model skins",
+      "ok": true,
+      "expected": "296x164 used only by models/weapons/v_blast/skin.pcx",
+      "actual": "296x164 checked against 96 model skins; collisions []"
     },
     {
       "name": "1280x720: game booted into a running engine",
@@ -283,22 +310,10 @@
       "name": "1280x720: demo1 running in game",
       "ok": true,
       "expected": "key_dest game, non-zero position, frames drawn",
-      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":13,\"worldDraws\":5411,\"statusText\":\"Running...\"}"
+      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":4,\"worldDraws\":1631,\"statusText\":\"Running...\"}"
     },
     {
-      "name": "cl_gun is 1",
-      "ok": true,
-      "expected": "1",
-      "actual": "1"
-    },
-    {
-      "name": "a weapon draw is submitted",
-      "ok": true,
-      "expected": "a pak0 weapon skin drawn last before the HUD every frame with cl_gun 1",
-      "actual": "28 weapon-skin draws over 28 frames (1.00/frame); sizes [\"296x164\"] -> [\"Blaster\"]; last-model sizes seen [\"1024x512\",\"296x164\",\"512x512\"]"
-    },
-    {
-      "name": "cl_gun still 1 after the draw check",
+      "name": "1280x720: cl_gun is 1",
       "ok": true,
       "expected": "1",
       "actual": "1"
@@ -430,6 +445,18 @@
       "actual": "20"
     },
     {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "1280x720: a weapon draw is submitted",
+      "ok": true,
+      "expected": "a model draw binds the unique blaster skin every frame",
+      "actual": "32 draws of 296x164 (Blaster) over 32 frames (1.00/frame); last-model sizes seen [\"1024x512\",\"296x164\",\"512x512\"]"
+    },
+    {
       "name": "2560x1440: game booted into a running engine",
       "ok": true,
       "expected": "engine memory readable",
@@ -481,7 +508,7 @@
       "name": "2560x1440: demo1 running in game",
       "ok": true,
       "expected": "key_dest game, non-zero position, frames drawn",
-      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":0,\"worldDraws\":1215,\"statusText\":\"Running...\"}"
+      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":4,\"worldDraws\":1631,\"statusText\":\"Running...\"}"
     },
     {
       "name": "lighting high applied",
@@ -511,7 +538,7 @@
       "name": "weapon geometry drawn at 2560x1440 / high",
       "ok": true,
       "expected": "modelDraws and worldDraws increase in game",
-      "actual": "+85 model draws, +1680 world draws"
+      "actual": "+100 model draws, +1680 world draws"
     },
     {
       "name": "screenshot 2560x1440-high-weapon.png",
@@ -610,9 +637,21 @@
       "actual": "20"
     },
     {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "2560x1440: a weapon draw is submitted",
+      "ok": true,
+      "expected": "a model draw binds the unique blaster skin every frame",
+      "actual": "12 draws of 296x164 (Blaster) over 12 frames (1.00/frame); last-model sizes seen [\"1024x512\",\"512x512\"]"
+    },
+    {
       "name": "no WebGL context lost during the run",
       "ok": true,
-      "expected": "0 context losses",
+      "expected": "0 context losses across every boot",
       "actual": "events 0, isContextLost false"
     },
     {
@@ -629,6 +668,7 @@
     }
   ],
   "notes": [
+    "8 non-fatal WebGL warnings (engine texture setup, recorded in consoleWarnings): [\"WebGL: INVALID_OPERATION: texParameter: no texture bound to target\"]",
     "non-fatal network 404s (optional probes; required files were hashed above): [\"http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak\"]"
   ],
   "consoleWarnings": [
@@ -636,79 +676,79 @@
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-10-30T21:08:46.853Z"
+      "at": "2026-10-30T21:41:06.498Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-10-30T21:08:47.771Z"
+      "at": "2026-10-30T21:41:07.841Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:08:47.815Z"
+      "at": "2026-10-30T21:41:07.884Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:08:47.815Z"
+      "at": "2026-10-30T21:41:07.885Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:08:47.815Z"
+      "at": "2026-10-30T21:41:07.885Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:08:47.816Z"
+      "at": "2026-10-30T21:41:07.885Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-10-30T21:10:43.225Z"
+      "at": "2026-10-30T21:42:46.922Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-10-30T21:10:44.049Z"
+      "at": "2026-10-30T21:42:47.866Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:10:44.088Z"
+      "at": "2026-10-30T21:42:47.938Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:10:44.088Z"
+      "at": "2026-10-30T21:42:47.938Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:10:44.089Z"
+      "at": "2026-10-30T21:42:47.938Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-10-30T21:10:44.090Z"
+      "at": "2026-10-30T21:42:47.938Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-10-30T21:11:01.409Z"
+      "at": "2026-10-30T21:43:11.695Z"
     }
   ],
   "consoleErrors": [],
@@ -718,70 +758,251 @@
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-10-30T21:08:47.294Z"
+      "at": "2026-10-30T21:41:07.281Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-10-30T21:08:47.296Z"
+      "at": "2026-10-30T21:41:07.283Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-10-30T21:10:43.628Z"
+      "at": "2026-10-30T21:42:47.363Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-10-30T21:10:43.638Z"
+      "at": "2026-10-30T21:42:47.365Z"
     }
   ],
   "pageErrors": [],
   "webgl": {
+    "pages": [
+      {
+        "resolution": "1280x720",
+        "contextLost": 0,
+        "isContextLost": false
+      },
+      {
+        "resolution": "2560x1440",
+        "contextLost": 0,
+        "isContextLost": false
+      }
+    ],
     "contextLost": 0,
-    "glLost": false
+    "glLost": false,
+    "warnings": [
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:41:07.884Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:41:07.885Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:41:07.885Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:41:07.885Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:42:47.938Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:42:47.938Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:42:47.938Z"
+      },
+      {
+        "type": "log-warning",
+        "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+        "source": "rendering",
+        "at": "2026-10-30T21:42:47.938Z"
+      }
+    ]
   },
+  "webglPages": [
+    {
+      "resolution": "1280x720",
+      "contextLost": 0,
+      "isContextLost": false
+    },
+    {
+      "resolution": "2560x1440",
+      "contextLost": 0,
+      "isContextLost": false
+    }
+  ],
+  "webglWarnings": [
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:41:07.884Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:41:07.885Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:41:07.885Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:41:07.885Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:42:47.938Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:42:47.938Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:42:47.938Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:42:47.938Z"
+    }
+  ],
   "clGun": {
-    "value": "1"
+    "value": "1",
+    "at": "1280x720"
   },
   "weaponDraw": {
-    "clGun": "1",
-    "viewWeaponSkinSizes": [
-      "296x164"
-    ],
+    "label": "1280x720",
+    "clGun": "1 (read on the 1280x720 boot; same app start-up line on this boot)",
+    "viewWeaponSkin": "296x164",
     "viewWeaponCandidates": [
       "Blaster"
     ],
-    "frames": 28,
-    "modelDraws": 84,
+    "frames": 32,
+    "modelDraws": 96,
     "modelDrawsPerFrame": 3,
-    "weaponSkinDraws": 28,
+    "weaponSkinDraws": 32,
     "weaponSkinDrawsPerFrame": 1,
-    "lastModelSkinDraws": {
-      "512x512": 56,
-      "1024x512": 152,
-      "296x164": 96
+    "modelTextureDraws": {
+      "256x256": 768,
+      "1024x512": 1995,
+      "296x164": 360,
+      "288x195": 144,
+      "152x92": 96,
+      "276x194": 95,
+      "512x512": 480,
+      "184x76": 52
     },
-    "weaponSkinSizes": [
-      "216x195",
-      "248x194",
-      "252x194",
-      "264x164",
-      "264x180",
-      "296x164",
-      "296x194",
-      "300x194",
-      "308x181",
-      "308x195"
-    ],
-    "method": "the renderer records the skin size of the last model draw before the HUD in each frame; a size belonging to a pak0 weapon skin is a weapon draw"
+    "lastModelSkinDraws": {
+      "512x512": 48,
+      "1024x512": 360,
+      "296x164": 312
+    },
+    "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
   },
+  "weaponDraws": [
+    {
+      "label": "1280x720",
+      "clGun": "1 (read on the 1280x720 boot; same app start-up line on this boot)",
+      "viewWeaponSkin": "296x164",
+      "viewWeaponCandidates": [
+        "Blaster"
+      ],
+      "frames": 32,
+      "modelDraws": 96,
+      "modelDrawsPerFrame": 3,
+      "weaponSkinDraws": 32,
+      "weaponSkinDrawsPerFrame": 1,
+      "modelTextureDraws": {
+        "256x256": 768,
+        "1024x512": 1995,
+        "296x164": 360,
+        "288x195": 144,
+        "152x92": 96,
+        "276x194": 95,
+        "512x512": 480,
+        "184x76": 52
+      },
+      "lastModelSkinDraws": {
+        "512x512": 48,
+        "1024x512": 360,
+        "296x164": 312
+      },
+      "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
+    },
+    {
+      "label": "2560x1440",
+      "clGun": "1 (read on the 1280x720 boot; same app start-up line on this boot)",
+      "viewWeaponSkin": "296x164",
+      "viewWeaponCandidates": [
+        "Blaster"
+      ],
+      "frames": 12,
+      "modelDraws": 252,
+      "modelDrawsPerFrame": 21,
+      "weaponSkinDraws": 12,
+      "weaponSkinDrawsPerFrame": 1,
+      "modelTextureDraws": {
+        "256x256": 651,
+        "1024x512": 4608,
+        "296x164": 217,
+        "288x195": 651,
+        "152x92": 434,
+        "276x194": 433,
+        "512x512": 2170,
+        "184x76": 52
+      },
+      "lastModelSkinDraws": {
+        "512x512": 217,
+        "1024x512": 217
+      },
+      "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
+    }
+  ],
   "modes": [
     {
       "label": "1280x720/high",
@@ -793,12 +1014,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 300,
-      "p95Ms": 333.3999999999942,
-      "meanMs": 299.15999999999985,
-      "minMs": 166.6999999999971,
-      "maxMs": 333.40000000000873,
-      "fpsMedian": 3.3333333333333335
+      "medianMs": 308.34999999999854,
+      "p95Ms": 333.29999999999563,
+      "meanMs": 310.825,
+      "minMs": 283.29999999999563,
+      "maxMs": 366.70000000000437,
+      "fpsMedian": 3.243067942273406
     },
     {
       "label": "1280x720/performance",
@@ -812,9 +1033,9 @@
       "count": 20,
       "medianMs": 200,
       "p95Ms": 216.6999999999971,
-      "meanMs": 194.99000000000015,
-      "minMs": 66.60000000000582,
-      "maxMs": 250,
+      "meanMs": 193.325,
+      "minMs": 66.59999999999127,
+      "maxMs": 233.3000000000029,
       "fpsMedian": 5
     },
     {
@@ -828,10 +1049,10 @@
       "software": true,
       "count": 20,
       "medianMs": 150,
-      "p95Ms": 166.70000000001164,
-      "meanMs": 148.3300000000003,
-      "minMs": 16.69999999999709,
-      "maxMs": 166.70000000001164,
+      "p95Ms": 166.6999999999971,
+      "meanMs": 148.325,
+      "minMs": 16.5,
+      "maxMs": 183.3000000000029,
       "fpsMedian": 6.666666666666667
     },
     {
@@ -844,12 +1065,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 1299.9500000000044,
-      "p95Ms": 1466.7000000000116,
-      "meanMs": 1326.6150000000002,
-      "minMs": 1266.5999999999913,
-      "maxMs": 1649.8999999999942,
-      "fpsMedian": 0.7692603561675423
+      "medianMs": 1099.949999999997,
+      "p95Ms": 1316.699999999997,
+      "meanMs": 1172.4549999999995,
+      "minMs": 1050,
+      "maxMs": 1333.199999999997,
+      "fpsMedian": 0.9091322332833335
     },
     {
       "label": "2560x1440/performance",
@@ -861,12 +1082,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 866.6000000000058,
-      "p95Ms": 883.3000000000175,
-      "meanMs": 832.4649999999995,
-      "minMs": 700.1000000000058,
-      "maxMs": 900,
-      "fpsMedian": 1.153934918070613
+      "medianMs": 874.9499999999971,
+      "p95Ms": 900,
+      "meanMs": 872.4649999999995,
+      "minMs": 833.2999999999884,
+      "maxMs": 916.6000000000058,
+      "fpsMedian": 1.1429224527115873
     },
     {
       "label": "2560x1440/off",
@@ -878,12 +1099,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 716.6999999999825,
-      "p95Ms": 766.6000000000058,
-      "meanMs": 720.8099999999991,
-      "minMs": 699.8999999999942,
-      "maxMs": 783.2999999999884,
-      "fpsMedian": 1.3952839402818813
+      "medianMs": 591.6499999999942,
+      "p95Ms": 633.3999999999942,
+      "meanMs": 596.65,
+      "minMs": 566.5999999999767,
+      "maxMs": 650,
+      "fpsMedian": 1.6901884560128622
     }
   ],
   "screenshots": [
@@ -891,7 +1112,7 @@
       "file": "docs/presentation-verification/shots/1280x720-high-menu.png",
       "width": 1280,
       "height": 720,
-      "bytes": 200620,
+      "bytes": 200515,
       "view": "main menu",
       "resolution": "1280x720",
       "level": "high",
@@ -901,7 +1122,7 @@
       "file": "docs/presentation-verification/shots/1280x720-high-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1196526,
+      "bytes": 1196447,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "high",
@@ -911,7 +1132,7 @@
       "file": "docs/presentation-verification/shots/1280x720-performance-menu.png",
       "width": 1280,
       "height": 720,
-      "bytes": 201036,
+      "bytes": 200580,
       "view": "main menu",
       "resolution": "1280x720",
       "level": "performance",
@@ -921,7 +1142,7 @@
       "file": "docs/presentation-verification/shots/1280x720-performance-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1201975,
+      "bytes": 1201868,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "performance",
@@ -931,7 +1152,7 @@
       "file": "docs/presentation-verification/shots/1280x720-off-menu.png",
       "width": 1280,
       "height": 720,
-      "bytes": 201946,
+      "bytes": 198610,
       "view": "main menu",
       "resolution": "1280x720",
       "level": "off",
@@ -941,7 +1162,7 @@
       "file": "docs/presentation-verification/shots/1280x720-off-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1202825,
+      "bytes": 1200409,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "off",
@@ -951,7 +1172,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-high-menu.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 575695,
+      "bytes": 575855,
       "view": "main menu",
       "resolution": "2560x1440",
       "level": "high",
@@ -961,7 +1182,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-high-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4919969,
+      "bytes": 4595118,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "high",
@@ -971,7 +1192,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-performance-menu.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 579472,
+      "bytes": 579341,
       "view": "main menu",
       "resolution": "2560x1440",
       "level": "performance",
@@ -981,7 +1202,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-performance-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4588166,
+      "bytes": 4588664,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "performance",
@@ -991,7 +1212,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-off-menu.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 534422,
+      "bytes": 534221,
       "view": "main menu",
       "resolution": "2560x1440",
       "level": "off",
@@ -1001,7 +1222,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-off-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4207930,
+      "bytes": 4204086,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "off",
@@ -1015,6 +1236,8 @@
       "width": 296,
       "height": 164
     },
+    "blasterSkinSizeCollisions": [],
+    "modelSkinCount": 96,
     "weaponSkins": [
       {
         "model": "v_bfg",
@@ -1311,7 +1534,7 @@
     ]
   },
   "limitations": [
-    "Frame times come from headless Chrome on SwiftShader (software rasterisation) when no GPU is reachable; they are labelled software and are not the box GPU's numbers.",
+    "The runner forces headless Chrome onto ANGLE/SwiftShader (--use-angle=swiftshader --enable-unsafe-swiftshader); the box's Intel GPU is not exercised, so every frame time is software and is not the owner's frame rate.",
     "The engine renders at the r_mode the runner sets (14 = 1280x720, 25 = 2560x1440); screenshots are the viewport at the same size.",
     "Only demo1 (Outer Base) is driven and only the starting Blaster is in hand. Enemy coverage is level placement in demo1, not per-frame visibility.",
     "Audio, pointer lock, mouse look, saves and the fullscreen API are not exercised by this headless run.",

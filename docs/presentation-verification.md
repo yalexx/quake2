@@ -10,13 +10,17 @@ The runner is `scripts/verify-presentation.mjs`; the machine-readable result is
 `docs/presentation-verification/report.json`. All screenshots below are inside
 this repository.
 
-- Run: 2026-10-30T21:08Z (`report.json` `at`)
+- Run: 2026-10-30T21:41Z (`report.json` `at`)
 - Branch: `clawbox/run-3zv49pxg`, worktree `.clawbox/worktrees/run-3zv49pxg`
 - Node: v24.22.1
 - Browser: headless Chrome 156.0.8078.47 (`--headless=new`)
-- Renderer: **software** — `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device
-  (Subzero) (0x0000C0DE)), SwiftShader driver)`; every frame-time row is
-  labelled software for that reason
+- Renderer: **software by construction** — the runner starts Chrome with
+  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`, and the
+  page reports `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)
+  (0x0000C0DE)), SwiftShader driver)`. The box does have a GPU (Chrome's log
+  names an `Intel(R) UHD Graphics 620`); this run deliberately does not use it,
+  so every frame-time row is labelled software and no hardware-rendering number
+  was measured.
 - Box display measured with `xrandr --current`:
   `HDMI-A-1 connected 2560x1440+2560+0` → 2560x1440
 
@@ -49,7 +53,7 @@ not 1, no weapon draw, a screenshot of the wrong size, or too few frame samples.
 
 The final run's console output is
 `docs/presentation-verification/logs/final-run.log`; it ends
-`PASS — 72/72 checks`.
+`PASS — 75/75 checks` (then the captured `EXIT=0`).
 
 ## HTTP and boot
 
@@ -57,13 +61,13 @@ The final run's console output is
 |---|---|
 | `GET http://127.0.0.1:4231/apps/quake2/` | **200**, `redirected: false` (0 redirects) |
 | Content-Type | `text/html; charset=utf-8` |
-| Served page | 6,110 B, contains `id="canvas"` |
-| Served checkout | `index.html`, `style.css`, `rtx-renderer.js`, `app.js`, `fullscreen.js` SHA-256 identical to this worktree |
-| Server | already running on 4231 for this run; the runner checked the files instead of starting a second server |
+| Served page | 6,117 B, contains `id="canvas"` |
+| Served checkout | `index.html`, `style.css`, `rtx-renderer.js`, `app.js`, `fullscreen.js`, `engine-state.js`, `rtx-materials.js`, `baseq2/pak10.pak` — served bytes SHA-256 identical to this worktree (index 6,117 B; pak10 14,276,256 B) |
+| Server | already running on 4231 for this run; the runner checked the served bytes instead of starting a second server |
 
 | Boot | Time | Drawing buffer | RTX report |
 |---|---|---|---|
-| 1280x720 (`?+set&r_mode&14&+map&demo1`) | 3.3 s | 1280x720 | `raster-3`, world 4, post 4, model 16 (albedo 14), sky 2, failures `[]` |
+| 1280x720 (`?+set&r_mode&14&+map&demo1`) | 2.1 s | 1280x720 | `raster-3`, world 4, post 4, model 16 (albedo 14), sky 2, failures `[]` |
 | 2560x1440 (`?+set&r_mode&25&+map&demo1`) | 1.8 s | 2560x1440 | same programs, failures `[]` |
 
 The engine's own `r_mode` table is used (14 = 1280x720, 25 = 2560x1440); the
@@ -81,16 +85,16 @@ are **software-rendered** and are not the box GPU's numbers.
 
 | Resolution | Mode | Samples | Median | p95 | Median fps | Renderer |
 |---|---|---:|---:|---:|---:|---|
-| 1280x720 | High | 20 | 300.0 ms | 333.4 ms | 3.33 | software |
+| 1280x720 | High | 20 | 308.3 ms | 333.3 ms | 3.24 | software |
 | 1280x720 | Performance | 20 | 200.0 ms | 216.7 ms | 5.00 | software |
 | 1280x720 | Off | 20 | 150.0 ms | 166.7 ms | 6.67 | software |
-| 2560x1440 | High | 20 | 1300.0 ms | 1466.7 ms | 0.77 | software |
-| 2560x1440 | Performance | 20 | 866.6 ms | 883.3 ms | 1.15 | software |
-| 2560x1440 | Off | 20 | 716.7 ms | 766.6 ms | 1.40 | software |
+| 2560x1440 | High | 20 | 1099.9 ms | 1316.7 ms | 0.91 | software |
+| 2560x1440 | Performance | 20 | 874.9 ms | 900.0 ms | 1.14 | software |
+| 2560x1440 | Off | 20 | 591.6 ms | 633.4 ms | 1.69 | software |
 
-For completeness, the min/max of the 20 samples: 1280 High 166.7/333.4,
-1280 Performance 66.6/250.0, 1280 Off 16.7/166.7; 2560 High 1266.6/1649.9,
-2560 Performance 700.1/900.0, 2560 Off 699.9/783.3 ms. High costs more than
+For completeness, the min/max of the 20 samples: 1280 High 283.3/366.7,
+1280 Performance 66.6/233.3, 1280 Off 16.5/183.3; 2560 High 1050.0/1333.2,
+2560 Performance 833.3/916.6, 2560 Off 566.6/650.0 ms. High costs more than
 Performance and Off costs least at both sizes, as expected; the absolute values
 are SwiftShader, not the GPU.
 
@@ -117,15 +121,23 @@ prompt; Off is visibly flatter and dimmer than the RTX modes.
 ## Weapon draw, not just `cl_gun`
 
 `cl_gun 1` says the view weapon should be drawn; the run also proves a draw was
-submitted. The renderer records the skin size of the **last model draw before
-the first 2D (HUD) draw of each frame** — the engine draws the view weapon after
-every entity and the HUD after that. The blaster's skin is `296x164`, a size no
-other weapon or monster skin in `pak0` uses.
+submitted. The renderer records every texture size bound by a model-shader draw.
+The blaster view model's skin is `296x164`, checked **unique among all 96 model
+skins in `pak0`** (weapons, monsters and items) — so a model draw binding that
+texture is the `v_blast` view model, not a monster, item or wall texture.
 
-Result: `cl_gun` = 1, last-model skin `296x164`, **28 weapon-skin draws over 28
-frames = 1.00 per frame**, candidate **Blaster**. The same renderer counted 84
-model draws over the same 28 frames, so the weapon draw is one named draw among
-the scene's models, not a stand-in for “models were drawn”.
+Results, checked after the three lighting modes had run at each size:
+
+- 1280x720: **32 draws of `296x164` over 32 frames = 1.00 per frame**, candidate
+  **Blaster**.
+- 2560x1440: **12 draws of `296x164` over 12 frames = 1.00 per frame**, candidate
+  **Blaster**.
+
+`cl_gun` was read as 1 on the 1280x720 boot; the 2560x1440 boot is the same app
+and start-up line (`+set cl_gun 1`) and draws the same named skin. At 2560 the
+engine draws another model after the view weapon before the HUD, so a test that
+looked only at the last model before the HUD would miss the weapon; the unique
+skin size does not depend on draw order.
 
 ## Merge and preserved work
 
@@ -137,7 +149,10 @@ The work branch was first fast-forwarded onto the live line
 - **`index.html`** — the source branch's dark UI (boot plate, `#ui`, menu/pause
   panel, options with Off/Performance/High) plus the live line's fullscreen
   button and hint, `fullscreen.js`, and a single `?v=rtx5` cache-bust on the
-  stylesheet and all four scripts.
+  stylesheet and all five scripts. `engine-state.js` now carries the tag too:
+  it is the script whose WASM offsets `read()` depends on, and the server caches
+  non-HTML for an hour, so leaving it unversioned was the one cache-bust gap in
+  the live line.
 - **`style.css`** — the whole dark interface plus the fullscreen control and
   hint rules. The removed `#render-settings` rules were dead: that element no
   longer exists; lighting moved into the menu's Options view.
@@ -221,26 +236,35 @@ node scripts/verify-presentation.mjs --url http://127.0.0.1:4231/apps/quake2/ --
 Result: **exit code 1**, stopping at the first required evidence:
 
 ```
-FAIL cl_gun is 1 — 0 (expected 1)
-verification failed: cl_gun is "0", not 1 — no weapon is drawn in hand
-FAIL — 15/16 checks; report docs/presentation-verification/report.json
+FAIL 1280x720: cl_gun is 1 — 0 (expected 1)
+verification failed: 1280x720: cl_gun is "0", not 1 — no weapon is drawn in hand
+FAIL — 16/17 checks; report docs/presentation-verification/report.json
 ```
 
 The full output is `docs/presentation-verification/logs/cl-gun-0-failure.log`
 (it ends with the captured `EXIT=1`). `app.js` was restored to `cl_gun 1`, the
 server re-served the restored file (the runner checks the served bytes against
-the worktree), and the final run above passed 72/72 at both resolutions.
+the worktree), and the final run above passed 75/75 at both resolutions.
 
 ## Not verified / limitations
 
-- **Software rendering only.** The headless browser had no GPU; SwiftShader's
-  numbers are much slower than the kiosk Chrome on the box GPU and must not be
-  read as the owner's frame rate. Every row says software.
+- **Software rendering only, by the runner's choice.** The runner starts Chrome
+  with `--use-angle=swiftshader --enable-unsafe-swiftshader`; the box's Intel
+  UHD Graphics 620 is not exercised. SwiftShader is much slower than the kiosk
+  Chrome on that GPU and must not be read as the owner's frame rate. Every row
+  says software.
 - **Small sample.** 20 rAF intervals give a nearest-rank p95 and a median, not a
   percentile-tail measurement or a distribution.
 - **One level, one weapon in hand.** Only demo1 is driven; the captured weapon
   is the Blaster. The five demo1 pickups are “covered” by placement, not held.
   Enemy coverage is placement in demo1, not per-frame visibility.
+- **Disclosed WebGL warnings.** Each boot logs four
+  `WebGL: INVALID_OPERATION: texParameter: no texture bound to target` warnings
+  from the engine's texture setup (8 across the two boots). They are kept in
+  `report.json` → `webgl.warnings` and `consoleWarnings`; they are not page
+  exceptions, JavaScript console errors, renderer failures or context losses,
+  which are the conditions the run treats as fatal. No WebGL context was lost on
+  either boot (`webgl.pages` both record 0).
 - **Not exercised headless:** audio, pointer lock and mouse look (the prompt is
   visible but no lock is taken), firing, saves/userdata, and the Fullscreen API.
   `fullscreen.js` is present and loaded, and the button renders, but fullscreen
