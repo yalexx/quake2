@@ -51,9 +51,10 @@ any required piece of evidence cannot be produced: no Chrome, no HTTP 200, a
 server serving a different checkout, a boot/renderer failure, a `cl_gun` that is
 not 1, no weapon draw, a screenshot of the wrong size, or too few frame samples.
 
-The final run's console output is
-`docs/presentation-verification/logs/final-run.log`; it ends
-`PASS — 75/75 checks` (then the captured `EXIT=0`).
+The final run's machine-readable result is
+`docs/presentation-verification/report.json`: `ok: true`, 75 checks, 0 failed,
+`fatal: null`. The console transcript of that run was printed to the worker's
+terminal and was not committed as a file; the report is the retained evidence.
 
 ## HTTP and boot
 
@@ -241,10 +242,13 @@ verification failed: 1280x720: cl_gun is "0", not 1 — no weapon is drawn in ha
 FAIL — 16/17 checks; report docs/presentation-verification/report.json
 ```
 
-The full output is `docs/presentation-verification/logs/cl-gun-0-failure.log`
-(it ends with the captured `EXIT=1`). `app.js` was restored to `cl_gun 1`, the
-server re-served the restored file (the runner checks the served bytes against
-the worktree), and the final run above passed 75/75 at both resolutions.
+That transcript was printed to the worker's terminal and was not committed as a
+file. The failure path it exercised is in the runner itself: the `cl_gun is 1`
+check calls `fatal()`, which sets `report.fatal` and throws, so the run ends with
+exit code 1 before any screenshot is taken. `app.js` was restored to `cl_gun 1`,
+the server re-served the restored file (the runner checks the served bytes
+against the worktree), and the final run above passed 75/75 at both resolutions
+with `report.json` as its retained evidence.
 
 ## Not verified / limitations
 
@@ -285,8 +289,8 @@ the worktree), and the final run above passed 75/75 at both resolutions.
 - `scripts/verify-presentation.mjs` — the runner (Node built-ins plus
   `control/bridge.mjs`; no packages).
 - `docs/presentation-verification.md` — this document.
-- `docs/presentation-verification/report.json`, `shots/*.png`, `logs/*.log` —
-  the run's own evidence.
+- `docs/presentation-verification/report.json` and `shots/*.png` — the run's own
+  evidence. (`logs/` is written at run time by the runner and is not committed.)
 - Merge resolutions in `index.html`, `style.css`, `rtx-renderer.js`; `app.js`,
   `style.css`, `index.html`, `scripts/model-geometry.mjs`, `baseq2/pak10.pak`,
   `README.md`, `CHANGELOG.md` carried in from the source branch unchanged where
