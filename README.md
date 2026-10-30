@@ -112,8 +112,8 @@ pak0. A later PAK wins, so the original archive, maps, sounds and every skin in
   the game's own idle/fire/walk frames; frame names, scale and origin are
   untouched and no gameplay state changes. The GL command list is regenerated
   as one fan per face.
-- **Budget** — 20 models: vertices 4,433 → 24,590, triangles 7,991 → 31,964;
-  `pak10.pak` is 13.29 MiB. The largest mesh is the tank at 1,646 vertices; the
+- **Budget** — 20 models: vertices 4,433 → 25,090, triangles 7,991 → 36,252;
+  `pak10.pak` is 13.61 MiB. The largest mesh is the tank at 1,646 vertices; the
   engine refuses a model at 3,399 ("has too many vertices"), so the build stays
   under its cap.
 - **Shading** — `rtx-renderer.js` gained `q2ModelShade`, patched into the

@@ -361,7 +361,10 @@ function buildRefined(model, opts) {
     else note = addMonsterHardware(context);
   }
   const frames = buildFrames(context);
-  const refined = { ...model, tris, st, frames, numXYZ: finalVerts.length };
+  // Hardware builders append their faces to context.tris (a new array, not the
+  // subdivided one), so the model has to take that array -- otherwise the added
+  // vertices would ship with no face referencing them.
+  const refined = { ...model, tris: context.tris, st, frames, numXYZ: finalVerts.length };
   return { model: refined, note };
 }
 
@@ -567,8 +570,9 @@ function addWeaponHardware(context) {
     const radius = Math.max(1.1, Math.min(fb.size[1], fb.size[2]) * 0.4);
     const half = Math.max(1.4, span(0) * 0.06);
     const center = [hi[0] - half * 0.8, fb.center[1], fb.center[2]];
-    cylinder(sub(center, [half, 0, 0]), add(center, [half, 0, 0]), radius + 0.5, 10, patches.metal);
-    cylinder(add(center, [half * 0.9, 0, 0]), add(center, [half * 1.7, 0, 0]), radius + 0.1, 10, patches.steel);
+    // Open rings, not capped discs: the barrel bore has to stay visible.
+    cylinder(sub(center, [half * 0.8, 0, 0]), add(center, [half * 0.8, 0, 0]), radius + 0.22, 10, patches.metal, false);
+    cylinder(add(center, [half * 0.9, 0, 0]), add(center, [half * 1.45, 0, 0]), radius + 0.05, 10, patches.steel, false);
     notes.push("muzzle");
   }
 
@@ -581,8 +585,8 @@ function addWeaponHardware(context) {
     const railX0 = tb.center[0] - tb.size[0] * 0.34;
     const railX1 = tb.center[0] + tb.size[0] * 0.34;
     const railY = tb.center[1];
-    const railZ = tb.hi[2] + 0.3;
-    box([(railX0 + railX1) / 2, railY, railZ], [Math.max(1.2, (railX1 - railX0) / 2), 0, 0], [0, 0.55, 0], [0, 0, 0.26], patches.steel);
+    const railZ = tb.hi[2] + 0.16;
+    box([(railX0 + railX1) / 2, railY, railZ], [Math.max(1.2, (railX1 - railX0) / 2), 0, 0], [0, 0.5, 0], [0, 0, 0.22], patches.steel);
     box([railX1 - 0.3, railY, railZ + 0.8], [0.55, 0, 0], [0, 0.62, 0], [0, 0, 0.7], patches.steel);
     box([railX0 + 0.5, railY, railZ + 0.55], [0.45, 0, 0], [0, 0.5, 0], [0, 0, 0.5], patches.dark);
     notes.push("rail");
@@ -599,11 +603,14 @@ function addWeaponHardware(context) {
     const chosen = sides.filter((t) => Math.sign(t.n[1]) === sideSign);
     const sb = bounds(chosen.flatMap((t) => [t.a, t.b, t.c]));
     const sideY = sideSign > 0 ? sb.hi[1] : sb.lo[1];
-    const xHalf = Math.max(0.8, sb.size[0] * 0.22);
-    const z0 = sb.center[2] - Math.min(2.2, sb.size[2] * 0.22);
-    for (let i = 0; i < 3; i++) {
-      const z = z0 + i * Math.max(0.9, sb.size[2] * 0.12);
-      box([sb.center[0], sideY + sideSign * 0.3, z], [xHalf, 0, 0], [0, 0.3, 0], [0, 0, 0.2], patches.dark);
+    const xHalf = Math.max(0.7, sb.size[0] * 0.16);
+    const zHalf = Math.max(0.65, sb.size[2] * 0.11);
+    // A shallow housing plate ties the ribs to the receiver, so they read as
+    // louvres in a panel rather than three rods stuck to the side.
+    box([sb.center[0], sideY + sideSign * 0.06, sb.center[2]], [xHalf, 0, 0], [0, 0.1, 0], [0, 0, zHalf], patches.metal);
+    for (let i = 0; i < 2; i++) {
+      const z = sb.center[2] - zHalf * 0.42 + i * zHalf * 0.84;
+      box([sb.center[0], sideY + sideSign * 0.19, z], [xHalf * 0.9, 0, 0], [0, 0.14, 0], [0, 0, 0.16], patches.dark);
     }
     notes.push("vents");
   }
@@ -622,7 +629,9 @@ function addWeaponHardware(context) {
       const a = -0.35 + (i / 6) * Math.PI * 1.15;
       arc.push([guardX + Math.cos(a) * radius, guardY, guardZ - Math.sin(a) * radius * 1.15]);
     }
-    tube(arc, 0.3, 5, patches.grip);
+    tube(arc, 0.5, 6, patches.grip);
+    box(arc[0], [0.72, 0, 0], [0, 0.62, 0], [0, 0, 0.55], patches.grip);
+    box(arc[arc.length - 1], [0.72, 0, 0], [0, 0.62, 0], [0, 0, 0.55], patches.grip);
     notes.push("guard");
   }
 
@@ -637,9 +646,12 @@ function addWeaponHardware(context) {
     let floorZ = lo[2] + span(2) * 0.2;
     const near = context.rest.filter((p) => Math.abs(p[0] - x) < span(0) * 0.06 && Math.abs(p[1] - cy) < span(1) * 0.4);
     if (near.length) floorZ = Math.min(...near.map((p) => p[2]));
-    cablePoints.push([x, cy, floorZ - 0.32 - Math.sin(t * Math.PI) * span(2) * 0.04]);
+    cablePoints.push([x, cy, floorZ - 0.22 - Math.sin(t * Math.PI) * span(2) * 0.025]);
   }
-  tube(cablePoints, 0.24, 5, patches.dark);
+  tube(cablePoints, 0.42, 6, patches.dark);
+  for (const index of [0, cablePoints.length - 1]) {
+    box(cablePoints[index], [0.62, 0, 0], [0, 0.62, 0], [0, 0, 0.5], patches.metal);
+  }
   notes.push("cable");
 
   // Bevel strips on the rear edges: low wedges that catch the rim light instead
