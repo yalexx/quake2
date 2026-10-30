@@ -3,23 +3,20 @@
 (() => {
   'use strict';
   const canvas = document.getElementById('canvas');
-  const panel = document.getElementById('render-settings');
-  const toggle = document.getElementById('rtx-toggle');
-  const quality = document.getElementById('rtx-quality');
   const status = document.getElementById('rtx-status');
+  const lightingButtons = Array.from(document.querySelectorAll('[data-lighting]'));
   let saved = {};
   try { saved = JSON.parse(localStorage.getItem('quake2-raster-look') || '{}'); } catch (_) { /* opaque iframe */ }
   const params = new URLSearchParams(location.hash.slice(1));
   let enabled = params.has('rtx') ? params.get('rtx') !== 'off' : saved.enabled !== false;
   let preset = params.get('quality') || saved.quality || 'performance';
   if (!['performance', 'high'].includes(preset)) preset = 'performance';
-  const report = { version: 'raster-2', worldShaders: 0, postShaders: 0, modelShaders: 0, skyShaders: 0,
-    matchedTextures: 0, materials: {}, failures: [], postDraws: 0, worldDraws: 0, modelDraws: 0, skyDraws: 0,
-    uiDraws: 0, fboSkips: 0,
-    supported: false };
+  const report = { version: 'raster-3', worldShaders: 0, postShaders: 0, modelShaders: 0, modelReliefShaders: 0,
+    skyShaders: 0, matchedTextures: 0, materials: {}, failures: [], postDraws: 0, worldDraws: 0, modelDraws: 0,
+    modelTextureDraws: {}, lastModelSkinDraws: {}, skyDraws: 0, uiDraws: 0, fboSkips: 0, supported: false };
   let gl, current, textureUnit = 0, dirty = true, sceneDirty = false, composite = null;
-  let worldThisFrame = false, skyPending = true;
-  const textures = new WeakMap(), programs = new Map(), shaders = new WeakMap(), bound = [];
+  let worldThisFrame = false, skyPending = true, lastModelSkins = [];
+  const textures = new WeakMap(), textureSizes = new WeakMap(), programs = new Map(), shaders = new WeakMap(), bound = [];
   // Per material: specular strength, roughness, fixture emission, relief scale.
   // The albedo relief is inferred from the texture's own luminance; a rougher
   // surface keeps more of it and a polished one flattens it. Nothing here adds
@@ -35,23 +32,28 @@
   // Weapon and monster skins are not in the wall-texture catalog, so they get
   // one restrained sheen rather than a guessed material.
   const MODEL = [0.45, 0.42, 0, 0.80];
+  function statusText() {
+    return report.failures.length ? 'Original renderer · effect unavailable' :
+      !report.supported ? 'Requires the GLES3 renderer' :
+      !enabled ? 'Original lighting' :
+      preset === 'high' ? 'Raster lighting · High · no ray tracing' : 'Raster lighting · Performance · no ray tracing';
+  }
   function update() {
     dirty = true;
-    toggle.checked = enabled;
-    quality.value = preset;
-    quality.disabled = !enabled;
-    status.textContent = report.failures.length ? 'Original renderer · effect unavailable' :
-      !report.supported ? 'Requires the GLES3 renderer' : enabled ? 'Raster lighting · no ray tracing' : 'Original lighting';
+    const active = enabled ? preset : 'off';
+    for (const button of lightingButtons) button.setAttribute('aria-pressed', String(button.dataset.lighting === active));
+    if (status) status.textContent = statusText();
     try { localStorage.setItem('quake2-raster-look', JSON.stringify({ enabled, quality: preset })); } catch (_) { /* optional persistence */ }
   }
   function mode() { return enabled && report.supported && !report.failures.length ? (preset === 'high' ? 2 : 1) : 0; }
-  toggle.addEventListener('change', () => { enabled = toggle.checked; update(); });
-  quality.addEventListener('change', () => { preset = quality.value; update(); });
-  // Keep game keyboard handlers from seeing controls, without stealing gameplay keys.
-  panel.addEventListener('keydown', event => event.stopPropagation());
-  panel.addEventListener('keyup', event => event.stopPropagation());
-  for (const type of ['mousedown','mouseup','click']) panel.addEventListener(type, event => event.stopPropagation());
-  document.addEventListener('pointerlockchange', () => { panel.hidden = document.pointerLockElement === canvas; });
+  for (const button of lightingButtons) {
+    button.addEventListener('click', () => {
+      const value = button.dataset.lighting;
+      enabled = value !== 'off';
+      if (value === 'high' || value === 'performance') preset = value;
+      update();
+    });
+  }
   window.quake2RTX = {
     set(on, level = preset) { enabled = !!on; preset = level === 'high' ? 'high' : 'performance'; update(); return this.status(); },
     status() { return { ...report, enabled: mode() > 0, quality: preset, mode: mode(),
@@ -235,6 +237,34 @@ vec3 q2ModelShade(vec3 rgb) {
   return rgb;
 }
 `;
+  // q2ModelShade: the shader the engine draws every MD2 model with (weapons,
+  // enemies, items) supplies only a texture and a transform -- no normal, no
+  // light. The relief it paints has to come from the albedo itself, so this
+  // derives a tangent-space normal from the skin's own luminance gradient,
+  // adds a key-lit relief term and a restrained painted-metal sheen, then
+  // leaves the engine's gamma and alpha path untouched. Gated by q2Model, which
+  // is 0 whenever the raster look is off, so Off restores the original shader.
+  const modelReliefFunctions = `
+uniform float q2Model;
+vec3 q2ModelShade(vec3 albedo, vec2 uv) {
+  float h = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
+  // Texture gradient -> a bump normal in the skin's own tangent frame. The
+  // clamp keeps a hard texel edge from becoming a spike.
+  float dhx = clamp(dFdx(h), -0.35, 0.35);
+  float dhy = clamp(dFdy(h), -0.35, 0.35);
+  vec3 n = normalize(vec3(-dhx * 2.4, -dhy * 2.4, 1.0));
+  vec3 l = normalize(vec3(-0.42, -0.55, 0.72));
+  float diff = max(dot(n, l), 0.0);
+  float spec = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 26.0);
+  float lum = clamp(h * 1.8, 0.0, 1.0);
+  vec3 tint = mix(vec3(0.74, 0.82, 1.0), vec3(1.08, 0.99, 0.84), lum);
+  albedo *= 0.93 + 0.16 * diff;
+  albedo += tint * spec * (0.05 + 0.13 * lum);
+  float edge = clamp(length(vec2(dhx, dhy)) * 1.8, 0.0, 0.45);
+  albedo += tint * edge * 0.08;
+  return albedo;
+}
+`;
   function transform(source, type) {
     if (type === gl.VERTEX_SHADER && source.includes('passWorldCoord = worldCoord.xyz;') && source.includes('passNormal')) {
       source = source.replace('void main()', 'out vec3 q2ViewDirection;\nvoid main()');
@@ -244,6 +274,12 @@ vec3 q2ModelShade(vec3 rgb) {
     if (type === gl.FRAGMENT_SHADER && source.includes('outColor = lmTex*texel;') && source.includes('passWorldCoord')) {
       return { kind: 'world', source: source.replace('void main()', worldFunctions+'\nvoid main()')
         .replace('outColor = lmTex*texel;', 'outColor = lmTex*texel; if (q2RTX > 0.5) outColor.rgb = q2Surface(texel.rgb,lmTex.rgb);') };
+    }
+    if (type === gl.FRAGMENT_SHADER && source.includes('outColor.a = texel.a*alpha;')
+        && source.includes('outColor.rgb = pow(texel.rgb, vec3(gamma));') && !source.includes('lightmap') && !source.includes('passColor')) {
+      return { kind: 'modelRelief', source: source.replace('void main()', modelReliefFunctions + '\nvoid main()')
+        .replace('outColor.rgb = pow(texel.rgb, vec3(gamma));',
+          'if (q2Model > 0.5) texel.rgb = q2ModelShade(texel.rgb, passTexCoord); outColor.rgb = pow(texel.rgb, vec3(gamma));') };
     }
     if (type === gl.FRAGMENT_SHADER && source.includes('uniform vec4 v_blend;') && source.includes('outColor = res;')) {
       const uv = source.includes('vec2 uv =') ? 'uv' : 'passTexCoord';
@@ -301,30 +337,42 @@ vec3 q2ModelShade(vec3 rgb) {
       }
       const modeLocation = gl.getUniformLocation(program,'q2RTX');
       const materialLocation = gl.getUniformLocation(program,'q2Material');
+      const modelLocation = gl.getUniformLocation(program,'q2Model');
       const skyLocation = gl.getUniformLocation(program,'q2Sky');
       const skyViewportLocation = gl.getUniformLocation(program,'q2SkyViewport');
       const originals = gl.getAttachedShaders(program).map(shader => shaders.get(shader)?.original || '');
       const is2D = originals.some(source => /uniform\s+uni2D\b/.test(source));
+      // Two model shader variants are patched: the one the live line shaded
+      // from vertex normals ("model"), and the one the rebuilt pak10 meshes
+      // use, which has no normal and is shaded from its albedo ("modelRelief").
       const isModel = originals.some(source => source.includes('texel *= min(vec4(1.5), passColor);'));
       const kind = skyLocation ? 'sky' : isModel && materialLocation ? 'model' :
+        modelLocation ? 'modelRelief' :
         materialLocation ? 'world' : modeLocation ? 'post' : is2D ? 'ui' : 'original';
-      programs.set(program,{ kind, modeLocation, materialLocation, skyLocation, skyViewportLocation,
-        lastMode: -1, lastTexture: null, lastSky: -1 });
+      programs.set(program,{ kind, modeLocation, materialLocation, modelLocation, skyLocation, skyViewportLocation,
+        lastMode: -1, lastModel: -1, lastTexture: null, lastSky: -1 });
       if (kind === 'world') report.worldShaders++;
       if (kind === 'post') report.postShaders++;
       if (kind === 'model') report.modelShaders++;
+      if (kind === 'modelRelief') { report.modelShaders++; report.modelReliefShaders++; }
       if (kind === 'sky') report.skyShaders++;
       report.supported = report.worldShaders > 0 && report.postShaders > 0;
       update();
     };
     gl.deleteProgram = program => { programs.delete(program); native.deleteProgram(program); };
     gl.useProgram = program => { current = programs.get(program); native.useProgram(program); dirty = true; };
-    gl.clear = (...args) => { sceneDirty = false; worldThisFrame = false; skyPending = true; return native.clear(...args); };
+    gl.clear = (...args) => { sceneDirty = false; worldThisFrame = false; skyPending = true; lastModelSkins = []; return native.clear(...args); };
     gl.activeTexture = unit => { textureUnit = unit-gl.TEXTURE0; native.activeTexture(unit); };
     gl.bindTexture = (target, texture) => { if (target === gl.TEXTURE_2D) { bound[textureUnit] = texture; dirty = true; } native.bindTexture(target,texture); };
     gl.texImage2D = function (...args) {
       native.texImage2D(...args);
       const [target,level,,width,height,,format,type,pixels,offset=0] = args;
+      // Remember every 2D level-0 upload's size: a model draw's bound texture
+      // is the skin it was uploaded from, and the runner uses the weapon skin's
+      // own size to tell a weapon draw from a world draw.
+      if (target === gl.TEXTURE_2D && level === 0 && width > 0 && height > 0 && bound[textureUnit]) {
+        textureSizes.set(bound[textureUnit], width + 'x' + height);
+      }
       if (target !== gl.TEXTURE_2D || level !== 0 || format !== gl.RGBA || type !== gl.UNSIGNED_BYTE || !ArrayBuffer.isView(pixels)) return;
       const bytes = new Uint8Array(pixels.buffer,pixels.byteOffset+offset*pixels.BYTES_PER_ELEMENT);
       if (bytes.length < width*height*4) return;
@@ -336,8 +384,33 @@ vec3 q2ModelShade(vec3 rgb) {
         report.matchedTextures++; report.materials[material[1]]=(report.materials[material[1]]||0)+1;
       }
     };
+    // Which skin size the engine bound for a model draw. The view weapon's
+    // skin has its own size, so the runner can name the draw instead of just
+    // counting models.
+    function noteModelTexture() {
+      // Which skins are bound for this model draw, across every texture unit:
+      // the engine does not promise the skin is on unit 0.
+      const sizes = [];
+      for (const texture of bound) {
+        if (!texture) continue;
+        const size = textureSizes.get(texture);
+        if (size) sizes.push(size);
+      }
+      if (!sizes.length) return;
+      lastModelSkins = [...new Set(sizes)];
+      for (const size of lastModelSkins) {
+        report.modelTextureDraws[size] = (report.modelTextureDraws[size] || 0) + 1;
+      }
+    }
     function uniforms() {
       if (current?.kind === 'ui') {
+        // The engine draws the view weapon after every entity and the HUD
+        // after that, so the first 2D draw of a frame names the skins of the
+        // model drawn last: the gun in hand when cl_gun is 1.
+        for (const size of lastModelSkins) {
+          report.lastModelSkinDraws[size] = (report.lastModelSkinDraws[size] || 0) + 1;
+        }
+        lastModelSkins = [];
         report.uiDraws++;
         if (sceneDirty) {
           sceneDirty = false;
@@ -346,6 +419,18 @@ vec3 q2ModelShade(vec3 rgb) {
             else finishScene();
           }
         }
+      }
+      if (current?.kind === 'modelRelief') {
+        // The albedo-relief model shader has no q2RTX uniform of its own
+        // (adding one would make it look like the post-program to the
+        // classifier); q2Model carries the same on/off and gates
+        // q2ModelShade in the fragment.
+        const value = mode() > 0 ? 1 : 0;
+        if (current.lastModel !== value) { gl.uniform1f(current.modelLocation,value); current.lastModel = value; }
+        report.modelDraws++;
+        noteModelTexture();
+        sceneDirty = true;
+        return;
       }
       if (!current || !current.modeLocation) return;
       const value = mode();
@@ -366,7 +451,7 @@ vec3 q2ModelShade(vec3 rgb) {
       dirty=false;
       if (current.kind==='post') { report.postDraws++; sceneDirty=false; }
       else if (current.kind==='sky') { report.skyDraws++; }
-      else if (current.kind==='model') { report.modelDraws++; sceneDirty=true; }
+      else if (current.kind==='model') { report.modelDraws++; noteModelTexture(); sceneDirty=true; }
       else if (current.kind==='world') { report.worldDraws++; sceneDirty=true; worldThisFrame=true; }
     }
     gl.drawElements = (...args) => { uniforms(); return native.drawElements(...args); };

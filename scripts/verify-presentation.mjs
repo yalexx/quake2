@@ -1,0 +1,1134 @@
+#!/usr/bin/env node
+// Acceptance runner for what the owner sees: the ClawBox Quake 2 app served at
+// http://127.0.0.1:4231/apps/quake2/, booting straight into the game, drawing a
+// weapon in hand (cl_gun 1) and rendering the dark interface in RTX High,
+// Performance and Off at 1280x720 and at the box display's measured resolution.
+//
+// Node built-ins plus the repo's own control/bridge.mjs; no packages. It starts
+// headless Chrome itself (SwiftShader when no GPU is reachable), drives the page
+// over the Chrome DevTools Protocol, reads cvars through the engine's console
+// via QuakeControl, measures rAF frame times, and writes every screenshot and
+// the JSON report inside the repo.
+//
+//   node scripts/verify-presentation.mjs [--url URL] [--out DIR] [--frames N]
+//
+// It exits 0 only when every required piece of evidence was produced and every
+// check passed; a missing browser, a refused HTTP target, a mismatched checkout,
+// a boot/renderer failure, a cl_gun that is not 1, a missing weapon draw, a
+// failed screenshot or too few frame samples all exit non-zero.
+//
+// The runner never edits the app. With cl_gun forced to 0 in app.js it stops at
+// the cl_gun check and exits 1 — that is the failure path this file proves.
+
+import crypto from "node:crypto";
+import fs from "node:fs";
+import fsp from "node:fs/promises";
+import net from "node:net";
+import os from "node:os";
+import path from "node:path";
+import { execFileSync, spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { QuakeControl } from "../control/bridge.mjs";
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const DEFAULT_URL = "http://127.0.0.1:4231/apps/quake2/";
+const GAME_MARK = "/apps/quake2/";
+const LIGHT_LEVELS = ["high", "performance", "off"];
+const MODE_NUMBERS = { high: 2, performance: 1, off: 0 };
+// The engine's own r_mode table (strings in engine/index.wasm):
+// 14 = 1280x720, 17 = 1366x768, 24 = 2560x1080, 25 = 2560x1440, 26 = 2560x1600.
+const R_MODES = { "1280x720": 14, "1366x768": 17, "2560x1080": 24, "2560x1440": 25, "2560x1600": 26 };
+const WEAPON_NAMES = {
+  v_blast: ["Blaster", "weapon_blaster"],
+  v_shotg: ["Shotgun", "weapon_shotgun"],
+  v_shotg2: ["Super Shotgun", "weapon_supershotgun"],
+  v_machn: ["Machinegun", "weapon_machinegun"],
+  v_chain: ["Chaingun", "weapon_chaingun"],
+  v_launch: ["Grenade Launcher", "weapon_grenadelauncher"],
+  v_rocket: ["Rocket Launcher", "weapon_rocketlauncher"],
+  v_rail: ["Railgun", "weapon_railgun"],
+  v_hyperb: ["HyperBlaster", "weapon_hyperblaster"],
+  v_bfg: ["BFG10K", "weapon_bfg"],
+  v_disint: ["Disintegrator", null],
+  v_flareg: ["Flare Gun", null],
+  v_handgr: ["Hand Grenades", null],
+};
+const ENEMY_NAMES = {
+  berserk: ["Berserker", ["monster_berserk"]],
+  flyer: ["Flyer", ["monster_flyer"]],
+  gunner: ["Gunner", ["monster_gunner"]],
+  infantry: ["Infantry", ["monster_infantry"]],
+  parasite: ["Parasite", ["monster_parasite"]],
+  soldier: ["Soldier", ["monster_soldier", "monster_soldier_light", "monster_soldier_ss"]],
+  tank: ["Tank", ["monster_tank"]],
+};
+
+const options = {
+  url: DEFAULT_URL,
+  out: path.join(ROOT, "docs", "presentation-verification"),
+  frames: 20,
+};
+const argv = process.argv.slice(2);
+for (let i = 0; i < argv.length; i++) {
+  if (argv[i] === "--url") options.url = argv[++i];
+  else if (argv[i] === "--out") options.out = path.resolve(argv[++i]);
+  else if (argv[i] === "--frames") options.frames = Number(argv[++i]);
+  else if (argv[i] === "--help" || argv[i] === "-h") {
+    console.log("verify-presentation.mjs [--url URL] [--out DIR] [--frames N]");
+    process.exit(0);
+  } else {
+    console.error("unknown option: " + argv[i]);
+    process.exit(2);
+  }
+}
+if (!Number.isFinite(options.frames) || options.frames < 10) {
+  console.error("--frames must be at least 10 (p95 needs a real sample)");
+  process.exit(2);
+}
+const OUT = options.out;
+const SHOTS = path.join(OUT, "shots");
+const LOGS = path.join(OUT, "logs");
+const target = new URL(options.url);
+const targetPort = Number(process.env.PORT || target.port || 80);
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const report = {
+  at: new Date().toISOString(),
+  url: options.url,
+  checkout: ROOT,
+  node: process.version,
+  platform: os.platform() + " " + os.release(),
+  display: null,
+  http: null,
+  server: null,
+  chrome: null,
+  renderer: null,
+  boot: null,
+  boots: [],
+  checks: [],
+  notes: [],
+  consoleWarnings: [],
+  consoleErrors: [],
+  networkErrors: [],
+  pageErrors: [],
+  webgl: { contextLost: 0, glError: null },
+  clGun: null,
+  weaponDraw: null,
+  modes: [],
+  screenshots: [],
+  coverage: null,
+  limitations: [],
+  fatal: null,
+  ok: false,
+};
+
+function check(name, ok, expected, actual, detail) {
+  const entry = { name, ok: Boolean(ok), expected, actual, ...(detail ? { detail } : {}) };
+  report.checks.push(entry);
+  console.log((ok ? "  ok   " : "  FAIL ") + name + " — " + actual + (ok ? "" : " (expected " + expected + ")"));
+  return Boolean(ok);
+}
+function note(text) {
+  report.notes.push(text);
+  console.log("  note " + text);
+}
+class Fatal extends Error {}
+function fatal(message) {
+  report.fatal = message;
+  throw new Fatal(message);
+}
+async function withTimeout(promise, ms, what) {
+  let timer;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(what + " timed out after " + ms + " ms")), ms);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+async function waitFor(fn, timeoutMs, intervalMs, what) {
+  const started = Date.now();
+  let last = null;
+  while (Date.now() - started < timeoutMs) {
+    try {
+      last = await fn();
+      if (last) return last;
+    } catch (error) {
+      last = String(error.message || error);
+    }
+    await sleep(intervalMs);
+  }
+  throw new Error(what + " did not happen within " + timeoutMs + " ms" + (last ? " (last: " + JSON.stringify(last) + ")" : ""));
+}
+
+// ---- HTTP target ---------------------------------------------------------
+
+async function fetchManual(url) {
+  try {
+    return await fetch(url, { redirect: "manual", signal: AbortSignal.timeout(15000) });
+  } catch (error) {
+    return null;
+  }
+}
+function sha256(buffer) {
+  return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+async function ensureServer() {
+  let response = await fetchManual(options.url);
+  if (!response) {
+    console.log("  starting node server.js on port " + targetPort);
+    const log = fs.openSync(path.join(LOGS, "server.log"), "a");
+    const child = spawn(process.execPath, ["server.js"], {
+      cwd: ROOT,
+      env: { ...process.env, PORT: String(targetPort) },
+      stdio: ["ignore", log, log],
+    });
+    serverChild = child;
+    let exited = null;
+    child.once("exit", (code, signal) => { exited = { code, signal }; });
+    try {
+      await waitFor(async () => {
+        if (exited) throw new Error("server.js exited (" + JSON.stringify(exited) + ")");
+        response = await fetchManual(options.url);
+        return response && response.status === 200;
+      }, 30000, 500, "the app server on port " + targetPort);
+    } catch (error) {
+      fatal("could not start the app server: " + error.message);
+    }
+    report.server = { started: true, port: targetPort, pid: child.pid, log: path.join(LOGS, "server.log") };
+  } else {
+    report.server = { started: false, port: targetPort, note: "a server was already listening; its files are checked below" };
+  }
+  if (!response) fatal("no HTTP response from " + options.url);
+  const body = await response.text();
+  report.http = {
+    url: options.url,
+    status: response.status,
+    redirected: response.redirected,
+    finalUrl: response.url,
+    type: response.headers.get("content-type") || "",
+    bytes: Buffer.byteLength(body),
+  };
+  check("HTTP 200 at " + options.url, response.status === 200, 200, String(response.status));
+  check("0 redirects", response.status === 200 && response.redirected === false, "200 with no redirect", "status " + response.status + ", redirected " + response.redirected);
+  check("served as text/html", /text\/html/i.test(report.http.type), "text/html", report.http.type || "(none)");
+  check("served page has the game canvas", /id=["']canvas["']/.test(body), "a canvas element", /id=["']canvas["']/.test(body) ? "present" : "missing");
+  if (response.status !== 200) fatal("the acceptance target did not answer 200");
+
+  // The 4231 port can outlive a run and still serve another checkout. Prove
+  // that what the browser will load is this working tree, file by file.
+  const compared = [];
+  for (const file of ["index.html", "style.css", "rtx-renderer.js", "app.js", "fullscreen.js"]) {
+    const served = await fetchManual(new URL(file, options.url));
+    const servedBytes = served ? Buffer.from(await served.arrayBuffer()) : Buffer.alloc(0);
+    const localBytes = fs.readFileSync(path.join(ROOT, file));
+    const same = served && served.status === 200 && sha256(servedBytes) === sha256(localBytes);
+    compared.push({ file, same, servedStatus: served ? served.status : null, servedBytes: servedBytes.length, localBytes: localBytes.length });
+    if (!same) {
+      fatal("the server at " + options.url + " is not serving this checkout: " + file +
+        " differs (served " + (served ? served.status : "no response") + ", " + servedBytes.length +
+        " B; local " + localBytes.length + " B). Stop the other server or start node server.js here.");
+    }
+  }
+  report.http.filesMatchCheckout = compared;
+  check("server is serving this checkout", compared.every((one) => one.same), "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical", compared.map((one) => one.file).join(", ") + " identical");
+}
+
+// ---- Display -------------------------------------------------------------
+
+function measureDisplay() {
+  const env = { ...process.env, DISPLAY: process.env.DISPLAY || ":0" };
+  let raw;
+  try {
+    raw = execFileSync("xrandr", ["--current"], { encoding: "utf8", env, timeout: 8000, stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    fatal("could not measure the box display with xrandr: " + String(error.message || error));
+  }
+  const lines = raw.split("\n");
+  let best = null;
+  for (const line of lines) {
+    if (!/\bconnected\b/.test(line)) continue;
+    const m = /(\d+)x(\d+)\+(\d+)\+(\d+)/.exec(line);
+    if (!m) continue;
+    const candidate = { width: Number(m[1]), height: Number(m[2]), x: Number(m[3]), y: Number(m[4]), line: line.trim() };
+    if (!best || candidate.width * candidate.height > best.width * best.height) best = candidate;
+  }
+  if (!best) {
+    const m = /current (\d+) x (\d+)/.exec(raw);
+    if (!m) fatal("xrandr reported no connected output and no current screen size");
+    best = { width: Number(m[1]), height: Number(m[2]), x: 0, y: 0, line: m[0] };
+  }
+  report.display = { ...best, source: "xrandr --current" };
+  console.log("  display " + best.width + "x" + best.height + " (" + best.line + ")");
+  return { label: best.width + "x" + best.height, width: best.width, height: best.height };
+}
+
+// ---- Chrome + CDP --------------------------------------------------------
+
+class Cdp {
+  constructor(wsUrl) {
+    this.wsUrl = wsUrl;
+    this.id = 0;
+    this.pending = new Map();
+    this.handlers = new Map();
+    this.ws = null;
+  }
+  async open() {
+    this.ws = new WebSocket(this.wsUrl);
+    await new Promise((resolve, reject) => {
+      this.ws.addEventListener("open", resolve, { once: true });
+      this.ws.addEventListener("error", () => reject(new Error("CDP WebSocket error")), { once: true });
+    });
+    this.ws.addEventListener("message", (event) => {
+      let message;
+      try { message = JSON.parse(typeof event.data === "string" ? event.data : Buffer.from(event.data).toString("utf8")); }
+      catch { return; }
+      if (message.id && this.pending.has(message.id)) {
+        const entry = this.pending.get(message.id);
+        this.pending.delete(message.id);
+        clearTimeout(entry.timer);
+        if (message.error) entry.reject(new Error(JSON.stringify(message.error)));
+        else entry.resolve(message.result);
+        return;
+      }
+      const list = this.handlers.get(message.method);
+      if (list) for (const fn of list) fn(message.params || {});
+    });
+  }
+  on(method, fn) {
+    if (!this.handlers.has(method)) this.handlers.set(method, []);
+    this.handlers.get(method).push(fn);
+  }
+  send(method, params = {}, timeoutMs = 45000) {
+    return new Promise((resolve, reject) => {
+      const id = ++this.id;
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error("CDP " + method + " timed out after " + timeoutMs + " ms"));
+      }, timeoutMs);
+      this.pending.set(id, { resolve, reject, timer });
+      this.ws.send(JSON.stringify({ id, method, params }));
+    });
+  }
+  close() {
+    try { this.ws.close(); } catch { /* already closed */ }
+  }
+}
+
+function findChrome() {
+  const candidates = [
+    process.env.CHROME_PATH,
+    "/usr/bin/google-chrome",
+    "/usr/bin/google-chrome-stable",
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/snap/bin/chromium",
+  ].filter(Boolean);
+  for (const candidate of candidates) if (fs.existsSync(candidate)) return candidate;
+  fatal("no Chrome/Chromium found (set CHROME_PATH)");
+}
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      const port = server.address().port;
+      server.close(() => resolve(port));
+    });
+  });
+}
+async function startChrome() {
+  const chromePath = findChrome();
+  const debuggingPort = await freePort();
+  const profile = fs.mkdtempSync(path.join(os.tmpdir(), "q2verify-chrome-"));
+  const args = [
+    "--headless=new",
+    "--no-sandbox",
+    "--use-gl=angle",
+    "--use-angle=swiftshader",
+    "--enable-unsafe-swiftshader",
+    "--remote-debugging-address=127.0.0.1",
+    "--remote-debugging-port=" + debuggingPort,
+    "--user-data-dir=" + profile,
+    "--window-size=1280,720",
+    "--hide-scrollbars",
+    "--no-first-run",
+    "--no-default-browser-check",
+    "--disable-infobars",
+    "--disable-features=Translate,MediaRouter",
+    "--autoplay-policy=no-user-gesture-required",
+    "--disable-background-timer-throttling",
+    "--disable-renderer-backgrounding",
+    "--disable-backgrounding-occluded-windows",
+    "--disable-dev-shm-usage",
+    "--mute-audio",
+    "about:blank",
+  ];
+  const stdout = fs.openSync(path.join(LOGS, "chrome.log"), "a");
+  const stderr = fs.openSync(path.join(LOGS, "chrome.log"), "a");
+  const child = spawn(chromePath, args, { stdio: ["ignore", stdout, stderr] });
+  chromeChild = { child, profile };
+  const base = "http://127.0.0.1:" + debuggingPort;
+  await waitFor(async () => {
+    if (child.exitCode !== null) throw new Error("Chrome exited with code " + child.exitCode);
+    try {
+      const response = await fetch(base + "/json/version", { signal: AbortSignal.timeout(2000) });
+      return response.ok ? await response.json() : null;
+    } catch { return null; }
+  }, 30000, 300, "headless Chrome's CDP endpoint");
+  report.chrome = { path: chromePath, debuggingPort, headless: true, profile };
+  return { base, child };
+}
+async function connectPage(base) {
+  const targets = await fetch(base + "/json/list").then((response) => response.json());
+  const page = targets.find((one) => one.type === "page" && one.webSocketDebuggerUrl);
+  if (!page) fatal("headless Chrome has no page target to drive");
+  const cdp = new Cdp(page.webSocketDebuggerUrl);
+  await cdp.open();
+  cdp.on("Runtime.consoleAPICalled", (params) => {
+    const text = (params.args || []).map((arg) => (arg.value !== undefined ? String(arg.value) : arg.description || arg.type || "")).join(" ");
+    const entry = { type: params.type, text, at: new Date().toISOString() };
+    if (params.type === "error" || params.type === "assert") report.consoleErrors.push(entry);
+    else if (params.type === "warning") report.consoleWarnings.push(entry);
+  });
+  cdp.on("Runtime.exceptionThrown", (params) => {
+    const details = params.exceptionDetails || {};
+    report.pageErrors.push({
+      text: details.exception && details.exception.description ? details.exception.description : details.text,
+      url: details.url,
+      line: details.lineNumber,
+      at: new Date().toISOString(),
+    });
+  });
+  cdp.on("Log.entryAdded", (params) => {
+    const entry = params.entry || {};
+    if (entry.level === "error") {
+      const record = { type: "log-error", text: entry.text, source: entry.source, url: entry.url || null, at: new Date().toISOString() };
+      // A 404 for an optional probe is not a fatal page error: the required
+      // app files are fetched and hashed by ensureServer, and a missing one of
+      // those fails boot. Network errors are kept on the record, not hidden.
+      if (entry.source === "network" || /Failed to load resource.*404/i.test(entry.text)) report.networkErrors.push(record);
+      else report.consoleErrors.push(record);
+    } else if (entry.level === "warning") {
+      report.consoleWarnings.push({ type: "log-warning", text: entry.text, source: entry.source, at: new Date().toISOString() });
+    }
+  });
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+  await cdp.send("Log.enable");
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
+    source: `window.__q2verify = { contextLost: 0, contextLostAt: null };
+      document.addEventListener("DOMContentLoaded", function () {
+        var canvas = document.getElementById("canvas");
+        if (!canvas) return;
+        canvas.addEventListener("webglcontextlost", function () {
+          window.__q2verify.contextLost += 1;
+          window.__q2verify.contextLostAt = new Date().toISOString();
+        }, true);
+      });`,
+  });
+  return cdp;
+}
+
+// ---- Page helpers --------------------------------------------------------
+
+async function evaluate(expression, { awaitPromise = false, timeoutMs = 60000 } = {}) {
+  const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise }, timeoutMs);
+  if (result.exceptionDetails) {
+    const text = result.exceptionDetails.exception && result.exceptionDetails.exception.description
+      ? result.exceptionDetails.exception.description : result.exceptionDetails.text;
+    throw new Error("page evaluation failed: " + text);
+  }
+  return result.result ? result.result.value : undefined;
+}
+function state() {
+  return evaluate(`(() => {
+    const canvas = document.getElementById("canvas");
+    let gl = null;
+    try { gl = canvas && canvas.getContext("webgl2"); } catch (error) { gl = null; }
+    const loading = document.getElementById("loading");
+    return {
+      readyState: document.readyState,
+      canvas: Boolean(canvas),
+      gl2: Boolean(gl),
+      drawingBuffer: gl ? [gl.drawingBufferWidth, gl.drawingBufferHeight] : null,
+      contextLost: gl ? gl.isContextLost() : null,
+      rtx: window.quake2RTX && window.quake2RTX.status ? window.quake2RTX.status() : null,
+      engine: window.quake2Engine && window.quake2Engine.read ? window.quake2Engine.read() : null,
+      loadingHidden: loading ? loading.hidden : null,
+      statusText: document.getElementById("status") ? document.getElementById("status").textContent : "",
+      detailText: document.getElementById("detail") ? document.getElementById("detail").textContent : "",
+      menuHidden: document.getElementById("menu-layer") ? document.getElementById("menu-layer").hidden : null,
+      verify: window.__q2verify || null,
+    };
+  })()`);
+}
+async function status() {
+  return evaluate("window.quake2RTX.status()");
+}
+async function waitFrames(count, timeoutMs = 45000) {
+  return evaluate(`new Promise((resolve) => {
+    let seen = 0, done = false;
+    function step() {
+      if (done) return;
+      seen += 1;
+      if (seen >= ${count}) { done = true; resolve(seen); return; }
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+    setTimeout(() => { if (!done) { done = true; resolve(seen); } }, ${timeoutMs});
+  })`, { awaitPromise: true, timeoutMs: timeoutMs + 10000 });
+}
+async function pressEscape() {
+  const key = { key: "Escape", code: "Escape", windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 };
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...key });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+}
+async function click(selector) {
+  return evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) return false;
+    element.click();
+    return true;
+  })()`);
+}
+async function openMenu() {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const now = await state();
+    if (now.engine && now.engine.keyDestName === "menu" && now.menuHidden === false) return true;
+    await pressEscape();
+    await sleep(1500);
+    const after = await state();
+    if (after.engine && after.engine.keyDestName === "menu" && after.menuHidden === false) return true;
+    if (after.engine && after.engine.keyDestName === "menu" && after.menuHidden === true) {
+      // The engine is already at its menu; give the page's UI loop a moment.
+      await sleep(1500);
+      const settled = await state();
+      if (settled.menuHidden === false) return true;
+    }
+  }
+  return false;
+}
+async function resume() {
+  if (!(await click('[data-action="resume"]'))) throw new Error("the Resume button is not in the page");
+  await waitFor(async () => {
+    const now = await state();
+    return now.engine && now.engine.keyDestName === "game" && now.menuHidden === true;
+  }, 20000, 500, "the game to resume after Resume");
+}
+// The engine console pauses a single-player game; a command it leaves with the
+// menu or console up must be followed by a deliberate return to the game, or
+// "no frames" would be recorded as "no weapon".
+async function ensureGame(context) {
+  let last = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const now = await state();
+    last = { keyDest: now.engine && now.engine.keyDestName, menuHidden: now.menuHidden, consoleOpen: now.engine && now.engine.consoleOpen };
+    if (now.engine && now.engine.keyDestName === "game" && now.menuHidden === true) return true;
+    if (now.menuHidden === false) await click('[data-action="resume"]');
+    else await pressEscape();
+    await sleep(1200);
+  }
+  report.notes.push("could not return to the game after " + context + ": " + JSON.stringify(last));
+  return false;
+}
+
+// ---- Engine console (cvars, r_mode) --------------------------------------
+
+class EngineConsole {
+  constructor(cdpBase) {
+    this.cdpBase = cdpBase;
+    this.control = null;
+  }
+  async connect() {
+    this.control = new QuakeControl({ cdpUrl: this.cdpBase, gameUrlMark: GAME_MARK, timeoutMs: 60000 });
+  }
+  async reconnect() {
+    try { await this.control.close(); } catch { /* already closed */ }
+    this.control = null;
+    await sleep(1200);
+    await this.connect();
+  }
+  // A command that timed out can leave the engine's console up. A fresh
+  // QuakeControl assumes it is down, so its next toggle would close it and type
+  // the command into the game. Close it first, from the page's own reading.
+  async ensureConsoleClosed() {
+    try {
+      const now = await state();
+      if (now.engine && (now.engine.consoleOpen || now.engine.keyDestName === "console")) {
+        await pressEscape();
+        await sleep(900);
+      }
+    } catch { /* the page will report the real failure */ }
+  }
+  async run(text) {
+    if (!this.control) await this.connect();
+    const now = await state();
+    if (!(now.engine && now.engine.keyDestName === "game" && now.menuHidden === true)) {
+      // The dark panel keeps the keyboard while it is up, so a console key
+      // would never reach the engine: get back to the game first.
+      await ensureGame("console command " + text);
+    }
+    await this.ensureConsoleClosed();
+    return withTimeout(this.control.command(text, { tail: 12 }), 90000, "engine console command " + JSON.stringify(text));
+  }
+  async runUntilEcho(text, attempts = 3) {
+    let last = null;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const answer = await this.run(text);
+        last = answer;
+        if (answer.ran && answer.echoFound) return answer;
+      } catch (error) {
+        last = error.message;
+      }
+      await this.reconnect();
+    }
+    throw new Error("engine console never ran " + JSON.stringify(text) + ": " + JSON.stringify(last));
+  }
+  async read(name) {
+    const pattern = new RegExp('"' + name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + '"\\s+is\\s+"([^"]*)"');
+    let last = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        if (!this.control) await this.connect();
+        const now = await state();
+        if (!(now.engine && now.engine.keyDestName === "game")) await ensureGame("console read " + name);
+        await this.ensureConsoleClosed();
+        const answer = await withTimeout(this.control.command(name, { tail: 5 }), 90000, "engine console read " + name);
+        for (const line of answer.output || []) {
+          const match = pattern.exec(line);
+          if (match) return match[1];
+        }
+        last = answer.reason || "no answer line";
+      } catch (error) {
+        last = error.message;
+      }
+      await this.reconnect();
+    }
+    report.notes.push("could not read cvar " + name + ": " + last);
+    return null;
+  }
+  async set(name, value) {
+    let last = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        await this.run(name + " " + value);
+        await sleep(800);
+        const got = await this.read(name);
+        if (got === value) return got;
+        last = "read back " + JSON.stringify(got);
+      } catch (error) {
+        last = error.message;
+      }
+      await this.reconnect();
+    }
+    throw new Error("cvar " + name + " would not take " + JSON.stringify(value) + ": " + last);
+  }
+  async close() {
+    try { await this.control.close(); } catch { /* nothing to close */ }
+  }
+}
+
+// ---- Screenshots ---------------------------------------------------------
+
+async function capture(name, width, height, meta) {
+  const shot = await cdp.send("Page.captureScreenshot", { format: "png" }, 90000);
+  const buffer = Buffer.from(shot.data, "base64");
+  const pngWidth = buffer.readUInt32BE(16);
+  const pngHeight = buffer.readUInt32BE(20);
+  const file = path.join(SHOTS, name);
+  await fsp.writeFile(file, buffer);
+  const entry = { file: path.relative(ROOT, file), width: pngWidth, height: pngHeight, bytes: buffer.length, ...meta };
+  report.screenshots.push(entry);
+  check("screenshot " + name, pngWidth === width && pngHeight === height, width + "x" + height, pngWidth + "x" + pngHeight);
+  if (pngWidth !== width || pngHeight !== height) fatal("screenshot " + name + " is " + pngWidth + "x" + pngHeight + ", not " + width + "x" + height);
+  return entry;
+}
+
+// ---- Frame timing --------------------------------------------------------
+
+function stats(samples) {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const n = sorted.length;
+  const median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+  const p95 = sorted[Math.min(n - 1, Math.ceil(0.95 * n) - 1)];
+  const mean = sorted.reduce((sum, one) => sum + one, 0) / n;
+  return { count: n, medianMs: median, p95Ms: p95, meanMs: mean, minMs: sorted[0], maxMs: sorted[n - 1] };
+}
+async function measureFrames(count, timeoutMs = 180000) {
+  const samples = await evaluate(`new Promise((resolve) => {
+    const times = [];
+    let last = 0, done = false;
+    function step(now) {
+      if (done) return;
+      if (last) times.push(now - last);
+      last = now;
+      if (times.length >= ${count}) { done = true; resolve(times); return; }
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+    setTimeout(() => { if (!done) { done = true; resolve(times); } }, ${timeoutMs});
+  })`, { awaitPromise: true, timeoutMs: timeoutMs + 10000 });
+  return samples;
+}
+async function frameRound(label, width, height, level, meta) {
+  let samples = await measureFrames(options.frames);
+  if (samples.length < 10) {
+    note(label + ": only " + samples.length + " rAF samples; retrying with a longer window");
+    samples = await measureFrames(options.frames, 240000);
+  }
+  check(label + " frame samples", samples.length >= 10, "at least 10 rAF samples", String(samples.length));
+  if (samples.length < 10) fatal(label + ": not enough rAF frames to report a median and p95");
+  const frame = stats(samples);
+  const renderer = report.renderer || {};
+  const software = /swiftshader|llvmpipe|softpipe|software|subzero/i.test(String(renderer.renderer || ""));
+  const row = {
+    label, width, height, level, mode: MODE_NUMBERS[level],
+    renderer: renderer.renderer || null,
+    vendor: renderer.vendor || null,
+    software,
+    ...frame,
+    fpsMedian: 1000 / frame.medianMs,
+  };
+  report.modes.push(row);
+  console.log("  " + label + " " + level.padEnd(11) + " median " + frame.medianMs.toFixed(1) +
+    " ms  p95 " + frame.p95Ms.toFixed(1) + " ms  (" + row.fpsMedian.toFixed(2) + " fps median)" +
+    (software ? " [software]" : ""));
+  return row;
+}
+
+// ---- Coverage ------------------------------------------------------------
+
+function readPakDirectory(file) {
+  const buffer = fs.readFileSync(file);
+  if (buffer.toString("latin1", 0, 4) !== "PACK") throw new Error(file + " is not a PAK file");
+  const offset = buffer.readInt32LE(4);
+  const length = buffer.readInt32LE(8);
+  const entries = new Map();
+  for (let at = offset; at < offset + length; at += 64) {
+    const end = buffer.indexOf(0, at);
+    const name = buffer.toString("latin1", at, end);
+    entries.set(name, { name, offset: buffer.readInt32LE(at + 56), size: buffer.readInt32LE(at + 60) });
+  }
+  return { buffer, entries };
+}
+function bspEntities(pak, map) {
+  const entry = pak.entries.get("maps/" + map + ".bsp");
+  if (!entry) return null;
+  const bsp = pak.buffer.subarray(entry.offset, entry.offset + entry.size);
+  const lumpOffset = bsp.readInt32LE(8);
+  const lumpLength = bsp.readInt32LE(12);
+  return bsp.toString("latin1", lumpOffset, lumpOffset + lumpLength);
+}
+function pcxDimensions(buffer, offset) {
+  const xmin = buffer.readUInt16LE(offset + 4);
+  const ymin = buffer.readUInt16LE(offset + 6);
+  const xmax = buffer.readUInt16LE(offset + 8);
+  const ymax = buffer.readUInt16LE(offset + 10);
+  return { width: xmax - xmin + 1, height: ymax - ymin + 1 };
+}
+function classnames(text) {
+  const found = new Set();
+  if (!text) return found;
+  for (const match of text.matchAll(/"classname"\s+"([A-Za-z0-9_]+)"/g)) found.add(match[1]);
+  return found;
+}
+function buildCoverage() {
+  const pak10 = readPakDirectory(path.join(ROOT, "baseq2", "pak10.pak"));
+  const pak0 = readPakDirectory(path.join(ROOT, "baseq2", "pak0.pak"));
+  const demo1Classes = classnames(bspEntities(pak0, "demo1"));
+  const blasterSkinEntry = pak0.entries.get("models/weapons/v_blast/skin.pcx");
+  const blasterSkin = blasterSkinEntry ? pcxDimensions(pak0.buffer, blasterSkinEntry.offset) : null;
+  const weapons = [];
+  const weaponSkins = [];
+  for (const [entryName, info] of pak10.entries) {
+    const m = /^models\/weapons\/(v_[a-z0-9]+)\/tris\.md2$/.exec(entryName);
+    if (!m) continue;
+    const known = WEAPON_NAMES[m[1]] || [m[1], null];
+    const inHand = m[1] === "v_blast";
+    const placed = Boolean(known[1] && demo1Classes.has(known[1]));
+    const skinEntry = pak0.entries.get("models/weapons/" + m[1] + "/skin.pcx");
+    const skin = skinEntry ? pcxDimensions(pak0.buffer, skinEntry.offset) : null;
+    if (skin) weaponSkins.push({ model: m[1], name: known[0], width: skin.width, height: skin.height });
+    weapons.push({
+      model: m[1], name: known[0], pickupClass: known[1],
+      skinSize: skin ? skin.width + "x" + skin.height : null,
+      placedInDemo1: placed, inHand,
+      covered: inHand || placed,
+    });
+  }
+  const enemies = [];
+  for (const [entryName, info] of pak10.entries) {
+    const m = /^models\/monsters\/([a-z0-9_]+)\/tris\.md2$/.exec(entryName);
+    if (!m) continue;
+    const known = ENEMY_NAMES[m[1]] || [m[1], ["monster_" + m[1]]];
+    const classes = known[1];
+    const present = classes.filter((one) => demo1Classes.has(one));
+    enemies.push({
+      model: m[1], name: known[0], monsterClasses: classes,
+      placedInDemo1: present,
+      covered: present.length > 0,
+    });
+  }
+  weapons.sort((a, b) => Number(b.covered) - Number(a.covered) || a.name.localeCompare(b.name));
+  enemies.sort((a, b) => Number(b.covered) - Number(a.covered) || a.name.localeCompare(b.name));
+  report.coverage = {
+    level: "demo1",
+    basis: "model assets in baseq2/pak10.pak; covered = present in demo1 (in hand for weapons, placed as a pickup or monster in the BSP entity lump). Enemy visibility in a particular frame is not claimed.",
+    blasterSkin,
+    weaponSkins,
+    weapons,
+    enemies,
+    weaponsCovered: weapons.filter((one) => one.covered).map((one) => one.name),
+    weaponsNotCovered: weapons.filter((one) => !one.covered).map((one) => one.name),
+    enemiesCovered: enemies.filter((one) => one.covered).map((one) => one.name),
+    enemiesNotCovered: enemies.filter((one) => !one.covered).map((one) => one.name),
+  };
+  check("pak10 covers 13 weapon models and 7 enemy models",
+    weapons.length === 13 && enemies.length === 7,
+    "13 weapons, 7 enemies",
+    weapons.length + " weapons, " + enemies.length + " enemies");
+  return report.coverage;
+}
+
+// ---- Main ---------------------------------------------------------------
+
+let serverChild = null;
+let chromeChild = null;
+let cdp = null;
+let consoleBridge = null;
+
+async function boot(label, url) {
+  const loaded = new Promise((resolve) => cdp.on("Page.loadEventFired", resolve));
+  await cdp.send("Page.navigate", { url }, 60000);
+  await Promise.race([loaded, sleep(30000)]);
+  const started = Date.now();
+  let snapshot = null;
+  try {
+    await waitFor(async () => {
+      snapshot = await state();
+      return snapshot.readyState === "complete" && snapshot.gl2 && snapshot.drawingBuffer &&
+        snapshot.drawingBuffer[0] > 0 && snapshot.drawingBuffer[1] > 0 &&
+        snapshot.rtx && snapshot.rtx.supported === true && (snapshot.rtx.failures || []).length === 0 &&
+        snapshot.engine && snapshot.engine.ok === true && snapshot.loadingHidden === true;
+    }, 240000, 1500, "the game to boot");
+  } catch (error) {
+    const last = snapshot ? JSON.stringify(snapshot).slice(0, 900) : "no state";
+    fatal("the game did not boot cleanly: " + error.message + " — last state " + last);
+  }
+  const bootRecord = {
+    label,
+    url,
+    seconds: Math.round((Date.now() - started) / 100) / 10,
+    drawingBuffer: snapshot.drawingBuffer,
+    rtx: {
+      version: snapshot.rtx.version,
+      supported: snapshot.rtx.supported,
+      failures: snapshot.rtx.failures,
+      worldShaders: snapshot.rtx.worldShaders,
+      postShaders: snapshot.rtx.postShaders,
+      modelShaders: snapshot.rtx.modelShaders,
+      modelReliefShaders: snapshot.rtx.modelReliefShaders,
+      skyShaders: snapshot.rtx.skyShaders,
+      programs: snapshot.rtx.programs,
+    },
+    engineRunning: snapshot.engine.ok,
+    keyDest: snapshot.engine.keyDestName,
+  };
+  report.boots.push(bootRecord);
+  if (!report.boot) report.boot = bootRecord;
+  check(label + ": game booted into a running engine", snapshot.engine.ok === true, "engine memory readable", snapshot.engine.keyDestName || "unreadable");
+  check(label + ": dark UI loaded (menu layer present)", snapshot.menuHidden !== null, "a menu layer", snapshot.menuHidden !== null ? "present" : "missing");
+  check(label + ": WebGL2 renderer installed", snapshot.gl2 === true, "WebGL2", String(snapshot.gl2));
+  check(label + ": RTX shader programs compiled", snapshot.rtx.supported === true && snapshot.rtx.worldShaders > 0 && snapshot.rtx.postShaders > 0,
+    "world + post shaders, no failures",
+    "world " + snapshot.rtx.worldShaders + ", post " + snapshot.rtx.postShaders + ", model " + snapshot.rtx.modelShaders +
+    " (albedo " + snapshot.rtx.modelReliefShaders + "), failures " + JSON.stringify(snapshot.rtx.failures));
+  check(label + ": pak10 model shader path active", snapshot.rtx.modelReliefShaders > 0, "at least one albedo-relief model program", String(snapshot.rtx.modelReliefShaders));
+  check(label + ": no WebGL context lost during boot", !(snapshot.verify && snapshot.verify.contextLost), "0", String((snapshot.verify && snapshot.verify.contextLost) || 0));
+
+  report.renderer = await evaluate(`(() => {
+    const canvas = document.getElementById("canvas");
+    const gl = canvas && canvas.getContext("webgl2");
+    if (!gl) return null;
+    const info = gl.getExtension("WEBGL_debug_renderer_info");
+    return {
+      renderer: info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl.getParameter(gl.RENDERER),
+      vendor: info ? gl.getParameter(info.UNMASKED_VENDOR_WEBGL) : gl.getParameter(gl.VENDOR),
+      version: gl.getParameter(gl.VERSION),
+      shading: gl.getParameter(gl.SHADING_LANGUAGE_VERSION),
+      webgl2: true,
+    };
+  })()`);
+  check("browser reports a WebGL renderer", Boolean(report.renderer && report.renderer.renderer), "a renderer string", report.renderer ? report.renderer.renderer : "(none)");
+  console.log("  renderer " + (report.renderer ? report.renderer.renderer : "(none)"));
+}
+
+async function waitDemo1(label) {
+  let last = null;
+  try {
+    await waitFor(async () => {
+      const now = await state();
+      const engine = now.engine || {};
+      const position = engine.position || {};
+      const moved = Math.abs(position.x || 0) + Math.abs(position.y || 0) + Math.abs(position.z || 0) > 1;
+      // Off persists in localStorage, and Off skips the composite, so
+      // postDraws stays 0 even though the scene is drawing: count world draws
+      // (or a composite) as "the game is rendering".
+      const drawing = now.rtx && (now.rtx.worldDraws > 0 || now.rtx.postDraws > 0);
+      last = { keyDest: engine.keyDestName, position, postDraws: now.rtx ? now.rtx.postDraws : null,
+        worldDraws: now.rtx ? now.rtx.worldDraws : null, statusText: now.statusText };
+      return engine.ok && engine.keyDestName === "game" && moved && drawing && now.menuHidden === true && now.loadingHidden === true;
+    }, 150000, 1500, "demo1 to load and draw");
+  } catch (error) {
+    fatal(label + ": demo1 did not start: " + error.message + " — last " + JSON.stringify(last));
+  }
+  check(label + ": demo1 running in game", true, "key_dest game, non-zero position, frames drawn", JSON.stringify(last));
+  await waitFrames(3);
+  await sleep(3000);
+}
+
+async function navigateResolution(resolution) {
+  const mode = R_MODES[resolution.label];
+  if (!mode) fatal("no r_mode for the measured display " + resolution.label + "; add it to R_MODES");
+  console.log("\n  resolution " + resolution.label + " (r_mode " + mode + ")");
+  await cdp.send("Emulation.setDeviceMetricsOverride", {
+    width: resolution.width, height: resolution.height, deviceScaleFactor: 1, mobile: false,
+  });
+  // The engine applies r_mode from the page's query string at start-up; this
+  // is a real boot at the requested resolution, not a resize after the fact.
+  const separator = options.url.includes("?") ? "&" : "?";
+  const url = options.url + separator + "+set&r_mode&" + mode + "&+map&demo1";
+  await boot(resolution.label, url);
+  let seen = null;
+  await waitFor(async () => {
+    const now = await state();
+    seen = now.drawingBuffer;
+    return seen && seen[0] === resolution.width && seen[1] === resolution.height;
+  }, 30000, 1000, "the drawing buffer to be " + resolution.label);
+  const now = await state();
+  check("render resolution " + resolution.label + " at boot", now.rtx && now.rtx.supported === true && (now.rtx.failures || []).length === 0,
+    "drawing buffer " + resolution.label + " with no renderer failure",
+    "drawing buffer " + seen.join("x") + ", failures " + JSON.stringify(now.rtx ? now.rtx.failures : null));
+  if (!(seen[0] === resolution.width && seen[1] === resolution.height)) {
+    fatal("the page booted at " + seen.join("x") + ", not " + resolution.label);
+  }
+  await consoleBridge.reconnect();
+  await waitFrames(3);
+}
+
+async function setLighting(level) {
+  const found = await click('[data-lighting="' + level + '"]');
+  if (!found) fatal("the " + level + " lighting button is missing");
+  await sleep(600);
+  const now = await status();
+  const expected = MODE_NUMBERS[level];
+  const ok = level === "off" ? now.mode === 0 && now.enabled === false
+    : now.mode === expected && now.quality === level && now.enabled === true;
+  check("lighting " + level + " applied", ok, "mode " + expected + (level === "off" ? " (Off)" : " (" + level + ")"),
+    "mode " + now.mode + ", quality " + now.quality + ", enabled " + now.enabled);
+  if (!ok) fatal("lighting " + level + " did not apply");
+  await waitFrames(2);
+}
+
+async function weaponDrawCheck() {
+  console.log("\n  cl_gun and weapon draw");
+  if (!(await ensureGame("before the cl_gun read"))) fatal("the game is not in game before the cl_gun read");
+  await sleep(3000);
+  await waitFrames(3);
+  const clGun = await consoleBridge.read("cl_gun");
+  report.clGun = { value: clGun };
+  const gunOk = check("cl_gun is 1", clGun === "1", "1", String(clGun));
+  if (!gunOk) fatal("cl_gun is " + JSON.stringify(clGun) + ", not 1 — no weapon is drawn in hand");
+  if (!(await ensureGame("cl_gun check"))) fatal("the game did not resume after reading cl_gun");
+
+  // The view weapon is an MD2 model drawn after every entity and before the
+  // HUD. The renderer records the skin size of the last model draw before the
+  // first 2D draw of each frame, so a draw can be named, not just counted.
+  // Its skin size is matched against the weapon skins inside pak0: a monster
+  // or world texture does not match, so a match means a weapon was in hand.
+  const skins = report.coverage.weaponSkins;
+  if (!skins.length) fatal("could not read any weapon skin from pak0");
+  const weaponSkinSizes = new Set(skins.map((one) => one.width + "x" + one.height));
+  const before = await status();
+  await waitFrames(2);
+  await sleep(5000);
+  await waitFrames(2);
+  const after = await status();
+  const observed = after.lastModelSkinDraws || {};
+  const previous = before.lastModelSkinDraws || {};
+  const seen = Object.keys(observed).filter((key) => (observed[key] || 0) > (previous[key] || 0));
+  const matching = seen.filter((key) => weaponSkinSizes.has(key));
+  const gunDraws = matching.reduce((sum, key) => sum + Math.max(0, (observed[key] || 0) - (previous[key] || 0)), 0);
+  const frames = after.postDraws - before.postDraws;
+  const modelDraws = after.modelDraws - before.modelDraws;
+  const perFrame = frames > 0 ? gunDraws / frames : null;
+  const candidates = [...new Set(skins.filter((one) => matching.includes(one.width + "x" + one.height)).map((one) => one.name))];
+  report.weaponDraw = {
+    clGun: "1",
+    viewWeaponSkinSizes: matching,
+    viewWeaponCandidates: candidates,
+    frames,
+    modelDraws,
+    modelDrawsPerFrame: frames > 0 ? modelDraws / frames : null,
+    weaponSkinDraws: gunDraws,
+    weaponSkinDrawsPerFrame: perFrame,
+    lastModelSkinDraws: observed,
+    weaponSkinSizes: [...weaponSkinSizes].sort(),
+    method: "the renderer records the skin size of the last model draw before the HUD in each frame; a size belonging to a pak0 weapon skin is a weapon draw",
+  };
+  check("a weapon draw is submitted", frames > 0 && gunDraws > 0 && perFrame !== null && perFrame >= 0.5,
+    "a pak0 weapon skin drawn last before the HUD every frame with cl_gun 1",
+    gunDraws + " weapon-skin draws over " + frames + " frames (" + (perFrame === null ? "n/a" : perFrame.toFixed(2)) +
+    "/frame); sizes " + JSON.stringify(matching) + " -> " + JSON.stringify(candidates) +
+    "; last-model sizes seen " + JSON.stringify(Object.keys(observed).sort()));
+  if (!(frames > 0 && gunDraws > 0 && perFrame !== null && perFrame >= 0.5)) {
+    fatal("no weapon draw was proven: " + gunDraws + " weapon-skin draws over " + frames + " frames");
+  }
+  const restored = await consoleBridge.read("cl_gun");
+  check("cl_gun still 1 after the draw check", restored === "1", "1", String(restored));
+  if (restored !== "1") fatal("cl_gun did not stay 1 during the weapon-draw check");
+}
+
+async function runModes(resolution) {
+  for (const level of LIGHT_LEVELS) {
+    console.log("\n  " + resolution.label + " / " + level);
+    const presence = await state();
+    if (presence.engine && presence.engine.dead) {
+      note(resolution.label + "/" + level + ": player died; restarting demo1 for the capture");
+      await waitDemo1(resolution.label);
+    }
+    await setLighting(level);
+    if (!(await openMenu())) fatal("the main menu did not open at " + resolution.label + " / " + level);
+    await setLighting(level); // keep the chosen mode while the menu is up
+    await waitFrames(2);
+    const menuState = await state();
+    check("main menu visible at " + resolution.label + " / " + level,
+      menuState.menuHidden === false && menuState.engine && menuState.engine.keyDestName === "menu",
+      "menu-layer visible", "menuHidden " + menuState.menuHidden + ", key_dest " + (menuState.engine && menuState.engine.keyDestName));
+    await capture(resolution.label + "-" + level + "-menu.png", resolution.width, resolution.height,
+      { view: "main menu", resolution: resolution.label, level, software: report.renderer ? /swiftshader|software|subzero|llvmpipe/i.test(String(report.renderer.renderer)) : null });
+
+    await resume();
+    await waitFrames(3);
+    const before = await status();
+    await waitFrames(2);
+    const after = await status();
+    const drawn = after.modelDraws > before.modelDraws && after.worldDraws > before.worldDraws;
+    check("weapon geometry drawn at " + resolution.label + " / " + level, drawn,
+      "modelDraws and worldDraws increase in game",
+      "+" + (after.modelDraws - before.modelDraws) + " model draws, +" + (after.worldDraws - before.worldDraws) + " world draws");
+    if (!drawn) fatal("no model draw was submitted in game at " + resolution.label + " / " + level);
+    await capture(resolution.label + "-" + level + "-weapon.png", resolution.width, resolution.height,
+      { view: "weapon in hand", resolution: resolution.label, level, software: report.renderer ? /swiftshader|software|subzero|llvmpipe/i.test(String(report.renderer.renderer)) : null });
+
+    await frameRound(resolution.label + "/" + level, resolution.width, resolution.height, level, {});
+  }
+}
+
+async function run() {
+  fs.mkdirSync(SHOTS, { recursive: true });
+  fs.mkdirSync(LOGS, { recursive: true });
+  console.log("verify-presentation: " + options.url);
+  const display = measureDisplay();
+  const resolutions = [
+    { label: "1280x720", width: 1280, height: 720 },
+    display,
+  ].filter((one, index, all) => all.findIndex((other) => other.label === one.label) === index);
+
+  await ensureServer();
+  const chrome = await startChrome();
+  cdp = await connectPage(chrome.base);
+  consoleBridge = new EngineConsole(chrome.base);
+  await consoleBridge.connect();
+  buildCoverage();
+
+  let firstResolution = true;
+  for (const resolution of resolutions) {
+    await navigateResolution(resolution);
+    await waitDemo1(resolution.label);
+    if (firstResolution) {
+      await weaponDrawCheck();
+      firstResolution = false;
+    }
+    await runModes(resolution);
+  }
+
+  // Post-run error audit: everything the page said while it was being driven.
+  const finalState = await state();
+  report.webgl = { contextLost: (finalState.verify && finalState.verify.contextLost) || 0, glLost: finalState.contextLost === true };
+  check("no WebGL context lost during the run", report.webgl.contextLost === 0 && !report.webgl.glLost,
+    "0 context losses", "events " + report.webgl.contextLost + ", isContextLost " + report.webgl.glLost);
+  check("no page exceptions", report.pageErrors.length === 0, "0", String(report.pageErrors.length));
+  check("no JavaScript console errors", report.consoleErrors.length === 0, "0", String(report.consoleErrors.length));
+  if (report.pageErrors.length) console.log("  page errors: " + JSON.stringify(report.pageErrors.slice(0, 5)));
+  if (report.consoleErrors.length) console.log("  console errors: " + JSON.stringify(report.consoleErrors.slice(0, 5)));
+  if (report.networkErrors.length) {
+    note("non-fatal network 404s (optional probes; required files were hashed above): " +
+      JSON.stringify(report.networkErrors.map((one) => one.url || one.text).slice(0, 8)));
+  }
+
+  report.limitations = [
+    "Frame times come from headless Chrome on SwiftShader (software rasterisation) when no GPU is reachable; they are labelled software and are not the box GPU's numbers.",
+    "The engine renders at the r_mode the runner sets (14 = 1280x720, 25 = 2560x1440); screenshots are the viewport at the same size.",
+    "Only demo1 (Outer Base) is driven and only the starting Blaster is in hand. Enemy coverage is level placement in demo1, not per-frame visibility.",
+    "Audio, pointer lock, mouse look, saves and the fullscreen API are not exercised by this headless run.",
+    "20 rAF samples give a nearest-rank p95; it is a small sample and not a percentile-tail measurement.",
+  ];
+}
+
+// ---- Teardown ------------------------------------------------------------
+
+async function teardown() {
+  if (consoleBridge) await consoleBridge.close().catch(() => {});
+  if (cdp) cdp.close();
+  if (chromeChild) {
+    try { chromeChild.child.kill("SIGTERM"); } catch { /* already gone */ }
+    await Promise.race([
+      new Promise((resolve) => chromeChild.child.once("exit", resolve)),
+      sleep(5000),
+    ]);
+    try { chromeChild.child.kill("SIGKILL"); } catch { /* already gone */ }
+    try { await fsp.rm(chromeChild.profile, { recursive: true, force: true }); } catch { /* best effort */ }
+  }
+  if (serverChild) {
+    try { serverChild.kill("SIGTERM"); } catch { /* already gone */ }
+    await Promise.race([
+      new Promise((resolve) => serverChild.once("exit", resolve)),
+      sleep(3000),
+    ]);
+    try { serverChild.kill("SIGKILL"); } catch { /* already gone */ }
+  }
+}
+
+function finish(exitCode) {
+  report.ok = exitCode === 0 && !report.fatal && report.checks.every((one) => one.ok);
+  try {
+    fs.mkdirSync(OUT, { recursive: true });
+    fs.writeFileSync(path.join(OUT, "report.json"), JSON.stringify(report, null, 2) + "\n");
+  } catch (error) {
+    console.error("could not write report.json: " + error.message);
+  }
+  console.log("\n" + (report.ok ? "PASS" : "FAIL") + " — " + report.checks.filter((one) => one.ok).length + "/" + report.checks.length +
+    " checks; report " + path.relative(ROOT, path.join(OUT, "report.json")));
+  if (report.fatal) console.error("fatal: " + report.fatal);
+  process.exitCode = exitCode;
+}
+
+let exitCode = 1;
+try {
+  await run();
+  exitCode = report.checks.every((one) => one.ok) ? 0 : 1;
+} catch (error) {
+  if (!report.fatal) report.fatal = String(error && error.message ? error.message : error);
+  console.error("\nverification failed: " + report.fatal);
+  exitCode = 1;
+} finally {
+  await teardown();
+  finish(exitCode);
+}

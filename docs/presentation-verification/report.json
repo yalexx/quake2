@@ -1,0 +1,1322 @@
+{
+  "at": "2026-10-30T21:08:46.253Z",
+  "url": "http://127.0.0.1:4231/apps/quake2/",
+  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-3zv49pxg",
+  "node": "v24.22.1",
+  "platform": "linux 7.0.0-38-generic",
+  "display": {
+    "width": 2560,
+    "height": 1440,
+    "x": 2560,
+    "y": 0,
+    "line": "HDMI-A-1 connected 2560x1440+2560+0 (normal left inverted right x axis y axis) 600mm x 340mm",
+    "source": "xrandr --current"
+  },
+  "http": {
+    "url": "http://127.0.0.1:4231/apps/quake2/",
+    "status": 200,
+    "redirected": false,
+    "finalUrl": "http://127.0.0.1:4231/apps/quake2/",
+    "type": "text/html; charset=utf-8",
+    "bytes": 6110,
+    "filesMatchCheckout": [
+      {
+        "file": "index.html",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 6110,
+        "localBytes": 6110
+      },
+      {
+        "file": "style.css",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 13068,
+        "localBytes": 13068
+      },
+      {
+        "file": "rtx-renderer.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 30299,
+        "localBytes": 30299
+      },
+      {
+        "file": "app.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 42397,
+        "localBytes": 42397
+      },
+      {
+        "file": "fullscreen.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 6812,
+        "localBytes": 6812
+      }
+    ]
+  },
+  "server": {
+    "started": false,
+    "port": 4231,
+    "note": "a server was already listening; its files are checked below"
+  },
+  "chrome": {
+    "path": "/usr/bin/google-chrome",
+    "debuggingPort": 43455,
+    "headless": true,
+    "profile": "/tmp/q2verify-chrome-XbkB9y"
+  },
+  "renderer": {
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "vendor": "Google Inc. (Google)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "shading": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+    "webgl2": true
+  },
+  "boot": {
+    "label": "1280x720",
+    "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
+    "seconds": 3.3,
+    "drawingBuffer": [
+      1280,
+      720
+    ],
+    "rtx": {
+      "version": "raster-3",
+      "supported": true,
+      "failures": [],
+      "worldShaders": 4,
+      "postShaders": 4,
+      "modelShaders": 16,
+      "modelReliefShaders": 14,
+      "skyShaders": 2,
+      "programs": [
+        "ui",
+        "sky",
+        "post",
+        "post",
+        "world",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "world",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "model",
+        "original",
+        "original"
+      ]
+    },
+    "engineRunning": true,
+    "keyDest": "game"
+  },
+  "boots": [
+    {
+      "label": "1280x720",
+      "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
+      "seconds": 3.3,
+      "drawingBuffer": [
+        1280,
+        720
+      ],
+      "rtx": {
+        "version": "raster-3",
+        "supported": true,
+        "failures": [],
+        "worldShaders": 4,
+        "postShaders": 4,
+        "modelShaders": 16,
+        "modelReliefShaders": 14,
+        "skyShaders": 2,
+        "programs": [
+          "ui",
+          "sky",
+          "post",
+          "post",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "model",
+          "original",
+          "original"
+        ]
+      },
+      "engineRunning": true,
+      "keyDest": "game"
+    },
+    {
+      "label": "2560x1440",
+      "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&25&+map&demo1",
+      "seconds": 1.8,
+      "drawingBuffer": [
+        2560,
+        1440
+      ],
+      "rtx": {
+        "version": "raster-3",
+        "supported": true,
+        "failures": [],
+        "worldShaders": 4,
+        "postShaders": 4,
+        "modelShaders": 16,
+        "modelReliefShaders": 14,
+        "skyShaders": 2,
+        "programs": [
+          "ui",
+          "sky",
+          "post",
+          "post",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "model",
+          "original",
+          "original"
+        ]
+      },
+      "engineRunning": true,
+      "keyDest": "game"
+    }
+  ],
+  "checks": [
+    {
+      "name": "HTTP 200 at http://127.0.0.1:4231/apps/quake2/",
+      "ok": true,
+      "expected": 200,
+      "actual": "200"
+    },
+    {
+      "name": "0 redirects",
+      "ok": true,
+      "expected": "200 with no redirect",
+      "actual": "status 200, redirected false"
+    },
+    {
+      "name": "served as text/html",
+      "ok": true,
+      "expected": "text/html",
+      "actual": "text/html; charset=utf-8"
+    },
+    {
+      "name": "served page has the game canvas",
+      "ok": true,
+      "expected": "a canvas element",
+      "actual": "present"
+    },
+    {
+      "name": "server is serving this checkout",
+      "ok": true,
+      "expected": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical",
+      "actual": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical"
+    },
+    {
+      "name": "pak10 covers 13 weapon models and 7 enemy models",
+      "ok": true,
+      "expected": "13 weapons, 7 enemies",
+      "actual": "13 weapons, 7 enemies"
+    },
+    {
+      "name": "1280x720: game booted into a running engine",
+      "ok": true,
+      "expected": "engine memory readable",
+      "actual": "game"
+    },
+    {
+      "name": "1280x720: dark UI loaded (menu layer present)",
+      "ok": true,
+      "expected": "a menu layer",
+      "actual": "present"
+    },
+    {
+      "name": "1280x720: WebGL2 renderer installed",
+      "ok": true,
+      "expected": "WebGL2",
+      "actual": "true"
+    },
+    {
+      "name": "1280x720: RTX shader programs compiled",
+      "ok": true,
+      "expected": "world + post shaders, no failures",
+      "actual": "world 4, post 4, model 16 (albedo 14), failures []"
+    },
+    {
+      "name": "1280x720: pak10 model shader path active",
+      "ok": true,
+      "expected": "at least one albedo-relief model program",
+      "actual": "14"
+    },
+    {
+      "name": "1280x720: no WebGL context lost during boot",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    {
+      "name": "browser reports a WebGL renderer",
+      "ok": true,
+      "expected": "a renderer string",
+      "actual": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+      "name": "render resolution 1280x720 at boot",
+      "ok": true,
+      "expected": "drawing buffer 1280x720 with no renderer failure",
+      "actual": "drawing buffer 1280x720, failures []"
+    },
+    {
+      "name": "1280x720: demo1 running in game",
+      "ok": true,
+      "expected": "key_dest game, non-zero position, frames drawn",
+      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":13,\"worldDraws\":5411,\"statusText\":\"Running...\"}"
+    },
+    {
+      "name": "cl_gun is 1",
+      "ok": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    {
+      "name": "a weapon draw is submitted",
+      "ok": true,
+      "expected": "a pak0 weapon skin drawn last before the HUD every frame with cl_gun 1",
+      "actual": "28 weapon-skin draws over 28 frames (1.00/frame); sizes [\"296x164\"] -> [\"Blaster\"]; last-model sizes seen [\"1024x512\",\"296x164\",\"512x512\"]"
+    },
+    {
+      "name": "cl_gun still 1 after the draw check",
+      "ok": true,
+      "expected": "1",
+      "actual": "1"
+    },
+    {
+      "name": "lighting high applied",
+      "ok": true,
+      "expected": "mode 2 (high)",
+      "actual": "mode 2, quality high, enabled true"
+    },
+    {
+      "name": "lighting high applied",
+      "ok": true,
+      "expected": "mode 2 (high)",
+      "actual": "mode 2, quality high, enabled true"
+    },
+    {
+      "name": "main menu visible at 1280x720 / high",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 1280x720-high-menu.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "weapon geometry drawn at 1280x720 / high",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+12 model draws, +860 world draws"
+    },
+    {
+      "name": "screenshot 1280x720-high-weapon.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "1280x720/high frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "main menu visible at 1280x720 / performance",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 1280x720-performance-menu.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "weapon geometry drawn at 1280x720 / performance",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+12 model draws, +860 world draws"
+    },
+    {
+      "name": "screenshot 1280x720-performance-weapon.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "1280x720/performance frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "lighting off applied",
+      "ok": true,
+      "expected": "mode 0 (Off)",
+      "actual": "mode 0, quality performance, enabled false"
+    },
+    {
+      "name": "lighting off applied",
+      "ok": true,
+      "expected": "mode 0 (Off)",
+      "actual": "mode 0, quality performance, enabled false"
+    },
+    {
+      "name": "main menu visible at 1280x720 / off",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 1280x720-off-menu.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "weapon geometry drawn at 1280x720 / off",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+6 model draws, +430 world draws"
+    },
+    {
+      "name": "screenshot 1280x720-off-weapon.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "1280x720/off frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "2560x1440: game booted into a running engine",
+      "ok": true,
+      "expected": "engine memory readable",
+      "actual": "game"
+    },
+    {
+      "name": "2560x1440: dark UI loaded (menu layer present)",
+      "ok": true,
+      "expected": "a menu layer",
+      "actual": "present"
+    },
+    {
+      "name": "2560x1440: WebGL2 renderer installed",
+      "ok": true,
+      "expected": "WebGL2",
+      "actual": "true"
+    },
+    {
+      "name": "2560x1440: RTX shader programs compiled",
+      "ok": true,
+      "expected": "world + post shaders, no failures",
+      "actual": "world 4, post 4, model 16 (albedo 14), failures []"
+    },
+    {
+      "name": "2560x1440: pak10 model shader path active",
+      "ok": true,
+      "expected": "at least one albedo-relief model program",
+      "actual": "14"
+    },
+    {
+      "name": "2560x1440: no WebGL context lost during boot",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    {
+      "name": "browser reports a WebGL renderer",
+      "ok": true,
+      "expected": "a renderer string",
+      "actual": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+      "name": "render resolution 2560x1440 at boot",
+      "ok": true,
+      "expected": "drawing buffer 2560x1440 with no renderer failure",
+      "actual": "drawing buffer 2560x1440, failures []"
+    },
+    {
+      "name": "2560x1440: demo1 running in game",
+      "ok": true,
+      "expected": "key_dest game, non-zero position, frames drawn",
+      "actual": "{\"keyDest\":\"game\",\"position\":{\"x\":128.0625,\"y\":-319.9375,\"z\":46.1875},\"postDraws\":0,\"worldDraws\":1215,\"statusText\":\"Running...\"}"
+    },
+    {
+      "name": "lighting high applied",
+      "ok": true,
+      "expected": "mode 2 (high)",
+      "actual": "mode 2, quality high, enabled true"
+    },
+    {
+      "name": "lighting high applied",
+      "ok": true,
+      "expected": "mode 2 (high)",
+      "actual": "mode 2, quality high, enabled true"
+    },
+    {
+      "name": "main menu visible at 2560x1440 / high",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 2560x1440-high-menu.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "weapon geometry drawn at 2560x1440 / high",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+85 model draws, +1680 world draws"
+    },
+    {
+      "name": "screenshot 2560x1440-high-weapon.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "2560x1440/high frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "lighting performance applied",
+      "ok": true,
+      "expected": "mode 1 (performance)",
+      "actual": "mode 1, quality performance, enabled true"
+    },
+    {
+      "name": "main menu visible at 2560x1440 / performance",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 2560x1440-performance-menu.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "weapon geometry drawn at 2560x1440 / performance",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+84 model draws, +1680 world draws"
+    },
+    {
+      "name": "screenshot 2560x1440-performance-weapon.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "2560x1440/performance frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "lighting off applied",
+      "ok": true,
+      "expected": "mode 0 (Off)",
+      "actual": "mode 0, quality performance, enabled false"
+    },
+    {
+      "name": "lighting off applied",
+      "ok": true,
+      "expected": "mode 0 (Off)",
+      "actual": "mode 0, quality performance, enabled false"
+    },
+    {
+      "name": "main menu visible at 2560x1440 / off",
+      "ok": true,
+      "expected": "menu-layer visible",
+      "actual": "menuHidden false, key_dest menu"
+    },
+    {
+      "name": "screenshot 2560x1440-off-menu.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "weapon geometry drawn at 2560x1440 / off",
+      "ok": true,
+      "expected": "modelDraws and worldDraws increase in game",
+      "actual": "+42 model draws, +840 world draws"
+    },
+    {
+      "name": "screenshot 2560x1440-off-weapon.png",
+      "ok": true,
+      "expected": "2560x1440",
+      "actual": "2560x1440"
+    },
+    {
+      "name": "2560x1440/off frame samples",
+      "ok": true,
+      "expected": "at least 10 rAF samples",
+      "actual": "20"
+    },
+    {
+      "name": "no WebGL context lost during the run",
+      "ok": true,
+      "expected": "0 context losses",
+      "actual": "events 0, isContextLost false"
+    },
+    {
+      "name": "no page exceptions",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    {
+      "name": "no JavaScript console errors",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    }
+  ],
+  "notes": [
+    "non-fatal network 404s (optional probes; required files were hashed above): [\"http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak\"]"
+  ],
+  "consoleWarnings": [
+    {
+      "type": "log-warning",
+      "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
+      "source": "javascript",
+      "at": "2026-10-30T21:08:46.853Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
+      "source": "deprecation",
+      "at": "2026-10-30T21:08:47.771Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:08:47.815Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:08:47.815Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:08:47.815Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:08:47.816Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
+      "source": "javascript",
+      "at": "2026-10-30T21:10:43.225Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
+      "source": "deprecation",
+      "at": "2026-10-30T21:10:44.049Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:10:44.088Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:10:44.088Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:10:44.089Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-10-30T21:10:44.090Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
+      "source": "javascript",
+      "at": "2026-10-30T21:11:01.409Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
+      "at": "2026-10-30T21:08:47.294Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
+      "at": "2026-10-30T21:08:47.296Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
+      "at": "2026-10-30T21:10:43.628Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
+      "at": "2026-10-30T21:10:43.638Z"
+    }
+  ],
+  "pageErrors": [],
+  "webgl": {
+    "contextLost": 0,
+    "glLost": false
+  },
+  "clGun": {
+    "value": "1"
+  },
+  "weaponDraw": {
+    "clGun": "1",
+    "viewWeaponSkinSizes": [
+      "296x164"
+    ],
+    "viewWeaponCandidates": [
+      "Blaster"
+    ],
+    "frames": 28,
+    "modelDraws": 84,
+    "modelDrawsPerFrame": 3,
+    "weaponSkinDraws": 28,
+    "weaponSkinDrawsPerFrame": 1,
+    "lastModelSkinDraws": {
+      "512x512": 56,
+      "1024x512": 152,
+      "296x164": 96
+    },
+    "weaponSkinSizes": [
+      "216x195",
+      "248x194",
+      "252x194",
+      "264x164",
+      "264x180",
+      "296x164",
+      "296x194",
+      "300x194",
+      "308x181",
+      "308x195"
+    ],
+    "method": "the renderer records the skin size of the last model draw before the HUD in each frame; a size belonging to a pak0 weapon skin is a weapon draw"
+  },
+  "modes": [
+    {
+      "label": "1280x720/high",
+      "width": 1280,
+      "height": 720,
+      "level": "high",
+      "mode": 2,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 300,
+      "p95Ms": 333.3999999999942,
+      "meanMs": 299.15999999999985,
+      "minMs": 166.6999999999971,
+      "maxMs": 333.40000000000873,
+      "fpsMedian": 3.3333333333333335
+    },
+    {
+      "label": "1280x720/performance",
+      "width": 1280,
+      "height": 720,
+      "level": "performance",
+      "mode": 1,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 200,
+      "p95Ms": 216.6999999999971,
+      "meanMs": 194.99000000000015,
+      "minMs": 66.60000000000582,
+      "maxMs": 250,
+      "fpsMedian": 5
+    },
+    {
+      "label": "1280x720/off",
+      "width": 1280,
+      "height": 720,
+      "level": "off",
+      "mode": 0,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 150,
+      "p95Ms": 166.70000000001164,
+      "meanMs": 148.3300000000003,
+      "minMs": 16.69999999999709,
+      "maxMs": 166.70000000001164,
+      "fpsMedian": 6.666666666666667
+    },
+    {
+      "label": "2560x1440/high",
+      "width": 2560,
+      "height": 1440,
+      "level": "high",
+      "mode": 2,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 1299.9500000000044,
+      "p95Ms": 1466.7000000000116,
+      "meanMs": 1326.6150000000002,
+      "minMs": 1266.5999999999913,
+      "maxMs": 1649.8999999999942,
+      "fpsMedian": 0.7692603561675423
+    },
+    {
+      "label": "2560x1440/performance",
+      "width": 2560,
+      "height": 1440,
+      "level": "performance",
+      "mode": 1,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 866.6000000000058,
+      "p95Ms": 883.3000000000175,
+      "meanMs": 832.4649999999995,
+      "minMs": 700.1000000000058,
+      "maxMs": 900,
+      "fpsMedian": 1.153934918070613
+    },
+    {
+      "label": "2560x1440/off",
+      "width": 2560,
+      "height": 1440,
+      "level": "off",
+      "mode": 0,
+      "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+      "vendor": "Google Inc. (Google)",
+      "software": true,
+      "count": 20,
+      "medianMs": 716.6999999999825,
+      "p95Ms": 766.6000000000058,
+      "meanMs": 720.8099999999991,
+      "minMs": 699.8999999999942,
+      "maxMs": 783.2999999999884,
+      "fpsMedian": 1.3952839402818813
+    }
+  ],
+  "screenshots": [
+    {
+      "file": "docs/presentation-verification/shots/1280x720-high-menu.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 200620,
+      "view": "main menu",
+      "resolution": "1280x720",
+      "level": "high",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-high-weapon.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1196526,
+      "view": "weapon in hand",
+      "resolution": "1280x720",
+      "level": "high",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-performance-menu.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 201036,
+      "view": "main menu",
+      "resolution": "1280x720",
+      "level": "performance",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-performance-weapon.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1201975,
+      "view": "weapon in hand",
+      "resolution": "1280x720",
+      "level": "performance",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-off-menu.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 201946,
+      "view": "main menu",
+      "resolution": "1280x720",
+      "level": "off",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-off-weapon.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1202825,
+      "view": "weapon in hand",
+      "resolution": "1280x720",
+      "level": "off",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-high-menu.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 575695,
+      "view": "main menu",
+      "resolution": "2560x1440",
+      "level": "high",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-high-weapon.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 4919969,
+      "view": "weapon in hand",
+      "resolution": "2560x1440",
+      "level": "high",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-performance-menu.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 579472,
+      "view": "main menu",
+      "resolution": "2560x1440",
+      "level": "performance",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-performance-weapon.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 4588166,
+      "view": "weapon in hand",
+      "resolution": "2560x1440",
+      "level": "performance",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-off-menu.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 534422,
+      "view": "main menu",
+      "resolution": "2560x1440",
+      "level": "off",
+      "software": true
+    },
+    {
+      "file": "docs/presentation-verification/shots/2560x1440-off-weapon.png",
+      "width": 2560,
+      "height": 1440,
+      "bytes": 4207930,
+      "view": "weapon in hand",
+      "resolution": "2560x1440",
+      "level": "off",
+      "software": true
+    }
+  ],
+  "coverage": {
+    "level": "demo1",
+    "basis": "model assets in baseq2/pak10.pak; covered = present in demo1 (in hand for weapons, placed as a pickup or monster in the BSP entity lump). Enemy visibility in a particular frame is not claimed.",
+    "blasterSkin": {
+      "width": 296,
+      "height": 164
+    },
+    "weaponSkins": [
+      {
+        "model": "v_bfg",
+        "name": "BFG10K",
+        "width": 216,
+        "height": 195
+      },
+      {
+        "model": "v_blast",
+        "name": "Blaster",
+        "width": 296,
+        "height": 164
+      },
+      {
+        "model": "v_chain",
+        "name": "Chaingun",
+        "width": 264,
+        "height": 164
+      },
+      {
+        "model": "v_disint",
+        "name": "Disintegrator",
+        "width": 216,
+        "height": 195
+      },
+      {
+        "model": "v_handgr",
+        "name": "Hand Grenades",
+        "width": 308,
+        "height": 195
+      },
+      {
+        "model": "v_hyperb",
+        "name": "HyperBlaster",
+        "width": 296,
+        "height": 194
+      },
+      {
+        "model": "v_launch",
+        "name": "Grenade Launcher",
+        "width": 248,
+        "height": 194
+      },
+      {
+        "model": "v_machn",
+        "name": "Machinegun",
+        "width": 300,
+        "height": 194
+      },
+      {
+        "model": "v_rail",
+        "name": "Railgun",
+        "width": 308,
+        "height": 181
+      },
+      {
+        "model": "v_rocket",
+        "name": "Rocket Launcher",
+        "width": 252,
+        "height": 194
+      },
+      {
+        "model": "v_shotg",
+        "name": "Shotgun",
+        "width": 264,
+        "height": 180
+      },
+      {
+        "model": "v_shotg2",
+        "name": "Super Shotgun",
+        "width": 296,
+        "height": 194
+      }
+    ],
+    "weapons": [
+      {
+        "model": "v_blast",
+        "name": "Blaster",
+        "pickupClass": "weapon_blaster",
+        "skinSize": "296x164",
+        "placedInDemo1": false,
+        "inHand": true,
+        "covered": true
+      },
+      {
+        "model": "v_launch",
+        "name": "Grenade Launcher",
+        "pickupClass": "weapon_grenadelauncher",
+        "skinSize": "248x194",
+        "placedInDemo1": true,
+        "inHand": false,
+        "covered": true
+      },
+      {
+        "model": "v_machn",
+        "name": "Machinegun",
+        "pickupClass": "weapon_machinegun",
+        "skinSize": "300x194",
+        "placedInDemo1": true,
+        "inHand": false,
+        "covered": true
+      },
+      {
+        "model": "v_rocket",
+        "name": "Rocket Launcher",
+        "pickupClass": "weapon_rocketlauncher",
+        "skinSize": "252x194",
+        "placedInDemo1": true,
+        "inHand": false,
+        "covered": true
+      },
+      {
+        "model": "v_shotg",
+        "name": "Shotgun",
+        "pickupClass": "weapon_shotgun",
+        "skinSize": "264x180",
+        "placedInDemo1": true,
+        "inHand": false,
+        "covered": true
+      },
+      {
+        "model": "v_shotg2",
+        "name": "Super Shotgun",
+        "pickupClass": "weapon_supershotgun",
+        "skinSize": "296x194",
+        "placedInDemo1": true,
+        "inHand": false,
+        "covered": true
+      },
+      {
+        "model": "v_bfg",
+        "name": "BFG10K",
+        "pickupClass": "weapon_bfg",
+        "skinSize": "216x195",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_chain",
+        "name": "Chaingun",
+        "pickupClass": "weapon_chaingun",
+        "skinSize": "264x164",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_disint",
+        "name": "Disintegrator",
+        "pickupClass": null,
+        "skinSize": "216x195",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_flareg",
+        "name": "Flare Gun",
+        "pickupClass": null,
+        "skinSize": null,
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_handgr",
+        "name": "Hand Grenades",
+        "pickupClass": null,
+        "skinSize": "308x195",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_hyperb",
+        "name": "HyperBlaster",
+        "pickupClass": "weapon_hyperblaster",
+        "skinSize": "296x194",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      },
+      {
+        "model": "v_rail",
+        "name": "Railgun",
+        "pickupClass": "weapon_railgun",
+        "skinSize": "308x181",
+        "placedInDemo1": false,
+        "inHand": false,
+        "covered": false
+      }
+    ],
+    "enemies": [
+      {
+        "model": "infantry",
+        "name": "Infantry",
+        "monsterClasses": [
+          "monster_infantry"
+        ],
+        "placedInDemo1": [
+          "monster_infantry"
+        ],
+        "covered": true
+      },
+      {
+        "model": "soldier",
+        "name": "Soldier",
+        "monsterClasses": [
+          "monster_soldier",
+          "monster_soldier_light",
+          "monster_soldier_ss"
+        ],
+        "placedInDemo1": [
+          "monster_soldier",
+          "monster_soldier_light",
+          "monster_soldier_ss"
+        ],
+        "covered": true
+      },
+      {
+        "model": "berserk",
+        "name": "Berserker",
+        "monsterClasses": [
+          "monster_berserk"
+        ],
+        "placedInDemo1": [],
+        "covered": false
+      },
+      {
+        "model": "flyer",
+        "name": "Flyer",
+        "monsterClasses": [
+          "monster_flyer"
+        ],
+        "placedInDemo1": [],
+        "covered": false
+      },
+      {
+        "model": "gunner",
+        "name": "Gunner",
+        "monsterClasses": [
+          "monster_gunner"
+        ],
+        "placedInDemo1": [],
+        "covered": false
+      },
+      {
+        "model": "parasite",
+        "name": "Parasite",
+        "monsterClasses": [
+          "monster_parasite"
+        ],
+        "placedInDemo1": [],
+        "covered": false
+      },
+      {
+        "model": "tank",
+        "name": "Tank",
+        "monsterClasses": [
+          "monster_tank"
+        ],
+        "placedInDemo1": [],
+        "covered": false
+      }
+    ],
+    "weaponsCovered": [
+      "Blaster",
+      "Grenade Launcher",
+      "Machinegun",
+      "Rocket Launcher",
+      "Shotgun",
+      "Super Shotgun"
+    ],
+    "weaponsNotCovered": [
+      "BFG10K",
+      "Chaingun",
+      "Disintegrator",
+      "Flare Gun",
+      "Hand Grenades",
+      "HyperBlaster",
+      "Railgun"
+    ],
+    "enemiesCovered": [
+      "Infantry",
+      "Soldier"
+    ],
+    "enemiesNotCovered": [
+      "Berserker",
+      "Flyer",
+      "Gunner",
+      "Parasite",
+      "Tank"
+    ]
+  },
+  "limitations": [
+    "Frame times come from headless Chrome on SwiftShader (software rasterisation) when no GPU is reachable; they are labelled software and are not the box GPU's numbers.",
+    "The engine renders at the r_mode the runner sets (14 = 1280x720, 25 = 2560x1440); screenshots are the viewport at the same size.",
+    "Only demo1 (Outer Base) is driven and only the starting Blaster is in hand. Enemy coverage is level placement in demo1, not per-frame visibility.",
+    "Audio, pointer lock, mouse look, saves and the fullscreen API are not exercised by this headless run.",
+    "20 rAF samples give a nearest-rank p95; it is a small sample and not a percentile-tail measurement."
+  ],
+  "fatal": null,
+  "ok": true
+}

@@ -14,7 +14,7 @@ var Module;
   // Relative URLs only: the box serves this app under /apps/quake2/.
   const PAK_DIR = "baseq2/";
   const REQUIRED_PAK = "pak0.pak";
-  const OPTIONAL_PAKS = ["pak1.pak", "pak2.pak", "pak9.pak"];
+  const OPTIONAL_PAKS = ["pak1.pak", "pak2.pak", "pak9.pak", "pak10.pak"];
   const ENGINE_DIR = "engine/";
   const ENGINE_SCRIPT = ENGINE_DIR + "index.js";
   // Saved games and config.cfg: server.js keeps them (the page's sandbox has
@@ -126,7 +126,7 @@ var Module;
     // the .wal it is about to draw, which is how the 4x wall art in pak9 reaches
     // the game (Yamagi draws it at the WAL's own size). The query string is
     // appended after these, so a URL can still turn it off.
-    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1"];
+    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1", "+set", "cl_gun", "1"];
     if (window.location.search.length > 1) {
       const extra = window.location.search.substr(1).split("&").filter(Boolean).map(function (arg) {
         try {
@@ -642,6 +642,311 @@ var Module;
     },
   };
 
+  // ---- Interface ---------------------------------------------------------
+  // The game's own menu and HUD stay exactly as they are; this layer is the
+  // presentation around them. Escape still opens the engine's menu (which is
+  // what pauses the single-player simulation), and the moment `cls.key_dest`
+  // reads 3 this dark panel comes up over it. Every action that needs the
+  // engine is sent as a synthetic key sequence into the game's own console, so
+  // nothing here replaces gameplay state.
+
+  const menuLayer = document.getElementById("menu-layer");
+  const menuPanel = document.getElementById("menu");
+  const optionsChip = document.getElementById("options-chip");
+  const bannerElement = document.getElementById("banner");
+  const bannerTextElement = document.getElementById("banner-text");
+  const promptElement = document.getElementById("prompt");
+  const hudBand = document.getElementById("hud-band");
+  const menuViews = Array.from(document.querySelectorAll(".menu-view"));
+
+  const ui = {
+    open: false,
+    view: "main",
+    closing: false, // Resume/map close: ignore key_dest 3 for a moment
+    passthrough: false, // our own synthetic keys must reach the engine
+    bannerTimer: 0,
+    prompt: false,
+  };
+
+  const ESCAPE_KEY = { key: "Escape", code: "Escape", vk: 27, ch: 27 };
+  const GRAVE_KEY = { key: "`", code: "Backquote", vk: 192, ch: 96 };
+  const ENTER_KEY = { key: "\r", code: "Enter", vk: 13, ch: 13 };
+  const CHAR_KEYS = {
+    " ": { key: " ", code: "Space", vk: 32 },
+    ".": { key: ".", code: "Period", vk: 190 },
+    "-": { key: "-", code: "Minus", vk: 189 },
+    "_": { key: "_", code: "Minus", vk: 189, shift: true },
+    "/": { key: "/", code: "Slash", vk: 191 },
+    "\\": { key: "\\", code: "Backslash", vk: 220 },
+    ";": { key: ";", code: "Semicolon", vk: 186 },
+    "'": { key: "'", code: "Quote", vk: 222 },
+    ",": { key: ",", code: "Comma", vk: 188 },
+    "=": { key: "=", code: "Equal", vk: 187 },
+    "+": { key: "+", code: "Equal", vk: 187, shift: true },
+  };
+
+  function sleep(ms) {
+    return new Promise(function (resolve) { setTimeout(resolve, ms); });
+  }
+
+  function engineSnapshot() {
+    try {
+      return window.quake2Engine && window.quake2Engine.read ? window.quake2Engine.read() : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function engineKeyDest() {
+    const state = engineSnapshot();
+    return state && typeof state.keyDest === "number" ? state.keyDest : null;
+  }
+
+  function keyDescriptor(ch) {
+    if (/^[a-z]$/i.test(ch)) {
+      const upper = ch.toUpperCase();
+      return { key: ch.toLowerCase(), code: "Key" + upper, vk: upper.charCodeAt(0), ch: ch.charCodeAt(0) };
+    }
+    if (/^[0-9]$/.test(ch)) return { key: ch, code: "Digit" + ch, vk: ch.charCodeAt(0), ch: ch.charCodeAt(0) };
+    const known = CHAR_KEYS[ch];
+    if (!known) return null;
+    return { key: known.key, code: known.code, vk: known.vk, ch: ch.charCodeAt(0), shift: known.shift };
+  }
+
+  // A synthetic keyboard event the engine's SDL layer reads exactly like a real
+  // one: keyCode/which/charCode are defined because KeyboardEvent's constructor
+  // leaves them at zero.
+  function dispatchKey(type, descriptor) {
+    const event = new KeyboardEvent(type, {
+      key: descriptor.key,
+      code: descriptor.code,
+      bubbles: true,
+      cancelable: true,
+      shiftKey: !!descriptor.shift,
+    });
+    Object.defineProperty(event, "keyCode", { get: function () { return descriptor.vk; } });
+    Object.defineProperty(event, "which", { get: function () { return descriptor.vk; } });
+    Object.defineProperty(event, "charCode", { get: function () { return type === "keypress" ? descriptor.ch || 0 : 0; } });
+    window.dispatchEvent(event);
+  }
+
+  function tapKey(descriptor) {
+    dispatchKey("keydown", descriptor);
+    dispatchKey("keypress", descriptor);
+    dispatchKey("keyup", descriptor);
+  }
+
+  // Runs one Quake 2 console command through the game's own console.
+  async function runCommand(command) {
+    ui.passthrough = true;
+    try {
+      canvasElement.focus();
+      let dest = engineKeyDest();
+      if (dest === 3) { tapKey(ESCAPE_KEY); await sleep(300); dest = engineKeyDest(); }
+      if (dest !== 1) { tapKey(GRAVE_KEY); await sleep(360); }
+      if (engineKeyDest() !== 1) { tapKey(GRAVE_KEY); await sleep(360); }
+      for (const ch of command) {
+        const descriptor = keyDescriptor(ch);
+        if (!descriptor) continue;
+        dispatchKey("keydown", descriptor);
+        dispatchKey("keypress", descriptor);
+        dispatchKey("keyup", descriptor);
+        await sleep(20);
+      }
+      tapKey(ENTER_KEY);
+      await sleep(480);
+      if (engineKeyDest() === 1) { tapKey(GRAVE_KEY); await sleep(280); }
+      return true;
+    } finally {
+      ui.passthrough = false;
+    }
+  }
+
+  // ---- Menu presentation -------------------------------------------------
+
+  function visibleView() {
+    return menuViews.find(function (view) { return !view.hidden; }) || menuViews[0];
+  }
+
+  function visibleButtons() {
+    return Array.from(visibleView().querySelectorAll("button")).filter(function (button) { return !button.disabled; });
+  }
+
+  function setView(view) {
+    ui.view = view;
+    for (const section of menuViews) section.hidden = section.dataset.view !== view;
+    const first = visibleButtons()[0];
+    if (first) first.focus({ preventScroll: true });
+  }
+
+  function showMenu(view) {
+    if (ui.open) {
+      if (view) setView(view);
+      return;
+    }
+    ui.open = true;
+    menuLayer.hidden = false;
+    document.body.classList.add("menu-open");
+    optionsChip.hidden = true;
+    promptElement.hidden = true;
+    hudBand.classList.remove("live");
+    setView(view || "main");
+  }
+
+  function hideMenu() {
+    if (!ui.open) return;
+    ui.open = false;
+    menuLayer.hidden = true;
+    document.body.classList.remove("menu-open");
+    if (document.activeElement && menuPanel.contains(document.activeElement)) document.activeElement.blur();
+  }
+
+  function showBanner(text, milliseconds) {
+    clearTimeout(ui.bannerTimer);
+    bannerTextElement.textContent = text;
+    bannerElement.hidden = !text;
+    if (text && milliseconds) {
+      ui.bannerTimer = setTimeout(function () { bannerElement.hidden = true; }, milliseconds);
+    }
+  }
+
+  function resumeGame() {
+    hideMenu();
+    ui.closing = true;
+    ui.passthrough = true;
+    tapKey(ESCAPE_KEY); // the engine's own menu closes and the game resumes
+    ui.passthrough = false;
+    clearTimeout(resumeGame.closingTimer);
+    resumeGame.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
+    canvasElement.focus();
+    if (Module._attemptPointerLock) Module._attemptPointerLock();
+  }
+
+  async function startMap(name) {
+    ui.closing = true;
+    hideMenu();
+    showBanner("Loading " + name, 9000);
+    await runCommand("map " + name);
+    ui.closing = false;
+    canvasElement.focus();
+  }
+
+  async function quitGame() {
+    ui.closing = true;
+    hideMenu();
+    showBanner("Closing Quake II", 4000);
+    await runCommand("quit");
+    ui.closing = false;
+  }
+
+  function doAction(action, button) {
+    if (action === "resume") resumeGame();
+    else if (action === "newgame") setView("newgame");
+    else if (action === "options") setView("options");
+    else if (action === "controls") setView("controls");
+    else if (action === "back") setView("main");
+    else if (action === "quit") quitGame();
+    else if (action === "map" && button && button.dataset.map) startMap(button.dataset.map);
+  }
+
+  // Roving focus: the item under the pointer becomes the focused item, so mouse
+  // hover and keyboard selection are always the same single highlight.
+  menuPanel.addEventListener("pointerover", function (event) {
+    const button = event.target.closest("button");
+    if (button && menuPanel.contains(button) && button !== document.activeElement) {
+      button.focus({ preventScroll: true });
+    }
+  });
+
+  menuPanel.addEventListener("click", function (event) {
+    const button = event.target.closest("button");
+    if (!button || !menuPanel.contains(button)) return;
+    doAction(button.dataset.action, button);
+  });
+
+  // While the panel is up it owns the keyboard: the engine's own menu must not
+  // scroll underneath it, and pointer lock must not be requested behind it.
+  window.addEventListener("keydown", function (event) {
+    if (!ui.open || ui.passthrough) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const buttons = visibleButtons();
+    const index = buttons.indexOf(document.activeElement);
+    if (event.key === "ArrowDown" || event.key === "Tab" && !event.shiftKey) {
+      const next = buttons[(index + 1) % (buttons.length || 1)];
+      if (next) next.focus();
+    } else if (event.key === "ArrowUp" || event.key === "Tab" && event.shiftKey) {
+      const next = buttons[(index - 1 + buttons.length) % (buttons.length || 1)];
+      if (next) next.focus();
+    } else if (event.key === "Enter" || event.key === " ") {
+      const button = document.activeElement && document.activeElement.matches("button")
+        ? document.activeElement : buttons[0];
+      if (button) button.click();
+    } else if (event.key === "Escape") {
+      if (ui.view !== "main") setView("main");
+      else resumeGame();
+    }
+  }, true);
+
+  window.addEventListener("keyup", function (event) {
+    if (!ui.open || ui.passthrough) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }, true);
+
+  optionsChip.addEventListener("click", function () {
+    // Opening from the chip asks the engine for its menu, which is the pause.
+    showMenu("options");
+    ui.passthrough = true;
+    tapKey(ESCAPE_KEY);
+    ui.passthrough = false;
+    ui.closing = true;
+    clearTimeout(optionsChip.closingTimer);
+    optionsChip.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
+  });
+
+  // `cls.key_dest` is the engine's own word for who owns the keyboard: 0 game,
+  // 1 console, 3 menu. Polling it is how the panel follows the real game state
+  // rather than guessing from focused elements.
+  function syncInterface() {
+    const state = engineSnapshot();
+    const dest = state && typeof state.keyDest === "number" ? state.keyDest : null;
+    const visible = canvasElement.style.display === "block";
+    const locked = document.pointerLockElement === canvasElement;
+    const playing = dest === 0 && !ui.open;
+    hudBand.classList.toggle("live", playing && visible);
+    optionsChip.hidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
+    const showPrompt = playing && visible && !locked && engineRunning;
+    if (showPrompt !== ui.prompt) {
+      ui.prompt = showPrompt;
+      promptElement.hidden = !showPrompt;
+    }
+    if (dest === 3 && !ui.open && !ui.closing) showMenu("main");
+    else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
+  }
+  setInterval(syncInterface, 120);
+
+  // Browsers take Escape for themselves while the pointer is locked: it leaves
+  // the lock and the page never sees the key, so the engine's own menu would
+  // stay shut until a second press. When the lock is lost with the game still
+  // running, ask the engine for its menu (that is the pause) and show the panel.
+  document.addEventListener("pointerlockchange", function () {
+    if (document.pointerLockElement === canvasElement) return;
+    setTimeout(function () {
+      if (document.pointerLockElement === canvasElement) return;
+      if (!engineRunning || ui.open || ui.closing) return;
+      const dest = engineKeyDest();
+      if (dest === 3) { showMenu("main"); return; }
+      if (dest !== 0) return;
+      ui.passthrough = true;
+      tapKey(ESCAPE_KEY);
+      ui.passthrough = false;
+      setTimeout(function () {
+        if (!ui.open && engineKeyDest() === 3) showMenu("main");
+      }, 260);
+    }, 220);
+  });
+
   // ---- Page wiring -------------------------------------------------------
 
   // The engine renames the window; keep the tab titled "Quake 2".
@@ -672,15 +977,16 @@ var Module;
   });
 
   // Keep keyboard focus on the game when clicking the letterbox bars or
-  // coming back to the tab.
+  // coming back to the tab -- but never steal it from the interface layer.
   document.addEventListener("mousedown", function (event) {
+    if (event.target.closest && event.target.closest("#ui")) return;
     if (event.target !== canvasElement && canvasElement.style.display === "block") {
       event.preventDefault();
       canvasElement.focus();
     }
   });
   window.addEventListener("focus", function () {
-    if (canvasElement.style.display === "block") canvasElement.focus();
+    if (canvasElement.style.display === "block" && !ui.open) canvasElement.focus();
   });
 
   // ---- Boot ----------------------------------------------------------------
