@@ -8,7 +8,7 @@
 // colour scaled by a shading factor, so a stone wall stays the same brown and a
 // red light stays red. The detail comes from relief, not from paint.
 //
-//   applyMaterial(base, source, material, { seed }) -> { width, height, rgb }
+//   applyMaterial(base, source, material, { seed, params }) -> { width, height, rgb }
 //
 //     base      the 4x sRGB picture from upscaleImage()
 //     source    the 1x pristine sRGB picture (only `crate` reads it, to decide
@@ -19,6 +19,10 @@
 //     seed      hash of the texture name (materialSeed(name) does that). It is
 //               the only randomness: the same arguments always produce the same
 //               bytes, so a rebuild reproduces the archive.
+//     params    per-entry knobs merged over MATERIAL_PARAMS[material] for this
+//               picture only; a name that is not in MATERIAL_KNOBS is refused.
+//               Omitted (or {}) the material's own row draws exactly what it
+//               always drew: the merge never changes a value it was not given.
 //
 // `sign`, `water`, `sky` and `flat` are the four materials that mean "keep the
 // faithful picture": applyMaterial returns a copy of base untouched.
@@ -638,6 +642,73 @@ export const MATERIAL_PARAMS = Object.freeze({
   glass: { detail: "smooth", normals: 2.5, shade: 0.35, ao: 0.1, grunge: 0.4, grain: 0.02, edge: 0.05, glint: 0, wear: 0 },
 });
 
+// Everything a per-entry tuning row may set. applyMaterial merges the row over
+// MATERIAL_PARAMS[material] and refuses any other name, so a typo in a tuning
+// table fails the build instead of silently drawing the global recipe. The last
+// two are per-entry knobs added for the weakest-margin tuning:
+//
+//   desat        extra pull toward the pixel's own grey, 0..0.6 once mixed
+//                with the grunge/glint/wear desaturation -- the chroma lever.
+//                Stays a rule, never a re-hue: it moves a colour along its own
+//                grey line.
+//   bias         luminance, in 0..255 levels, by which the mean guard's target
+//                moves away from the faithful base's mean (positive = brighter).
+//                It exists because the base itself can sit off the pristine
+//                WAL's mean, and a material that aims at the base inherits that
+//                offset.
+//   grungeDesat  the grunge's share of desaturation (0.15 in every material
+//                row). Pulled down it keeps the grime's darkening and drops the
+//                pull toward grey, which is what a low-chroma surface needs to
+//                keep a stable hue once the 8-bit round trip is measured.
+//
+// All three default to the global recipe's value (0, 0 and 0.15), so any
+// material row that does not name them draws byte-identical output.
+export const MATERIAL_KNOBS = Object.freeze([
+  "detail",
+  "normals",
+  "shade",
+  "ao",
+  "grunge",
+  "grain",
+  "edge",
+  "glint",
+  "wear",
+  "glow",
+  "desat",
+  "bias",
+  "grungeDesat",
+]);
+
+// The row a picture is drawn with: the material's own, or a copy with a
+// caller's per-entry knobs merged over it. Validated here, once, so the drawing
+// code never has to guess what a knob name means.
+function profileFor(material, params) {
+  const base = MATERIAL_PARAMS[material];
+  if (!base) throw new TypeError("applyMaterial: material " + JSON.stringify(material) + " has no recipe");
+  if (params == null) return base;
+  if (typeof params !== "object" || Array.isArray(params)) {
+    throw new TypeError("applyMaterial: params must be an object of knob values");
+  }
+  const keys = Object.keys(params);
+  if (!keys.length) return base;
+  const merged = { ...base };
+  for (const key of keys) {
+    if (!MATERIAL_KNOBS.includes(key)) {
+      throw new TypeError(
+        "applyMaterial: unknown knob " + JSON.stringify(key) + "; the knobs are " + MATERIAL_KNOBS.join(" ")
+      );
+    }
+    const value = params[key];
+    if (key === "detail") {
+      if (typeof value !== "string") throw new TypeError("applyMaterial: knob detail must be a string");
+    } else if (!Number.isFinite(value)) {
+      throw new TypeError("applyMaterial: knob " + JSON.stringify(key) + " must be a finite number");
+    }
+    merged[key] = value;
+  }
+  return merged;
+}
+
 // ---------------------------------------------------------------------------
 // The crate question: is the face timber or steel?
 // ---------------------------------------------------------------------------
@@ -756,8 +827,7 @@ export function applyMaterial(base, source, material, options = {}) {
     return { width, height, rgb: Uint8Array.from(base.rgb) };
   }
 
-  const profile = MATERIAL_PARAMS[material];
-  if (!profile) throw new TypeError("applyMaterial: material " + JSON.stringify(material) + " has no recipe");
+  const profile = profileFor(material, options.params);
   if (source != null) validateImage(source, "source");
 
   const seed = seedOf(options.seed);
@@ -913,6 +983,12 @@ export function applyMaterial(base, source, material, options = {}) {
 
   // -- 5. colour -----------------------------------------------------------
   const out = new Float32Array(count * 3);
+  // The per-entry desaturation, 0 for every material that does not name it.
+  const extraDesat = profile.desat ?? 0;
+  const grungeDesat = profile.grungeDesat ?? 0.15;
+  // Where the mean guard aims, in 0..255 levels: the faithful base's own mean,
+  // moved by the per-entry bias (0 unless a tuning row asks for it).
+  const bias = profile.bias ?? 0;
   // Grain is scaled by the surface's own relief. A flat painted panel has
   // little microtexture to show, so a full-strength grain there reads as noise
   // and pulls the picture away from its source; the same grain on a busy
@@ -955,7 +1031,7 @@ export function applyMaterial(base, source, material, options = {}) {
     const occlusion = 1 - profile.ao * cavity[pixel];
 
     let brighten;
-    let desaturate = 0.15 * grunge[pixel];
+    let desaturate = grungeDesat * grunge[pixel] + extraDesat;
     if (profile.glint) {
       // Metal's convex highlight is a glint: less bright, and pulled toward
       // its own grey so it reads as sheen rather than paint.
@@ -1020,11 +1096,12 @@ export function applyMaterial(base, source, material, options = {}) {
   encode();
 
   const baseSrgbMean = srgbLuminanceMean(base.rgb, count);
-  if (baseSrgbMean > 0.5) {
+  const targetSrgbMean = baseSrgbMean + bias;
+  if (targetSrgbMean > 0.5) {
     for (let attempt = 0; attempt < 2; attempt++) {
       const outSrgbMean = srgbLuminanceMean(rgb, count);
       if (!(outSrgbMean > 0.5)) break;
-      const correction = clamp(baseSrgbMean / outSrgbMean, 0.75, 1.35);
+      const correction = clamp(targetSrgbMean / outSrgbMean, 0.75, 1.35);
       if (Math.abs(correction - 1) < 0.004) break;
       gain = clamp(gain * Math.pow(correction, 2.4), 0.55, 2.2);
       encode();

@@ -119,6 +119,109 @@
     "wear": 0
    }
   },
+  "materialTuning": {
+   "textures/e1u1/wsupprt1_14.wal": {
+    "params": {
+     "glow": 0.55,
+     "grain": 0.15
+    },
+    "why": "lamp: least detail of any material entry (1.01x the smooth floor) and the largest colour move (meanAbsRgb 6.44 of 10). The bloom was most of that colour move and almost none of the detail; a quarter less glow (0.55) and a finer grain (0.05 -> 0.15) take meanAbsRgb to 3.83 and detail to 1.21x"
+   },
+   "textures/e1u1/grnx2_5.wal": {
+    "params": {
+     "grain": 0.32
+    },
+    "why": "metal: detail 1.520x, only 1.3% above the 1.5x floor; a finer grain (0.24 -> 0.32) lifts it to 1.65x without touching the relief that drives the seam"
+   },
+   "textures/e1u1/grnx3_3.wal": {
+    "params": {
+     "grain": 0.3
+    },
+    "why": "metal: detail 1.545x and the highest seam-to-base ratio of the grnx family (0.31 against the base's 0.2285). The same finer grain (0.24 -> 0.30) lifts detail to 1.65x and pulls the seam ratio down to 0.2497"
+   },
+   "textures/e1u2/metal11_3.wal": {
+    "params": {
+     "normals": 4,
+     "wear": 0.2,
+     "grungeDesat": 0.08
+    },
+    "why": "rust: largest hue shift in the set (2.5433° of 3°) with only 0.006 of the 0.007 bright share left. The shift came from desaturation leaving low-chroma pixels to quantise badly; less relief (7.5 -> 4), less chipped-edge desaturation (0.5 -> 0.2) and a gentler grunge pull to grey (0.15 -> 0.08) take hue to 2.03° and bright share to 0.0049"
+   },
+   "textures/e1u1/florr1_2.wal": {
+    "params": {
+     "ao": 0.25,
+     "grunge": 0.95,
+     "grain": 0.32,
+     "edge": 0.55
+    },
+    "why": "stone: meanAbsRgb 5.0122, the second-largest colour move in the set, at 3.25x detail. Less cavity darkening, a lighter grime pull and a softer edge highlight take it to 3.76; a finer grain (0.24 -> 0.32) keeps detail above its old 4.83 at 4.97 (3.35x the 1.5x floor)"
+   },
+   "textures/e1u1/+0btshoot2.wal": {
+    "params": {
+     "normals": 3,
+     "grunge": 0.5
+    },
+    "why": "tech: meanAbsRgb 4.9447, hue 1.9925° and a bright-pixel share already at its 0.013. Softer relief (6 -> 3) and less grime (0.7 -> 0.5) take rgb to 4.33, hue to 1.81° and bright share to 0.0128. The toggle partner +abtshoot2 is not an animation frame and keeps its own art"
+   },
+   "textures/e1u1/color1_2.wal": {
+    "params": {
+     "edge": 0.15,
+     "desat": 0.01,
+     "grain": 0.36
+    },
+    "why": "rust: 99th-percentile chroma 88 against an allowance of 93.2 (94.4%). The edge highlight was the main chroma source: a softer edge (0.45 -> 0.15) and 1% more pull toward each pixel's own grey take it to 86 (92.3%), and a finer grain (0.32 -> 0.36) keeps detail at 4.85 (2.91x)"
+   },
+   "textures/e1u1/+0comp10_1.wal": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: chroma 97 against the 103.1 allowance. One recipe for all five frames: the edge highlight was most of the chroma, so edge 0.45 -> 0.2 with 1.2% more pull toward grey takes it to 94, and the colour move drops too (meanAbsRgb 2.43 -> 2.35)"
+   },
+   "textures/e1u1/+1comp10_1.wal": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 94"
+   },
+   "textures/e1u1/+2comp10_1.wal": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 95"
+   },
+   "textures/e1u1/+3comp10_1.wal": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94"
+   },
+   "textures/e1u1/+4comp10_1.wal": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94"
+   },
+   "textures/e1u1/wgrate1_8.wal": {
+    "params": {
+     "bias": -1,
+     "grain": 0.38
+    },
+    "why": "rust: largest luminance bias among material entries (0.9465 of 2) with detail at 1.589x. The bias was inherited from the faithful base's own mean, so the mean guard now aims one level lower (bias -1) and the grain goes finer (0.32 -> 0.38): bias 0.022, detail 1.68x"
+   },
+   "textures/e1u1/pip01_1.wal": {
+    "params": {
+     "normals": 3,
+     "grain": 0.34,
+     "edge": 0.36
+    },
+    "why": "rust: lowest Pearson correlation in the set (0.9008 against the 0.9 floor). Most of the structure the pass imposed was relief the source did not have: relief 7.5 -> 3 with a slightly finer grain (0.32 -> 0.34) and a softer edge lifts r to 0.9359 with detail at 4.55, above its old 4.54 (4.88x)"
+   }
+  },
   "materialGates": "material art is held to the realism gates instead of gate 4 (source 3x3 envelope) and gate 5 (bilinear gradient)",
   "parameters": {
    "upscale": "catmull-rom",
@@ -243,7 +346,7 @@
   },
   "artPixels": 27602944,
   "artBytes": 82808832,
-  "pngBytes": 41181973,
+  "pngBytes": 41197102,
   "unchanged": 0
  },
  "entries": [
@@ -310,9 +413,16 @@
    "materialWhy": "shooter-panel face; tech by name even though it reads as a light",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "normals": 3,
+     "grunge": 0.5
+    },
+    "why": "tech: meanAbsRgb 4.9447, hue 1.9925° and a bright-pixel share already at its 0.013. Softer relief (6 -> 3) and less grime (0.7 -> 0.5) take rgb to 4.33, hue to 1.81° and bright share to 0.0128. The toggle partner +abtshoot2 is not an animation frame and keeps its own art"
+   },
    "source": "32x32",
    "art": "128x128",
-   "pngBytes": 32004,
+   "pngBytes": 32001,
    "generated": false,
    "pass": true,
    "gates": {
@@ -327,33 +437,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9963,
-    "meanAbsRgb": 4.9447,
+    "pearson": 0.9976,
+    "meanAbsRgb": 4.3278,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 2.1049,
-    "meanLuminanceBias": 0.4403,
-    "seam": 0.3984,
+    "meanLuminanceError": 1.8371,
+    "meanLuminanceBias": 0.4423,
+    "seam": 0.3976,
     "seamSource": 0.445,
     "seamBaseline": 0.4164,
     "seamBaselineKind": "material base",
-    "seamStep": 3.1615,
+    "seamStep": 3.1641,
     "seamStepBaseline": 1.7266,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.9925,
-    "chroma99": 224,
+    "hueShift": 1.8117,
+    "chroma99": 228,
     "chroma99Base": 249,
-    "brightShare": 0.013,
+    "brightShare": 0.0128,
     "brightShareBase": 0.0137,
-    "detailEnergy": 6.7523,
+    "detailEnergy": 6.7069,
     "detailEnergyBase": 3.9522,
-    "softwareLuminance": 45.4801,
+    "softwareLuminance": 45.2075,
     "softwareSourceLuminance": 44.936,
-    "softwareLuminanceBias": 0.544,
-    "softwareIndices": 79,
+    "softwareLuminanceBias": 0.2715,
+    "softwareIndices": 80,
     "softwareSourceIndices": 67,
-    "softwareIndexShare": 1.1791
+    "softwareIndexShare": 1.194
    },
    "failures": []
   },
@@ -530,9 +640,16 @@
    "materialWhy": "tech: machine, computer or door-mechanism name (added for map coverage)",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: chroma 97 against the 103.1 allowance. One recipe for all five frames: the edge highlight was most of the chroma, so edge 0.45 -> 0.2 with 1.2% more pull toward grey takes it to 94, and the colour move drops too (meanAbsRgb 2.43 -> 2.35)"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 101978,
+   "pngBytes": 101419,
    "generated": false,
    "pass": true,
    "gates": {
@@ -547,30 +664,30 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9817,
-    "meanAbsRgb": 2.4336,
+    "pearson": 0.9849,
+    "meanAbsRgb": 2.3509,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.9462,
-    "meanLuminanceBias": 0.0128,
-    "seam": 1.8853,
+    "meanLuminanceError": 1.7598,
+    "meanLuminanceBias": 0.042,
+    "seam": 1.9526,
     "seamSource": 3.7604,
     "seamBaseline": 3.3952,
     "seamBaselineKind": "material base",
-    "seamStep": 8.651,
+    "seamStep": 8.7396,
     "seamStepBaseline": 8.444,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.2722,
-    "chroma99": 97,
+    "hueShift": 1.3285,
+    "chroma99": 94,
     "chroma99Base": 91,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.6522,
+    "detailEnergy": 3.5712,
     "detailEnergyBase": 1.6045,
-    "softwareLuminance": 22.7932,
+    "softwareLuminance": 22.8809,
     "softwareSourceLuminance": 23.0154,
-    "softwareLuminanceBias": 0.2222,
+    "softwareLuminanceBias": 0.1345,
     "softwareIndices": 70,
     "softwareSourceIndices": 53,
     "softwareIndexShare": 1.3208
@@ -805,9 +922,16 @@
    "materialWhy": "tech: machine, computer or door-mechanism name (added for map coverage)",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 94"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 103240,
+   "pngBytes": 102926,
    "generated": false,
    "pass": true,
    "gates": {
@@ -822,33 +946,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.981,
-    "meanAbsRgb": 2.4604,
+    "pearson": 0.984,
+    "meanAbsRgb": 2.3822,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.9763,
-    "meanLuminanceBias": 0.0081,
-    "seam": 1.887,
+    "meanLuminanceError": 1.7917,
+    "meanLuminanceBias": 0.0473,
+    "seam": 1.9539,
     "seamSource": 3.707,
     "seamBaseline": 3.3533,
     "seamBaselineKind": "material base",
-    "seamStep": 8.8073,
+    "seamStep": 8.8932,
     "seamStepBaseline": 8.444,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.3212,
-    "chroma99": 98,
+    "hueShift": 1.3338,
+    "chroma99": 94,
     "chroma99Base": 91,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.7034,
+    "detailEnergy": 3.6199,
     "detailEnergyBase": 1.6535,
-    "softwareLuminance": 23.1695,
+    "softwareLuminance": 23.2361,
     "softwareSourceLuminance": 23.3654,
-    "softwareLuminanceBias": 0.1959,
-    "softwareIndices": 73,
+    "softwareLuminanceBias": 0.1292,
+    "softwareIndices": 69,
     "softwareSourceIndices": 52,
-    "softwareIndexShare": 1.4038
+    "softwareIndexShare": 1.3269
    },
    "failures": []
   },
@@ -915,9 +1039,16 @@
    "materialWhy": "tech: machine, computer or door-mechanism name (added for map coverage)",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 98 -> 95"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 102625,
+   "pngBytes": 102258,
    "generated": false,
    "pass": true,
    "gates": {
@@ -932,33 +1063,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9815,
-    "meanAbsRgb": 2.3276,
+    "pearson": 0.9846,
+    "meanAbsRgb": 2.253,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.898,
-    "meanLuminanceBias": 0.0124,
-    "seam": 1.8705,
+    "meanLuminanceError": 1.7163,
+    "meanLuminanceBias": 0.0481,
+    "seam": 1.9314,
     "seamSource": 3.7261,
     "seamBaseline": 3.3612,
     "seamBaselineKind": "material base",
-    "seamStep": 8.6237,
+    "seamStep": 8.6888,
     "seamStepBaseline": 8.444,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.2807,
-    "chroma99": 98,
+    "hueShift": 1.3376,
+    "chroma99": 95,
     "chroma99Base": 91,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.6547,
+    "detailEnergy": 3.5746,
     "detailEnergyBase": 1.6126,
-    "softwareLuminance": 22.9863,
+    "softwareLuminance": 23.0337,
     "softwareSourceLuminance": 23.1358,
-    "softwareLuminanceBias": 0.1496,
-    "softwareIndices": 74,
+    "softwareLuminanceBias": 0.1022,
+    "softwareIndices": 70,
     "softwareSourceIndices": 52,
-    "softwareIndexShare": 1.4231
+    "softwareIndexShare": 1.3462
    },
    "failures": []
   },
@@ -1025,9 +1156,16 @@
    "materialWhy": "tech: machine, computer or door-mechanism name (added for map coverage)",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 101838,
+   "pngBytes": 101373,
    "generated": false,
    "pass": true,
    "gates": {
@@ -1042,30 +1180,30 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9812,
-    "meanAbsRgb": 2.3887,
+    "pearson": 0.9843,
+    "meanAbsRgb": 2.3187,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.9107,
-    "meanLuminanceBias": 0.0039,
-    "seam": 1.9259,
+    "meanLuminanceError": 1.7331,
+    "meanLuminanceBias": 0.0553,
+    "seam": 2.0048,
     "seamSource": 3.7625,
     "seamBaseline": 3.3999,
     "seamBaselineKind": "material base",
-    "seamStep": 8.8203,
+    "seamStep": 8.9531,
     "seamStepBaseline": 8.444,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.2665,
-    "chroma99": 97,
+    "hueShift": 1.3165,
+    "chroma99": 94,
     "chroma99Base": 91,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.6398,
+    "detailEnergy": 3.5591,
     "detailEnergyBase": 1.5989,
-    "softwareLuminance": 22.8511,
+    "softwareLuminance": 22.9169,
     "softwareSourceLuminance": 23.0298,
-    "softwareLuminanceBias": 0.1787,
+    "softwareLuminanceBias": 0.1129,
     "softwareIndices": 72,
     "softwareSourceIndices": 52,
     "softwareIndexShare": 1.3846
@@ -1135,9 +1273,16 @@
    "materialWhy": "tech: machine, computer or door-mechanism name (added for map coverage)",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.2,
+     "desat": 0.012
+    },
+    "why": "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 103578,
+   "pngBytes": 102988,
    "generated": false,
    "pass": true,
    "gates": {
@@ -1152,33 +1297,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9812,
-    "meanAbsRgb": 2.4504,
+    "pearson": 0.9844,
+    "meanAbsRgb": 2.3695,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 1.977,
-    "meanLuminanceBias": 0.0051,
-    "seam": 1.8365,
+    "meanLuminanceError": 1.7885,
+    "meanLuminanceBias": 0.0449,
+    "seam": 1.9114,
     "seamSource": 3.6732,
     "seamBaseline": 3.3228,
     "seamBaselineKind": "material base",
-    "seamStep": 8.5794,
+    "seamStep": 8.7057,
     "seamStepBaseline": 8.444,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.2754,
-    "chroma99": 97,
+    "hueShift": 1.3466,
+    "chroma99": 94,
     "chroma99Base": 91,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.7103,
+    "detailEnergy": 3.6267,
     "detailEnergyBase": 1.6493,
-    "softwareLuminance": 23.1024,
+    "softwareLuminance": 23.1424,
     "softwareSourceLuminance": 23.2799,
-    "softwareLuminanceBias": 0.1775,
-    "softwareIndices": 72,
+    "softwareLuminanceBias": 0.1375,
+    "softwareIndices": 70,
     "softwareSourceIndices": 53,
-    "softwareIndexShare": 1.3585
+    "softwareIndexShare": 1.3208
    },
    "failures": []
   },
@@ -4686,9 +4831,17 @@
    "materialWhy": "corroded brown steel, name and look agree",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "edge": 0.15,
+     "desat": 0.01,
+     "grain": 0.36
+    },
+    "why": "rust: 99th-percentile chroma 88 against an allowance of 93.2 (94.4%). The edge highlight was the main chroma source: a softer edge (0.45 -> 0.15) and 1% more pull toward each pixel's own grey take it to 86 (92.3%), and a finer grain (0.32 -> 0.36) keeps detail at 4.85 (2.91x)"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 110536,
+   "pngBytes": 111670,
    "generated": false,
    "pass": true,
    "gates": {
@@ -4703,33 +4856,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9565,
-    "meanAbsRgb": 3.5422,
+    "pearson": 0.9597,
+    "meanAbsRgb": 3.4526,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 3.3515,
-    "meanLuminanceBias": 0.0698,
-    "seam": 1.4025,
+    "meanLuminanceError": 3.1817,
+    "meanLuminanceBias": 0.0546,
+    "seam": 1.384,
     "seamSource": 1.9159,
     "seamBaseline": 1.8169,
     "seamBaselineKind": "material base",
-    "seamStep": 6.9727,
+    "seamStep": 7.1445,
     "seamStepBaseline": 4.1667,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.0108,
-    "chroma99": 88,
+    "hueShift": 1.0923,
+    "chroma99": 86,
     "chroma99Base": 82,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 4.6473,
+    "detailEnergy": 4.8523,
     "detailEnergyBase": 1.6686,
-    "softwareLuminance": 40.0822,
+    "softwareLuminance": 39.9812,
     "softwareSourceLuminance": 40.3465,
-    "softwareLuminanceBias": 0.2643,
-    "softwareIndices": 63,
+    "softwareLuminanceBias": 0.3653,
+    "softwareIndices": 62,
     "softwareSourceIndices": 45,
-    "softwareIndexShare": 1.4
+    "softwareIndexShare": 1.3778
    },
    "failures": []
   },
@@ -7371,9 +7524,18 @@
    "materialWhy": "rough stone/concrete, name and look agree",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "ao": 0.25,
+     "grunge": 0.95,
+     "grain": 0.32,
+     "edge": 0.55
+    },
+    "why": "stone: meanAbsRgb 5.0122, the second-largest colour move in the set, at 3.25x detail. Less cavity darkening, a lighter grime pull and a softer edge highlight take it to 3.76; a finer grain (0.24 -> 0.32) keeps detail above its old 4.83 at 4.97 (3.35x the 1.5x floor)"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 106627,
+   "pngBytes": 109173,
    "generated": false,
    "pass": true,
    "gates": {
@@ -7388,33 +7550,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9684,
-    "meanAbsRgb": 5.0122,
+    "pearson": 0.9656,
+    "meanAbsRgb": 3.7591,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 5.1771,
-    "meanLuminanceBias": 0.1848,
-    "seam": 1.1344,
+    "meanLuminanceError": 3.8911,
+    "meanLuminanceBias": 0.0635,
+    "seam": 1.058,
     "seamSource": 1.1676,
     "seamBaseline": 1.1121,
     "seamBaselineKind": "material base",
-    "seamStep": 5.8151,
+    "seamStep": 5.582,
     "seamStepBaseline": 2.4154,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.029,
-    "chroma99": 35,
+    "hueShift": 1.0274,
+    "chroma99": 34,
     "chroma99Base": 34,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 4.8268,
+    "detailEnergy": 4.9744,
     "detailEnergyBase": 1.4835,
-    "softwareLuminance": 41.0256,
+    "softwareLuminance": 41.0578,
     "softwareSourceLuminance": 41.2821,
-    "softwareLuminanceBias": 0.2565,
-    "softwareIndices": 19,
+    "softwareLuminanceBias": 0.2243,
+    "softwareIndices": 16,
     "softwareSourceIndices": 7,
-    "softwareIndexShare": 2.7143
+    "softwareIndexShare": 2.2857
    },
    "failures": []
   },
@@ -9626,9 +9788,15 @@
    "materialWhy": "slatted steel vent grille, not vegetation",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "grain": 0.32
+    },
+    "why": "metal: detail 1.520x, only 1.3% above the 1.5x floor; a finer grain (0.24 -> 0.32) lifts it to 1.65x without touching the relief that drives the seam"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 93833,
+   "pngBytes": 96948,
    "generated": false,
    "pass": true,
    "gates": {
@@ -9643,30 +9811,30 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9868,
-    "meanAbsRgb": 2.2345,
+    "pearson": 0.9866,
+    "meanAbsRgb": 2.2302,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 2.1348,
-    "meanLuminanceBias": 0.1528,
-    "seam": 0.2979,
+    "meanLuminanceError": 2.1338,
+    "meanLuminanceBias": 0.1512,
+    "seam": 0.2828,
     "seamSource": 0.4827,
     "seamBaseline": 0.2692,
     "seamBaselineKind": "material base",
-    "seamStep": 1.276,
+    "seamStep": 1.1602,
     "seamStepBaseline": 0.6758,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.3611,
+    "hueShift": 1.3735,
     "chroma99": 28,
     "chroma99Base": 30,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.4553,
+    "detailEnergy": 3.7388,
     "detailEnergyBase": 2.2731,
-    "softwareLuminance": 21.4569,
+    "softwareLuminance": 21.4512,
     "softwareSourceLuminance": 21.2766,
-    "softwareLuminanceBias": 0.1804,
+    "softwareLuminanceBias": 0.1746,
     "softwareIndices": 28,
     "softwareSourceIndices": 17,
     "softwareIndexShare": 1.6471
@@ -9956,9 +10124,15 @@
    "materialWhy": "cross-braced steel grating, not vegetation",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "grain": 0.3
+    },
+    "why": "metal: detail 1.545x and the highest seam-to-base ratio of the grnx family (0.31 against the base's 0.2285). The same finer grain (0.24 -> 0.30) lifts detail to 1.65x and pulls the seam ratio down to 0.2497"
+   },
    "source": "128x64",
    "art": "512x256",
-   "pngBytes": 203896,
+   "pngBytes": 208776,
    "generated": false,
    "pass": true,
    "gates": {
@@ -9973,30 +10147,30 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9831,
-    "meanAbsRgb": 2.205,
+    "pearson": 0.9828,
+    "meanAbsRgb": 2.2107,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 2.1163,
-    "meanLuminanceBias": 0.1333,
-    "seam": 0.31,
+    "meanLuminanceError": 2.121,
+    "meanLuminanceBias": 0.1242,
+    "seam": 0.2497,
     "seamSource": 0.3487,
     "seamBaseline": 0.2285,
     "seamBaselineKind": "material base",
-    "seamStep": 1.138,
+    "seamStep": 0.9805,
     "seamStepBaseline": 0.5482,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.4051,
+    "hueShift": 1.4106,
     "chroma99": 34,
     "chroma99Base": 39,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 3.7332,
+    "detailEnergy": 3.9907,
     "detailEnergyBase": 2.4162,
-    "softwareLuminance": 24.9267,
+    "softwareLuminance": 24.9518,
     "softwareSourceLuminance": 25.0178,
-    "softwareLuminanceBias": 0.091,
+    "softwareLuminanceBias": 0.066,
     "softwareIndices": 50,
     "softwareSourceIndices": 44,
     "softwareIndexShare": 1.1364
@@ -11545,9 +11719,17 @@
    "materialWhy": "corroded brown steel, name and look agree",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "normals": 3,
+     "grain": 0.34,
+     "edge": 0.36
+    },
+    "why": "rust: lowest Pearson correlation in the set (0.9008 against the 0.9 floor). Most of the structure the pass imposed was relief the source did not have: relief 7.5 -> 3 with a slightly finer grain (0.32 -> 0.34) and a softer edge lifts r to 0.9359 with detail at 4.55, above its old 4.54 (4.88x)"
+   },
    "source": "64x128",
    "art": "256x512",
-   "pngBytes": 215741,
+   "pngBytes": 215735,
    "generated": false,
    "pass": true,
    "gates": {
@@ -11562,33 +11744,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9008,
-    "meanAbsRgb": 3.156,
+    "pearson": 0.9359,
+    "meanAbsRgb": 3.0347,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 3.1695,
-    "meanLuminanceBias": 0.1108,
-    "seam": 1.0096,
+    "meanLuminanceError": 3.0417,
+    "meanLuminanceBias": 0.0408,
+    "seam": 1.0085,
     "seamSource": 1.0891,
     "seamBaseline": 1.0387,
     "seamBaselineKind": "material base",
-    "seamStep": 4.6185,
+    "seamStep": 4.6289,
     "seamStepBaseline": 1.4714,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 0.8834,
-    "chroma99": 51,
+    "hueShift": 0.8633,
+    "chroma99": 50,
     "chroma99Base": 47,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 4.5407,
+    "detailEnergy": 4.5548,
     "detailEnergyBase": 0.9333,
-    "softwareLuminance": 43.0752,
+    "softwareLuminance": 43.3316,
     "softwareSourceLuminance": 43.231,
-    "softwareLuminanceBias": 0.1558,
-    "softwareIndices": 28,
+    "softwareLuminanceBias": 0.1007,
+    "softwareIndices": 26,
     "softwareSourceIndices": 15,
-    "softwareIndexShare": 1.8667
+    "softwareIndexShare": 1.7333
    },
    "failures": []
   },
@@ -14350,9 +14532,16 @@
    "materialWhy": "corroded brown steel, name and look agree",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "bias": -1,
+     "grain": 0.38
+    },
+    "why": "rust: largest luminance bias among material entries (0.9465 of 2) with detail at 1.589x. The bias was inherited from the faithful base's own mean, so the mean guard now aims one level lower (bias -1) and the grain goes finer (0.32 -> 0.38): bias 0.022, detail 1.68x"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 102827,
+   "pngBytes": 104728,
    "generated": false,
    "pass": true,
    "gates": {
@@ -14367,33 +14556,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.9912,
-    "meanAbsRgb": 2.8285,
+    "pearson": 0.9907,
+    "meanAbsRgb": 2.796,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 2.7596,
-    "meanLuminanceBias": 0.9465,
-    "seam": 1.3372,
+    "meanLuminanceError": 2.7506,
+    "meanLuminanceBias": 0.0219,
+    "seam": 1.3513,
     "seamSource": 1.4627,
     "seamBaseline": 1.554,
     "seamBaselineKind": "material base",
-    "seamStep": 10.224,
+    "seamStep": 10.6927,
     "seamStepBaseline": 7.0495,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 1.1191,
-    "chroma99": 47,
+    "hueShift": 1.0935,
+    "chroma99": 46,
     "chroma99Base": 48,
     "brightShare": 0,
     "brightShareBase": 0,
-    "detailEnergy": 6.5809,
+    "detailEnergy": 6.9506,
     "detailEnergyBase": 4.1424,
-    "softwareLuminance": 31.2739,
+    "softwareLuminance": 30.4399,
     "softwareSourceLuminance": 30.7953,
-    "softwareLuminanceBias": 0.4786,
-    "softwareIndices": 54,
+    "softwareLuminanceBias": 0.3554,
+    "softwareIndices": 53,
     "softwareSourceIndices": 27,
-    "softwareIndexShare": 2
+    "softwareIndexShare": 1.963
    },
    "failures": []
   },
@@ -14955,9 +15144,16 @@
    "materialWhy": "lit support strip: flag 1 makes it a lamp, not a support",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "glow": 0.55,
+     "grain": 0.15
+    },
+    "why": "lamp: least detail of any material entry (1.01x the smooth floor) and the largest colour move (meanAbsRgb 6.44 of 10). The bloom was most of that colour move and almost none of the detail; a quarter less glow (0.55) and a finer grain (0.05 -> 0.15) take meanAbsRgb to 3.83 and detail to 1.21x"
+   },
    "source": "32x64",
    "art": "128x256",
-   "pngBytes": 38730,
+   "pngBytes": 44299,
    "generated": false,
    "pass": true,
    "gates": {
@@ -14972,33 +15168,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.995,
-    "meanAbsRgb": 6.4409,
+    "pearson": 0.9982,
+    "meanAbsRgb": 3.8265,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 6.6482,
-    "meanLuminanceBias": 0.8964,
-    "seam": 0.951,
+    "meanLuminanceError": 3.9837,
+    "meanLuminanceBias": 0.751,
+    "seam": 0.9284,
     "seamSource": 1.1879,
     "seamBaseline": 1.0062,
     "seamBaselineKind": "material base",
-    "seamStep": 2.1198,
+    "seamStep": 2.9792,
     "seamStepBaseline": 1.8828,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 0.64,
-    "chroma99": 42,
+    "hueShift": 0.5301,
+    "chroma99": 43,
     "chroma99Base": 44,
-    "brightShare": 0.0001,
+    "brightShare": 0,
     "brightShareBase": 0.2002,
-    "detailEnergy": 4.5342,
+    "detailEnergy": 5.448,
     "detailEnergyBase": 4.4894,
-    "softwareLuminance": 96.2809,
+    "softwareLuminance": 96.6036,
     "softwareSourceLuminance": 95.3698,
-    "softwareLuminanceBias": 0.9111,
-    "softwareIndices": 46,
+    "softwareLuminanceBias": 1.2338,
+    "softwareIndices": 47,
     "softwareSourceIndices": 40,
-    "softwareIndexShare": 1.15
+    "softwareIndexShare": 1.175
    },
    "failures": []
   },
@@ -15890,9 +16086,17 @@
    "materialWhy": "corroded brown steel, name and look agree",
    "materialBy": "table",
    "recipe": "material",
+   "tuning": {
+    "params": {
+     "normals": 4,
+     "wear": 0.2,
+     "grungeDesat": 0.08
+    },
+    "why": "rust: largest hue shift in the set (2.5433° of 3°) with only 0.006 of the 0.007 bright share left. The shift came from desaturation leaving low-chroma pixels to quantise badly; less relief (7.5 -> 4), less chipped-edge desaturation (0.5 -> 0.2) and a gentler grunge pull to grey (0.15 -> 0.08) take hue to 2.03° and bright share to 0.0049"
+   },
    "source": "64x64",
    "art": "256x256",
-   "pngBytes": 119561,
+   "pngBytes": 117849,
    "generated": false,
    "pass": true,
    "gates": {
@@ -15907,33 +16111,33 @@
     "softwareIndices": true
    },
    "metrics": {
-    "pearson": 0.994,
-    "meanAbsRgb": 4.9107,
+    "pearson": 0.9955,
+    "meanAbsRgb": 3.8791,
     "flat": false,
     "flatMax": null,
-    "meanLuminanceError": 3.1526,
-    "meanLuminanceBias": 0.5047,
-    "seam": 0.7194,
+    "meanLuminanceError": 2.8501,
+    "meanLuminanceBias": 0.339,
+    "seam": 0.7716,
     "seamSource": 1.0482,
     "seamBaseline": 0.9749,
     "seamBaselineKind": "material base",
-    "seamStep": 4.9076,
+    "seamStep": 4.9818,
     "seamStepBaseline": 3.099,
     "outlierPercent": null,
     "gradient": null,
-    "hueShift": 2.5433,
-    "chroma99": 216,
+    "hueShift": 2.0266,
+    "chroma99": 226,
     "chroma99Base": 231,
-    "brightShare": 0.006,
+    "brightShare": 0.0049,
     "brightShareBase": 0.002,
-    "detailEnergy": 6.4882,
+    "detailEnergy": 6.3723,
     "detailEnergyBase": 3.1625,
-    "softwareLuminance": 49.2708,
+    "softwareLuminance": 49.1524,
     "softwareSourceLuminance": 49.4577,
-    "softwareLuminanceBias": 0.1868,
-    "softwareIndices": 96,
+    "softwareLuminanceBias": 0.3052,
+    "softwareIndices": 99,
     "softwareSourceIndices": 79,
-    "softwareIndexShare": 1.2152
+    "softwareIndexShare": 1.2532
    },
    "failures": []
   },

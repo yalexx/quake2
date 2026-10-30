@@ -63,6 +63,16 @@
 // material, the reason materialFor gave, per-material counts, the knobs in
 // MATERIAL_PARAMS and the recipe text per entry.
 //
+// Per-entry tuning. MATERIAL_TUNING (below TEXTURE_OVERRIDES) holds one row of
+// material knobs for each of the ten weakest materials named in
+// docs/texture-review/REALISM.md §6, merged over the material's global row by
+// applyMaterial({params}) for that picture alone. MATERIAL_PARAMS is never
+// touched from there: a global knob redraws every entry of that material, and
+// the strong entries keep the art they already have. A row is recorded in the
+// report per entry as `tuning` (its params and its reason), the way `override`
+// is, and in `recipe.materialTuning`; docs/texture-review/tuning.json holds the
+// before/after numbers.
+//
 // Coverage
 //
 // The targets are the WALs that have art plus every WAL a map in the manifest
@@ -276,6 +286,76 @@ export const TEXTURE_OVERRIDES = {
 
 export function overrideFor(name) {
   return TEXTURE_OVERRIDES[String(name).toLowerCase()] ?? null;
+}
+
+// Per-entry material tuning: the ten weakest materials of
+// docs/texture-review/REALISM.md §6, each given knobs for that one picture and
+// nothing else. MATERIAL_PARAMS stays the global recipe -- a global knob would
+// redraw all 77 rust, 71 metal or 68 tech entries, and the strong entries must
+// stay exactly as they are -- so a row here is merged over the material's row
+// by applyMaterial({params}) and recorded in the report beside the override.
+// Each `why` names the number the row moves.
+export const MATERIAL_TUNING = {
+  "textures/e1u1/wsupprt1_14.wal": {
+    params: { glow: 0.55, grain: 0.15 },
+    why: "lamp: least detail of any material entry (1.01x the smooth floor) and the largest colour move (meanAbsRgb 6.44 of 10). The bloom was most of that colour move and almost none of the detail; a quarter less glow (0.55) and a finer grain (0.05 -> 0.15) take meanAbsRgb to 3.83 and detail to 1.21x",
+  },
+  "textures/e1u1/grnx2_5.wal": {
+    params: { grain: 0.32 },
+    why: "metal: detail 1.520x, only 1.3% above the 1.5x floor; a finer grain (0.24 -> 0.32) lifts it to 1.65x without touching the relief that drives the seam",
+  },
+  "textures/e1u1/grnx3_3.wal": {
+    params: { grain: 0.30 },
+    why: "metal: detail 1.545x and the highest seam-to-base ratio of the grnx family (0.31 against the base's 0.2285). The same finer grain (0.24 -> 0.30) lifts detail to 1.65x and pulls the seam ratio down to 0.2497",
+  },
+  "textures/e1u2/metal11_3.wal": {
+    params: { normals: 4, wear: 0.2, grungeDesat: 0.08 },
+    why: "rust: largest hue shift in the set (2.5433° of 3°) with only 0.006 of the 0.007 bright share left. The shift came from desaturation leaving low-chroma pixels to quantise badly; less relief (7.5 -> 4), less chipped-edge desaturation (0.5 -> 0.2) and a gentler grunge pull to grey (0.15 -> 0.08) take hue to 2.03° and bright share to 0.0049",
+  },
+  "textures/e1u1/florr1_2.wal": {
+    params: { ao: 0.25, grunge: 0.95, grain: 0.32, edge: 0.55 },
+    why: "stone: meanAbsRgb 5.0122, the second-largest colour move in the set, at 3.25x detail. Less cavity darkening, a lighter grime pull and a softer edge highlight take it to 3.76; a finer grain (0.24 -> 0.32) keeps detail above its old 4.83 at 4.97 (3.35x the 1.5x floor)",
+  },
+  "textures/e1u1/+0btshoot2.wal": {
+    params: { normals: 3, grunge: 0.5 },
+    why: "tech: meanAbsRgb 4.9447, hue 1.9925° and a bright-pixel share already at its 0.013. Softer relief (6 -> 3) and less grime (0.7 -> 0.5) take rgb to 4.33, hue to 1.81° and bright share to 0.0128. The toggle partner +abtshoot2 is not an animation frame and keeps its own art",
+  },
+  "textures/e1u1/color1_2.wal": {
+    params: { edge: 0.15, desat: 0.01, grain: 0.36 },
+    why: "rust: 99th-percentile chroma 88 against an allowance of 93.2 (94.4%). The edge highlight was the main chroma source: a softer edge (0.45 -> 0.15) and 1% more pull toward each pixel's own grey take it to 86 (92.3%), and a finer grain (0.32 -> 0.36) keeps detail at 4.85 (2.91x)",
+  },
+  "textures/e1u1/+0comp10_1.wal": {
+    params: { edge: 0.2, desat: 0.012 },
+    why: "tech animation family: chroma 97 against the 103.1 allowance. One recipe for all five frames: the edge highlight was most of the chroma, so edge 0.45 -> 0.2 with 1.2% more pull toward grey takes it to 94, and the colour move drops too (meanAbsRgb 2.43 -> 2.35)",
+  },
+  "textures/e1u1/+1comp10_1.wal": {
+    params: { edge: 0.2, desat: 0.012 },
+    why: "tech animation family: same recipe as +0comp10_1, chroma 98 -> 94",
+  },
+  "textures/e1u1/+2comp10_1.wal": {
+    params: { edge: 0.2, desat: 0.012 },
+    why: "tech animation family: same recipe as +0comp10_1, chroma 98 -> 95",
+  },
+  "textures/e1u1/+3comp10_1.wal": {
+    params: { edge: 0.2, desat: 0.012 },
+    why: "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94",
+  },
+  "textures/e1u1/+4comp10_1.wal": {
+    params: { edge: 0.2, desat: 0.012 },
+    why: "tech animation family: same recipe as +0comp10_1, chroma 97 -> 94",
+  },
+  "textures/e1u1/wgrate1_8.wal": {
+    params: { bias: -1, grain: 0.38 },
+    why: "rust: largest luminance bias among material entries (0.9465 of 2) with detail at 1.589x. The bias was inherited from the faithful base's own mean, so the mean guard now aims one level lower (bias -1) and the grain goes finer (0.32 -> 0.38): bias 0.022, detail 1.68x",
+  },
+  "textures/e1u1/pip01_1.wal": {
+    params: { normals: 3, grain: 0.34, edge: 0.36 },
+    why: "rust: lowest Pearson correlation in the set (0.9008 against the 0.9 floor). Most of the structure the pass imposed was relief the source did not have: relief 7.5 -> 3 with a slightly finer grain (0.32 -> 0.34) and a softer edge lifts r to 0.9359 with detail at 4.55, above its old 4.54 (4.88x)",
+  },
+};
+
+export function tuningFor(name) {
+  return MATERIAL_TUNING[String(name).toLowerCase()] ?? null;
 }
 
 // What a texture is actually drawn with: the detected class unless an override
@@ -1901,6 +1981,9 @@ function main(argv) {
     const decision = materialFor(entry, original);
     const material = decision.material;
     const materialArt = !UNCHANGED_MATERIALS.includes(material);
+    // The per-entry knobs for this picture, merged over the material's global
+    // row; null for every entry that follows the material's own recipe.
+    const tuning = materialArt ? tuningFor(entry.name) : null;
     const base = upscaleImage(original, { textureClass, params: recipe.params });
     const file = artFileFor(entry);
     let art = null;
@@ -1915,6 +1998,7 @@ function main(argv) {
           material,
           materialWhy: decision.why,
           materialBy: decision.by,
+          ...(tuning ? { tuning: { params: tuning.params, why: tuning.why } } : {}),
           source: original.width + "x" + original.height,
           art: null,
           pass: false,
@@ -1930,7 +2014,9 @@ function main(argv) {
       }
       art = decodePngRgb(file);
     } else {
-      art = materialArt ? guardMaterialSeam(applyMaterial(base, original, material, { seed: entry.name }), base) : base;
+      art = materialArt
+        ? guardMaterialSeam(applyMaterial(base, original, material, { seed: entry.name, params: tuning?.params }), base)
+        : base;
       const png = encodePngRgb(art.width, art.height, art.rgb);
       const previous = fs.existsSync(file) ? fs.readFileSync(file) : null;
       if (!previous || !previous.equals(png)) {
@@ -1963,6 +2049,7 @@ function main(argv) {
       materialBy: decision.by,
       recipe: materialArt ? "material" : "faithful",
       ...(recipe.override ? { detectedClass: recipe.detectedClass, override: { class: recipe.override.class ?? null, params: recipe.override.params ?? null, why: recipe.override.why } } : {}),
+      ...(tuning ? { tuning: { params: tuning.params, why: tuning.why } } : {}),
       source: original.width + "x" + original.height,
       art: art.width + "x" + art.height,
       pngBytes: bytes,
@@ -2005,6 +2092,7 @@ function main(argv) {
         "Every other material is drawn by applyMaterial(base, source, material, {seed: entry.name}): relief from the base's own shading, one fixed light from the upper left, " +
         "wrapped cavity occlusion, grunge, grain and edge wear, and a mean-brightness guard -- all deterministic, all tileable, all in scripts/material-lib.mjs.",
       materialParams: MATERIAL_PARAMS,
+      materialTuning: MATERIAL_TUNING,
       materialGates: "material art is held to the realism gates instead of gate 4 (source 3x3 envelope) and gate 5 (bilinear gradient)",
       parameters: BASE_PARAMS,
       classes: CLASS_PARAMS,

@@ -20,7 +20,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { DEFAULT_PAK, HIRES_SCALE, PROJECT_ROOT, decodePng, readManifest, readPakDirectory, readWal } from "./texture-lib.mjs";
+import { DEFAULT_PAK, HIRES_SCALE, PROJECT_ROOT, decodePng, downsampleRgba, readManifest, readPakDirectory, readWal } from "./texture-lib.mjs";
 
 const PACKER = path.join(path.dirname(fileURLToPath(import.meta.url)), "texture-pack.mjs");
 const ART_DIR = path.join(PROJECT_ROOT, "assets", "textures");
@@ -208,9 +208,15 @@ process.stdout.write("\n4x wall art packs into both archives\n");
     const inputBefore = fs.readFileSync(input);
     check("the fixture entry is a wall in the manifest", Boolean(entry && entry.type === "wal" && entry.png), JSON.stringify(entry?.name));
 
-    // The picture, from the project's own 1x art for that entry, shifted so the
-    // packed bytes cannot match the original by luck, then drawn two ways.
-    const source = decodePng(fs.readFileSync(path.join(PROJECT_ROOT, entry.png)));
+    // The picture, from the project's own art for that entry, shifted so the
+    // packed bytes cannot match the original by luck, then drawn two ways. That
+    // art may itself be at HIRES_SCALE now, so reduce it to the entry's pixels
+    // first: the fixture is the entry at 1x, whatever is on disk.
+    const drawn = decodePng(fs.readFileSync(path.join(PROJECT_ROOT, entry.png)));
+    const source =
+      drawn.width === entry.width && drawn.height === entry.height
+        ? drawn
+        : { width: entry.width, height: entry.height, data: downsampleRgba(drawn.data, drawn.width, drawn.height, entry.width, entry.height) };
     const oneX = shiftedRgb(source, [24, -16, 8]);
     const fourX = upscaleFlat(oneX, source.width, source.height, HIRES_SCALE);
     const onePng = encodePngRgb(source.width, source.height, oneX);

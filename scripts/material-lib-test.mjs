@@ -26,6 +26,9 @@
 //      wrap edge is no bigger than the busiest step inside the picture.
 //   7. colour. Only the base RGB is scaled (and pulled toward its own grey for
 //      desaturation): a saturated input keeps its hue within a degree or two.
+//   8. per-entry tuning. The optional `params` merge over MATERIAL_PARAMS:
+//      none (or {}) is the shipped picture byte for byte, a knob changes it,
+//      a bad knob is refused, and desat / bias / grungeDesat do what they say.
 
 import { MATERIALS, UNCHANGED_MATERIALS, applyMaterial, materialSeed } from "./material-lib.mjs";
 import { MATERIALS as CONTRACT_MATERIALS } from "./material-classes.mjs";
@@ -468,6 +471,76 @@ check("the mean brightness stays close to the faithful picture", (() => {
     return Math.abs(meanLuminance(out) - before) < 2.5;
   });
 })());
+
+// ---------------------------------------------------------------------------
+// 12. Per-entry tuning. A row's params merge over MATERIAL_PARAMS[material]:
+//     no params (or an empty object) reproduces the shipped picture byte for
+//     byte, a param does change it, and an unknown knob is refused.
+// ---------------------------------------------------------------------------
+process.stdout.write("\ntuning\n");
+const TUNED = ["stone", "metal", "rust", "tech", "lamp"];
+const tuningBase = periodicBase(64, 64);
+const tuningSource = solidSource(150, 100, 50);
+for (const material of TUNED) {
+  const plain = applyMaterial(tuningBase, tuningSource, material, { seed: 71 });
+  check(material + ": no params is what the material row draws on its own",
+    sameBytes(plain, applyMaterial(tuningBase, tuningSource, material, { seed: 71 })));
+  check(material + ": an empty params object changes nothing",
+    sameBytes(plain, applyMaterial(tuningBase, tuningSource, material, { seed: 71, params: {} })));
+  check(material + ": a param changes the picture",
+    !sameBytes(plain, applyMaterial(tuningBase, tuningSource, material, { seed: 71, params: { grain: 0.5 } })));
+}
+// The digest below was taken from material-lib.mjs as it stood before the
+// params option existed: the shipped rows must stay byte for byte the same.
+const TUNING_DIGEST = 0x2ae8727;
+function tuningDigest() {
+  let hash = 0x811c9dc5;
+  for (const material of TUNED) {
+    const bytes = applyMaterial(periodicBase(32, 32), solidSource(120, 110, 100), material, { seed: 3 }).rgb;
+    for (const value of bytes) hash = Math.imul(hash ^ value, 0x01000193) >>> 0;
+  }
+  return hash >>> 0;
+}
+check("the shipped defaults hash to the same bytes as before the params option",
+  tuningDigest() === TUNING_DIGEST, "digest 0x" + tuningDigest().toString(16));
+
+let refused = 0;
+for (const params of [{ grain2: 0.5 }, { detail: 1 }, { glow: "bright" }, { desat: Number.NaN }, { bias: Infinity }]) {
+  try {
+    applyMaterial(tuningBase, tuningSource, "stone", { seed: 71, params });
+    refused++;
+  } catch (error) {
+    if (!(error instanceof TypeError)) refused++;
+  }
+}
+check("bad knob rows are refused, not silently ignored", refused === 0, refused + " accepted");
+
+const plainRust = applyMaterial(tuningBase, tuningSource, "rust", { seed: 72 });
+const desatRust = applyMaterial(tuningBase, tuningSource, "rust", { seed: 72, params: { desat: 0.2 } });
+function meanSpread(image) {
+  let sum = 0;
+  for (let at = 0; at < image.rgb.length; at += 3) {
+    const r = image.rgb[at], g = image.rgb[at + 1], b = image.rgb[at + 2];
+    sum += Math.max(r, g, b) - Math.min(r, g, b);
+  }
+  return sum / (image.rgb.length / 3);
+}
+check("desat pulls the colour toward its own grey", meanSpread(desatRust) < meanSpread(plainRust) - 0.5,
+  meanSpread(plainRust).toFixed(2) + " -> " + meanSpread(desatRust).toFixed(2));
+
+const biasDown = applyMaterial(tuningBase, tuningSource, "stone", { seed: 73, params: { bias: -1 } });
+const biasUp = applyMaterial(tuningBase, tuningSource, "stone", { seed: 73, params: { bias: 1 } });
+const plainStone = applyMaterial(tuningBase, tuningSource, "stone", { seed: 73 });
+check("bias moves the mean by about a level and in the asked direction",
+  Math.abs(meanLuminance(plainStone) - meanLuminance(biasDown) - 1) < 0.4 &&
+  Math.abs(meanLuminance(biasUp) - meanLuminance(plainStone) - 1) < 0.4,
+  [meanLuminance(biasDown), meanLuminance(plainStone), meanLuminance(biasUp)].map((v) => v.toFixed(2)).join(" / "));
+
+const grungeOn = applyMaterial(tuningBase, tuningSource, "rust", { seed: 74 });
+const grungeOff = applyMaterial(tuningBase, tuningSource, "rust", { seed: 74, params: { grungeDesat: 0 } });
+check("grungeDesat: 0 leaves the grunge colour alone", !sameBytes(grungeOff, grungeOn) &&
+  meanSpread(grungeOff) > meanSpread(grungeOn),
+  "spread " + meanSpread(grungeOn).toFixed(2) + " -> " + meanSpread(grungeOff).toFixed(2));
 
 process.stdout.write("\n" + (failed ? failed + " of " + checked + " checks FAILED\n" : "all " + checked + " checks passed\n"));
 process.exitCode = failed ? 1 : 0;
