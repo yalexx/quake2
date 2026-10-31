@@ -29,7 +29,7 @@ import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { QuakeControl } from "../control/bridge.mjs";
-import { canvasStrip, readHealth } from "../control/hud.mjs";
+import { canvasStrip, readHealth, decodePng } from "../control/hud.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_URL = "http://127.0.0.1:4231/apps/quake2/";
@@ -63,6 +63,35 @@ const ENEMY_NAMES = {
   soldier: ["Soldier", ["monster_soldier", "monster_soldier_light", "monster_soldier_ss"]],
   tank: ["Tank", ["monster_tank"]],
 };
+
+// The engine's own menu tree, from Qwasm2's src/client/menu/menu.c and
+// src/client/menu/videomenu.c (the engine prints "Yamagi Quake II v8.60"). The
+// row lists and their order are the acceptance target: the dark panel must
+// carry these rows, in this order, with the engine's own value lists.
+const ENGINE_MENU_TREE = {
+  main: ["GAME", "MULTIPLAYER", "OPTIONS", "VIDEO", "QUIT"],
+  game: ["easy", "medium", "hard", "hard+", "load game", "save game", "credits"],
+  multiplayer: ["join network server", "start network server", "player setup", "customize controls"],
+  options: ["effects volume", "OGG volume", "OGG music", "OGG shuffle", "sound backend",
+    "mouse speed", "always run", "invert mouse", "lookstrafe", "free look", "crosshair",
+    "pause on minimized", "customize controls", "reset defaults", "go to console"],
+  // The gles3 branch of VID_MenuInit, without the gamepad-only row.
+  video: ["renderer", "video mode", "brightness", "field of view", "color intensity",
+    "overbrights", "color light", "ui scale", "fullscreen", "vertical sync",
+    "aniso filtering", "multisampling", "texture filter", "reset to default", "apply"],
+};
+// The engine's crosshair itemnames and the r_mode video-mode list (modes[] in
+// videomenu.c sorted by their printed string: 1600x900 is modenum 32 and comes
+// after 1440x900), then auto and custom.
+const ENGINE_CROSSHAIR_LABELS = ["none", "cross", "dot", "angle"];
+const ENGINE_VIDEO_MODE_VALUES = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11",
+  "12", "13", "14", "15", "16", "17", "18", "32", "19", "20", "21", "22", "23", "24", "25", "26",
+  "27", "28", "29", "30", "31", "-2", "-1"];
+const ENGINE_R_MODE_LABELS = ["320x240", "400x300", "512x384", "640x400", "640x480", "800x500",
+  "800x600", "960x720", "1024x480", "1024x640", "1024x768", "1152x768", "1152x864", "1280x800",
+  "1280x720", "1280x960", "1280x1024", "1366x768", "1440x900", "1600x900", "1600x1200", "1680x1050",
+  "1920x1080", "1920x1200", "2048x1536", "2560x1080", "2560x1440", "2560x1600", "3440x1440",
+  "3840x1600", "3840x2160", "4096x2160", "5120x2880", "auto", "custom"];
 
 const options = {
   url: DEFAULT_URL,
@@ -648,9 +677,12 @@ class EngineConsole {
 
 // ---- Screenshots ---------------------------------------------------------
 
-async function capture(name, width, height, meta) {
+async function screenshotBuffer() {
   const shot = await cdp.send("Page.captureScreenshot", { format: "png" }, 90000);
-  const buffer = Buffer.from(shot.data, "base64");
+  return Buffer.from(shot.data, "base64");
+}
+
+async function captureBuffer(name, buffer, width, height, meta) {
   const pngWidth = buffer.readUInt32BE(16);
   const pngHeight = buffer.readUInt32BE(20);
   const file = path.join(SHOTS, name);
@@ -660,6 +692,40 @@ async function capture(name, width, height, meta) {
   check("screenshot " + name, pngWidth === width && pngHeight === height, width + "x" + height, pngWidth + "x" + pngHeight);
   if (pngWidth !== width || pngHeight !== height) fatal("screenshot " + name + " is " + pngWidth + "x" + pngHeight + ", not " + width + "x" + height);
   return entry;
+}
+
+async function capture(name, width, height, meta) {
+  return captureBuffer(name, await screenshotBuffer(), width, height, meta);
+}
+
+// The engine draws a loading plaque over a black frame for a moment after a
+// reload; a screenshot taken then is black and differs from the same view on
+// the next boot across the whole frame, which would make a crosshair diff look
+// like a hit. Wait until the centre of the frame is a picture, not black.
+function centreLuma(buffer) {
+  const image = decodePng(buffer);
+  const cx = Math.round(image.width / 2), cy = Math.round(image.height / 2);
+  let sum = 0, count = 0;
+  for (let y = cy - 60; y <= cy + 60; y++) {
+    for (let x = cx - 60; x <= cx + 60; x++) {
+      const at = (y * image.width + x) * 4;
+      sum += 0.2126 * image.data[at] + 0.7152 * image.data[at + 1] + 0.0722 * image.data[at + 2];
+      count++;
+    }
+  }
+  return sum / count;
+}
+
+async function waitForVisibleScene(label, timeoutMs = 90000) {
+  const started = Date.now();
+  let mean = 0;
+  while (Date.now() - started < timeoutMs) {
+    const buffer = await screenshotBuffer();
+    mean = centreLuma(buffer);
+    if (mean > 8) return { buffer, mean };
+    await sleep(1500);
+  }
+  fatal(label + ": the frame stayed black at the centre (mean luma " + mean.toFixed(1) + ")");
 }
 
 // ---- Frame timing --------------------------------------------------------
@@ -1129,6 +1195,370 @@ async function hudCheck(label) {
   await ensureGame("after the HUD check");
 }
 
+// ---- The presentation fixes this run adds (owner reports B1-B4) ----------
+//
+// Each block leaves a real screenshot under docs/presentation-verification/
+// shots and a check that the property is on the rendered page, not merely in
+// the source: the engine's crosshair is drawn and visible, the old status bar
+// cannot show through the HUD band, the health read-out has no rule or shadow,
+// the menu rows are the engine's own, and the engine's resolution row really
+// restarts the level at the selected r_mode.
+
+function resolutionUrl(resolution, extra) {
+  const separator = options.url.includes("?") ? "&" : "?";
+  const mode = R_MODES[resolution.label];
+  if (!mode) fatal("no r_mode for " + resolution.label);
+  return options.url + separator + "+set&r_mode&" + mode + "&+map&demo1" + (extra ? "&" + extra : "");
+}
+
+// A reload that keeps the Cdp/console plumbing pointing at the new page. The
+// full boot() also records every boot check; this only waits for the running
+// level, which is what a settings apply should produce.
+async function reloadGame(url, label) {
+  await cdp.send("Page.navigate", { url }, 60000);
+  await waitFor(async () => {
+    const now = await state();
+    return now.readyState === "complete" && now.engine && now.engine.ok && now.engine.keyDestName === "game" &&
+      now.menuHidden === true && now.loadingHidden === true && now.rtx &&
+      (now.rtx.worldDraws > 0 || now.rtx.postDraws > 0) &&
+      now.drawingBuffer && now.drawingBuffer[0] > 0;
+  }, 240000, 1500, label + " to boot");
+  await consoleBridge.reconnect();
+  await sleep(3500);
+}
+
+async function hudBoxes() {
+  return evaluate(`(() => {
+    const hud = document.getElementById("hud");
+    const cs = getComputedStyle(hud);
+    const box = hud.getBoundingClientRect();
+    const health = document.getElementById("hud-health");
+    const hcs = getComputedStyle(health);
+    return {
+      hidden: hud.hidden,
+      background: cs.backgroundColor,
+      borderTop: cs.borderTopWidth,
+      boxShadow: cs.boxShadow,
+      rect: [Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)],
+      statBoxes: Array.from(document.querySelectorAll(".hud-stat")).map(function (el) {
+        const r = el.getBoundingClientRect();
+        return [Math.round(r.left), Math.round(r.top), Math.round(r.width), Math.round(r.height)];
+      }),
+      health: { background: hcs.backgroundColor, borderTop: hcs.borderTopWidth, borderBottom: hcs.borderBottomWidth,
+        textDecoration: hcs.textDecorationLine, textShadow: hcs.textShadow, boxShadow: hcs.boxShadow },
+      text: hud.textContent.replace(/\\s+/g, " ").trim(),
+    };
+  })()`);
+}
+
+function readPngEntry(entry) {
+  return decodePng(fs.readFileSync(path.join(ROOT, entry.file)));
+}
+
+// Pixels in the band that are not the solid fill, outside the new read-out
+// text. Zero is the proof that no engine pixel (the old digits included) shows
+// through; the text boxes are excluded because the new text is drawn there.
+function bandBleed(image, rect, statBoxes) {
+  const [bx, by, bw, bh] = rect;
+  const fill = [7, 9, 11];
+  let total = 0, different = 0;
+  for (let y = by + 2; y < by + bh - 2; y++) {
+    for (let x = bx + 2; x < bx + bw - 2; x++) {
+      if (statBoxes.some(function (box) {
+        return x >= box[0] - 3 && x < box[0] + box[2] + 3 && y >= box[1] - 3 && y < box[1] + box[3] + 3;
+      })) continue;
+      const at = (y * image.width + x) * 4;
+      total++;
+      if (Math.abs(image.data[at] - fill[0]) > 1 || Math.abs(image.data[at + 1] - fill[1]) > 1 ||
+        Math.abs(image.data[at + 2] - fill[2]) > 1) different++;
+    }
+  }
+  return { total, different, ratio: total ? different / total : 1 };
+}
+
+// Bright pixels in the band while the HUD is hidden: the engine's old status
+// bar is there, which is what the opaque band has to hide.
+function bandInk(image, rect) {
+  const [bx, by, bw, bh] = rect;
+  let ink = 0;
+  for (let y = by + 2; y < by + bh - 2; y++) {
+    for (let x = bx + 2; x < bx + bw - 2; x++) {
+      const at = (y * image.width + x) * 4;
+      const lum = 0.2126 * image.data[at] + 0.7152 * image.data[at + 1] + 0.0722 * image.data[at + 2];
+      if (lum > 200) ink++;
+    }
+  }
+  return ink;
+}
+
+// Pixels that differ between the same view with the crosshair off and on,
+// restricted to a window around the screen centre. The engine's cross is a
+// small drawn element, so a crosshair that is missing or covered yields no
+// cluster at all.
+function centreDiff(off, on, windowRadius) {
+  const cx = Math.round(on.width / 2), cy = Math.round(on.height / 2);
+  let minX = Infinity, minY = Infinity, maxX = -1, maxY = -1, count = 0;
+  for (let y = cy - windowRadius; y <= cy + windowRadius; y++) {
+    for (let x = cx - windowRadius; x <= cx + windowRadius; x++) {
+      const a = (y * off.width + x) * 4;
+      const b = (y * on.width + x) * 4;
+      const delta = (Math.abs(off.data[a] - on.data[b]) + Math.abs(off.data[a + 1] - on.data[b + 1]) +
+        Math.abs(off.data[a + 2] - on.data[b + 2])) / 3;
+      if (delta > 25) {
+        count++;
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+  }
+  return { count, minX, minY, maxX, maxY, cx, cy,
+    width: maxX >= minX ? maxX - minX + 1 : 0, height: maxY >= minY ? maxY - minY + 1 : 0 };
+}
+
+// Measure the cross itself, not the scene: the engine draws four short arms
+// (3 px thick, starting 4 px from the centre and ending 10 px out) and nothing
+// at the centre. The score is the mean luma of those arm pixels minus the same
+// measurement on a ring outside the cross. A crosshair that is missing or
+// covered scores near zero even on a bright wall; the drawn one scores high.
+function crosshairScore(image) {
+  const luminance = (x, y) => {
+    const at = (y * image.width + x) * 4;
+    return 0.2126 * image.data[at] + 0.7152 * image.data[at + 1] + 0.0722 * image.data[at + 2];
+  };
+  const baseX = Math.round(image.width / 2), baseY = Math.round(image.height / 2);
+  let best = -Infinity, bestAt = null;
+  for (let ox = -3; ox <= 3; ox++) {
+    for (let oy = -3; oy <= 3; oy++) {
+      const cx = baseX + ox, cy = baseY + oy;
+      const arms = [], ring = [];
+      for (let d = 4; d <= 9; d++) {
+        for (let t = -1; t <= 1; t++) {
+          arms.push(luminance(cx + t, cy - d), luminance(cx + t, cy + d));
+          arms.push(luminance(cx - d, cy + t), luminance(cx + d, cy + t));
+        }
+      }
+      for (let d = 13; d <= 19; d += 2) {
+        for (let t = -1; t <= 1; t++) {
+          ring.push(luminance(cx + t, cy - d), luminance(cx + t, cy + d));
+          ring.push(luminance(cx - d, cy + t), luminance(cx + d, cy + t));
+        }
+      }
+      const mean = (values) => values.reduce((sum, one) => sum + one, 0) / values.length;
+      const score = mean(arms) - mean(ring);
+      if (score > best) { best = score; bestAt = { cx, cy }; }
+    }
+  }
+  return { score: best, at: bestAt };
+}
+
+async function readMenuRows(view) {
+  return evaluate(`(() => Array.from(document.querySelectorAll('.menu-view[data-view="${view}"] .menu-list button')).map(function (button) {
+    return {
+      label: button.querySelector(".label") ? button.querySelector(".label").textContent.trim() : "",
+      value: button.querySelector(".value") ? button.querySelector(".value").textContent.trim() : null,
+      cvar: button.dataset.cvar || null,
+      cvars: button.dataset.cvars || null,
+      action: button.dataset.action || null,
+      skill: button.dataset.skill === undefined ? null : button.dataset.skill,
+      values: button.dataset.values ? button.dataset.values.split(",") : null,
+      labels: button.dataset.labels ? button.dataset.labels.split(",") : null,
+      index: button.dataset.index === undefined ? null : Number(button.dataset.index),
+      changed: button.classList.contains("changed"),
+    };
+  }))()`);
+}
+
+async function menuTreeChecks() {
+  console.log("\n  menu parity");
+  if (!(await openMenu())) fatal("the menu did not open for the parity checks");
+  const main = await evaluate(`Array.from(document.querySelectorAll('.menu-view[data-view="main"] .label')).map((label) => label.textContent.trim())`);
+  check("menu parity: main menu is the engine's own five entries",
+    JSON.stringify(main) === JSON.stringify(ENGINE_MENU_TREE.main),
+    ENGINE_MENU_TREE.main.join(", "), (main || []).join(", "));
+  const views = {};
+  for (const view of ["game", "multiplayer", "options", "video"]) {
+    await click('[data-action="' + view + '"]');
+    await sleep(350);
+    const rows = await readMenuRows(view);
+    views[view] = rows;
+    const labels = rows.map(function (row) { return row.label; });
+    check("menu parity: " + view + " rows are the engine's own, in order",
+      JSON.stringify(labels) === JSON.stringify(ENGINE_MENU_TREE[view]),
+      ENGINE_MENU_TREE[view].join(", "), (labels || []).join(", "));
+    await click('[data-action="back"]');
+    await sleep(250);
+  }
+  report.menu = report.menu || {};
+  report.menu.parity = views;
+
+  const gameSkills = (views.game || []).filter(function (row) { return row.action === "newgame"; }).map(function (row) { return row.skill; });
+  check("GAME menu skills cover easy, medium, hard and hard+ (0-3)",
+    JSON.stringify(gameSkills) === JSON.stringify(["0", "1", "2", "3"]), "skills 0,1,2,3", (gameSkills || []).join(","));
+
+  const videoMode = (views.video || []).find(function (row) { return row.label === "video mode"; });
+  check("VIDEO menu has the engine's own video mode row",
+    Boolean(videoMode) && videoMode.cvar === "r_mode", "video mode (r_mode)", videoMode ? videoMode.cvar : "missing");
+  check("VIDEO video mode lists the engine's 33 modes plus auto and custom, in its order",
+    Boolean(videoMode) && JSON.stringify(videoMode.values) === JSON.stringify(ENGINE_VIDEO_MODE_VALUES),
+    ENGINE_VIDEO_MODE_VALUES.length + " values", videoMode ? String(videoMode.values && videoMode.values.length) + " values" : "missing");
+  check("VIDEO video mode labels are the engine's resolutions",
+    Boolean(videoMode) && JSON.stringify(videoMode.labels) === JSON.stringify(ENGINE_R_MODE_LABELS),
+    ENGINE_R_MODE_LABELS.length + " labels", videoMode ? String(videoMode.labels && videoMode.labels.length) + " labels" : "missing");
+  const crosshairRow = (views.options || []).find(function (row) { return row.label === "crosshair"; });
+  check("OPTIONS crosshair row carries the engine's none/cross/dot/angle values",
+    Boolean(crosshairRow) && JSON.stringify(crosshairRow.labels) === JSON.stringify(ENGINE_CROSSHAIR_LABELS),
+    ENGINE_CROSSHAIR_LABELS.join(", "), crosshairRow ? (crosshairRow.labels || []).join(", ") : "missing");
+  const pauseRow = (views.options || []).find(function (row) { return row.label === "pause on minimized"; });
+  check("OPTIONS pause row carries the engine's three values",
+    Boolean(pauseRow) && JSON.stringify(pauseRow.labels) === JSON.stringify(["yes", "no", "unpause on re-focus"]),
+    "yes, no, unpause on re-focus", pauseRow ? (pauseRow.labels || []).join(", ") : "missing");
+  const filterRow = (views.video || []).find(function (row) { return row.label === "texture filter"; });
+  check("VIDEO texture filter carries the engine's pixelated/standard/trilinear values",
+    Boolean(filterRow) && JSON.stringify(filterRow.labels) === JSON.stringify(["pixelated", "standard", "trilinear"]),
+    "pixelated, standard, trilinear", filterRow ? (filterRow.labels || []).join(", ") : "missing");
+  const shuffleRow = (views.options || []).find(function (row) { return row.label === "OGG shuffle"; });
+  check("OPTIONS OGG shuffle carries the engine's five values",
+    Boolean(shuffleRow) && JSON.stringify(shuffleRow.labels) === JSON.stringify(["default", "play once", "sequential", "random", "truly random"]),
+    "default, play once, sequential, random, truly random", shuffleRow ? (shuffleRow.labels || []).join(", ") : "missing");
+  return views;
+}
+
+async function presentationFixesCheck(resolution) {
+  const label = resolution.label;
+  console.log("\n  " + label + " presentation fixes (B1-B4)");
+  if (!(await ensureGame("the presentation fixes check"))) fatal(label + ": the game is not in game for the presentation fixes check");
+
+  // B1: the engine's crosshair is on at the app's own default scale, and it is
+  // drawn in the centre of the frame. Two boots with only the crosshair cvar
+  // different give the same spawn view, and the difference is the cross.
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair&1"), label + " crosshair on");
+  const crosshairRead = await consoleBridge.read("crosshair");
+  const scaleRead = await consoleBridge.read("crosshair_scale");
+  check("B1: the engine's crosshair is on at boot", crosshairRead === "1", "crosshair 1", String(crosshairRead));
+  check("B1: the crosshair is drawn at the engine's visible scale", scaleRead === "3", "crosshair_scale 3", String(scaleRead));
+  if (!(await ensureGame("crosshair on capture"))) fatal(label + ": the game did not resume for the crosshair capture");
+  await waitFrames(3);
+  const onScene = await waitForVisibleScene(label + " crosshair-on frame");
+  // The engine's loading plaque fades out a moment after the first picture;
+  // let it finish so the capture is the player's view, not the plaque.
+  await sleep(10000);
+  const onSettled = await screenshotBuffer();
+  const crosshairOn = await captureBuffer(label + "-crosshair.png", onSettled, resolution.width, resolution.height,
+    { view: "crosshair at the centre of the in-game view", resolution: label, crosshair: crosshairRead, crosshairScale: scaleRead, centreLuma: Math.round(centreLuma(onSettled)) });
+  const onImage = decodePng(onSettled);
+  const onCross = crosshairScore(onImage);
+  const hudInfo = await hudBoxes();
+  check("B2: the HUD band's fill is fully opaque",
+    /^rgb\(/.test(hudInfo.background) && !/rgba\(.*,\s*0?\.\d+\)/.test(hudInfo.background),
+    "an opaque rgb() fill", hudInfo.background);
+  check("B3: the health read-out is text only", hudInfo.health.background === "rgba(0, 0, 0, 0)" &&
+    hudInfo.health.borderTop === "0px" && hudInfo.health.borderBottom === "0px" &&
+    hudInfo.health.textDecoration === "none" && hudInfo.health.textShadow === "none" && hudInfo.health.boxShadow === "none",
+    "no background, border, underline, shadow or box-shadow",
+    JSON.stringify(hudInfo.health));
+  // The band with the HUD hidden: the engine's status bar is underneath.
+  await evaluate("document.getElementById('hud').hidden = true; true");
+  await sleep(900);
+  const hudUnderneath = await capture(label + "-hud-underneath.png", resolution.width, resolution.height,
+    { view: "the engine status bar with the new HUD hidden; the band covers exactly this", resolution: label });
+  await evaluate("document.getElementById('hud').hidden = false; true");
+  await sleep(900);
+  const hudCovered = await capture(label + "-hud-covered.png", resolution.width, resolution.height,
+    { view: "the same frame with the new opaque HUD band; no old digit shows through", resolution: label });
+  const underneathImage = readPngEntry(hudUnderneath);
+  const coveredImage = readPngEntry(hudCovered);
+  const ink = bandInk(underneathImage, hudInfo.rect);
+  const bleed = bandBleed(coveredImage, hudInfo.rect, hudInfo.statBoxes);
+  check("B2: the band's frame really carries the engine's old status bar when the band is hidden",
+    ink > 20, "bright old-HUD pixels under the band", ink + " bright pixels in the band");
+  check("B2: no old HUD pixel shows through the opaque band",
+    bleed.different === 0, "0 non-fill pixels outside the new read-out", bleed.different + " of " + bleed.total +
+    " pixels differ (" + (bleed.ratio * 100).toFixed(3) + "%)");
+  report.presentation = report.presentation || {};
+  report.presentation.hud = { background: hudInfo.background, rect: hudInfo.rect, health: hudInfo.health,
+    oldHudInkUnderBand: ink, bleedPixels: bleed.different, bleedTotal: bleed.total };
+
+  // The crosshair off/on pair.
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair&0"), label + " crosshair off");
+  if (!(await ensureGame("crosshair off capture"))) fatal(label + ": the game did not resume for the crosshair-off capture");
+  await waitFrames(3);
+  const offScene = await waitForVisibleScene(label + " crosshair-off frame");
+  await sleep(10000);
+  const offSettled = await screenshotBuffer();
+  const crosshairOff = await captureBuffer(label + "-crosshair-off.png", offSettled, resolution.width, resolution.height,
+    { view: "the same spawn with crosshair 0; no cross at the centre", resolution: label, crosshair: "0", centreLuma: Math.round(centreLuma(offSettled)) });
+  const offImage = decodePng(offSettled);
+  const offCross = crosshairScore(offImage);
+  const diff = centreDiff(offImage, onImage, 20);
+  // The difference has to be the cross itself, not the scene: a compact
+  // cluster around the centre, and the same arms measurably brighter than
+  // their surroundings in the crosshair-on frame. A black or shifted frame
+  // fails both.
+  check("B1: the engine's crosshair is visible in the centre of the frame",
+    diff.count >= 30 && diff.count <= 1500 && diff.width >= 15 && diff.width <= 60 &&
+    diff.height >= 15 && diff.height <= 60 &&
+    Math.abs((diff.minX + diff.maxX) / 2 - diff.cx) <= 4 && Math.abs((diff.minY + diff.maxY) / 2 - diff.cy) <= 4 &&
+    onCross.score >= 40 && onCross.score - offCross.score >= 30,
+    "a compact cross-shaped cluster at the centre (at most 60x60), brighter than its ring",
+    diff.count + " differing pixels, bbox " + (diff.width + "x" + diff.height) + " at " +
+    (diff.minX + "," + diff.minY) + " (centre " + diff.cx + "," + diff.cy + "); cross score on " +
+    onCross.score.toFixed(1) + ", off " + offCross.score.toFixed(1));
+  report.presentation.crosshair = { cvar: crosshairRead, scale: scaleRead, diff,
+    scoreOn: onCross.score, scoreOff: offCross.score, centreLumaOn: Math.round(onScene.mean), centreLumaOff: Math.round(offScene.mean) };
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair&1"), label + " crosshair restored");
+  if (!(await ensureGame("menu parity"))) fatal(label + ": the game did not resume for the menu parity checks");
+  const views = await menuTreeChecks();
+
+  // B4: the resolution row applies. Select the engine's 1366x768 mode (r_mode
+  // 17) in the panel, press apply, and read the engine's own drawing buffer.
+  await click('[data-action="video"]');
+  await sleep(350);
+  let clicks = 0;
+  let selected = null;
+  while (clicks < 40) {
+    selected = await evaluate(`(() => { const b=document.querySelector('.menu-view[data-view="video"] .setting[data-cvar="r_mode"]'); if (!b) return null; const values=b.dataset.values.split(','); return { value: values[Number(b.dataset.index)], label: b.querySelector('.value').textContent.trim(), changed: b.classList.contains('changed'), hint: document.getElementById('apply-hint') ? document.getElementById('apply-hint').textContent : null }; })()`);
+    if (!selected) break;
+    if (selected.label === "1366x768") break;
+    await click('.menu-view[data-view="video"] .setting[data-cvar="r_mode"]');
+    await sleep(120);
+    clicks++;
+  }
+  check("B4: the video mode row selects the engine's 1366x768 (r_mode 17)",
+    Boolean(selected) && selected.value === "17" && selected.label === "1366x768",
+    "value 17 (1366x768)", selected ? selected.value + " (" + selected.label + ")" : "row missing");
+  check("B4: selecting a resolution marks it as a pending change",
+    Boolean(selected) && selected.changed === true, "changed", selected ? String(selected.changed) : "missing");
+  await capture(label + "-resolution-menu.png", resolution.width, resolution.height,
+    { view: "VIDEO > video mode selected at 1366x768, apply shows one change", resolution: label });
+  await click('.menu-view[data-view="video"] [data-action="apply"]');
+  await waitFor(async () => {
+    const search = await evaluate("location.search");
+    const now = await state();
+    return /\+set&r_mode&17/.test(search) && now.menuHidden === true &&
+      now.drawingBuffer && now.drawingBuffer[0] === 1366 && now.drawingBuffer[1] === 768;
+  }, 240000, 1500, "the level to restart at r_mode 17");
+  await consoleBridge.reconnect();
+  await sleep(5000);
+  const applied = await state();
+  await capture(label + "-resolution-applied.png", resolution.width, resolution.height,
+    { view: "the level restarted at 1366x768 after Apply", resolution: label, drawingBuffer: applied.drawingBuffer });
+  check("B4: apply restarted the level at the selected resolution",
+    applied.drawingBuffer && applied.drawingBuffer[0] === 1366 && applied.drawingBuffer[1] === 768,
+    "drawing buffer 1366x768", JSON.stringify(applied.drawingBuffer));
+  report.presentation.resolution = { selected, drawingBuffer: applied.drawingBuffer,
+    search: await evaluate("location.search") };
+  // Put the page back at the suite's own resolution for the rest of the run.
+  await reloadGame(resolutionUrl(resolution), label + " restored resolution");
+  const restored = await state();
+  check("B4: the suite's resolution is restored after the apply check",
+    restored.drawingBuffer && restored.drawingBuffer[0] === resolution.width,
+    "drawing buffer " + resolution.label, JSON.stringify(restored.drawingBuffer));
+  await ensureGame("after the presentation fixes check");
+  return views;
+}
+
 // The happy path the menu promises: GAME > easy starts a new game. The app
 // hands the map to the engine on its start-up line (it cannot type into the
 // console), so the page reloads; this waits for the new page and the new game.
@@ -1139,7 +1569,7 @@ async function newGameCheck(label) {
   await click('[data-action="game"]');
   await sleep(400);
   const entries = await evaluate(`Array.from(document.querySelectorAll('.menu-view[data-view="game"] .label')).map((label) => label.textContent.trim())`);
-  const engineEntries = ["easy", "medium", "hard+", "load game", "save game", "credits"];
+  const engineEntries = ENGINE_MENU_TREE.game;
   check("GAME menu matches the engine's own game menu", JSON.stringify(entries) === JSON.stringify(engineEntries),
     engineEntries.join(", "), (entries || []).join(", "));
   await click('[data-action="newgame"][data-skill="0"]');
@@ -1162,6 +1592,11 @@ async function newGameCheck(label) {
   report.menu.gameEntries = entries;
   await consoleBridge.reconnect();
   await animateDemo1(label);
+  // The happy path's own frame: the first area after GAME > easy, which the
+  // owner asked to see with the fixes on it.
+  await sleep(4000);
+  await capture(label + "-newgame-first-area.png", 1280, 720,
+    { view: "demo1's first area after GAME > easy started a new game", resolution: label, source: "New Game" });
 }
 
 async function runModes(resolution) {
@@ -1244,7 +1679,10 @@ async function run() {
     // level start, and the screenshots have already exercised the scene by now.
     await weaponDrawCheck(resolution.label);
     await hudCheck(resolution.label);
-    if (resolution.label === "1280x720") await newGameCheck(resolution.label);
+    if (resolution.label === "1280x720") {
+      await presentationFixesCheck(resolution);
+      await newGameCheck(resolution.label);
+    }
     const pageState = await state();
     report.webglPages.push({
       resolution: resolution.label,

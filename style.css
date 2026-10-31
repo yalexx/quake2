@@ -144,11 +144,13 @@ canvas {
   font-family: inherit;
 }
 
-/* The HUD band. It covers the engine's status bar (the engine still draws it;
-   that is where the live numbers are read from) and carries the same values in
-   the interface's own type: a dark rule at the bottom of the canvas, three
-   tabular read-outs, amber on the ammo. Sized from the canvas by app.js so it
-   hugs the game view at any resolution. */
+/* The HUD band. It is deliberately fully opaque: the engine still draws its
+   own status bar underneath (that is where the live numbers are read from),
+   and a translucent band let those digits and icons show through it. A solid
+   fill hides every engine pixel behind the band at both resolutions. There is
+   no rule, underline, shadow or per-readout bar: the read-outs are text only,
+   in the interface's own type, amber on the ammo. Sized from the canvas by
+   app.js so it hugs the game view at any resolution. */
 #hud {
   position: fixed;
   z-index: 4;
@@ -157,11 +159,22 @@ canvas {
   gap: clamp(18px, 3vw, 44px);
   box-sizing: border-box;
   padding: 0 clamp(12px, 2vw, 30px);
-  background: linear-gradient(to top, rgba(7, 9, 11, 0.96), rgba(9, 11, 13, 0.9));
-  border-top: 1px solid rgba(198, 168, 102, 0.22);
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.55);
+  background: #07090b;
+  border: 0;
+  box-shadow: none;
   pointer-events: none;
   user-select: none;
+}
+
+/* Text only: no rule, underline, shadow or background on the read-outs. */
+#hud .hud-stat,
+#hud .hud-label,
+#hud b {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  text-decoration: none;
+  text-shadow: none;
 }
 
 #hud[hidden] {
@@ -538,13 +551,69 @@ canvas {
   margin-top: 16px;
 }
 
+/* The engine's GAME menu has a blank separator between the four skills and
+   load/save/credits; this is that gap, not a row. */
+.menu-gap {
+  height: 11px;
+}
+
+/* The options apply control sits under the engine's own rows: the engine's
+   menu applies each change immediately, but this page can only carry values
+   on the start-up line. */
+.menu-apply {
+  margin-top: 6px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.menu-apply button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 16px;
+  color: var(--amber);
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-align: left;
+  cursor: pointer;
+}
+
+.menu-apply button:hover,
+.menu-apply button:focus-visible {
+  color: #f6e6b4;
+  background: linear-gradient(to right, rgba(198, 168, 102, 0.13), transparent 72%);
+  outline: none;
+}
+
+.menu-apply .hint {
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
 /* Video / Options rows: the label on the left, the engine's value on the
    right. A row cycles through the values the engine accepts; the amber value
    marks a change that `apply` has not carried over yet. */
 .menu-list-settings button {
   height: 34px;
+  gap: 10px;
   font-size: 11.5px;
   letter-spacing: 0.12em;
+}
+
+.menu-list-settings button .label {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.menu-list-settings button .value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .menu-list-settings button .value {

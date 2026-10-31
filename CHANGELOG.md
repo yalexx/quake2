@@ -7,6 +7,44 @@ the archive, where the art lives, the commands and the measurements behind them
 way and what closed them, because those are the parts a reader cannot recover
 from the files as they now stand.
 
+## Crosshair, old HUD, text-only health and menu parity
+
+### Fixed
+
+- **No crosshair.** The engine was drawing its own 2D crosshair, but at the
+  default `crosshair_scale` of 1 it is a 7x7 pixel plus on this build (measured
+  at 1280x720: 7x7 at 1, 14x14 at 2, 21x21 at 3, no larger above 3), and a
+  restored `userdata/config.cfg` can carry `crosshair 0` at all. The start-up
+  line now sets `+set crosshair 1 +set crosshair_scale 3`; the engine's own
+  maximum scale gives a visible 21x21 cross at 1280x720 and 2560x1440, and the
+  OPTIONS crosshair row now carries the engine's four values
+  none/cross/dot/angle.
+- **The old status bar showed through the new HUD.** The band's background was
+  a 0.96/0.9-alpha gradient, so the engine's digits and icons under it were
+  still visible. It is now a solid `#07090b` fill with no border or shadow.
+  The acceptance runner hides the band, proves the engine's status bar is
+  underneath, then shows the band and proves every pixel outside the new
+  read-out is the exact fill colour (0 of 41,920 sampled pixels differ).
+- **A bar under the health number.** The health read-out (and the other
+  read-outs) now has no border, underline, text-shadow or box-shadow; it is
+  text only, in the same font and position. The line the owner saw was the old
+  status bar showing through the translucent band, which the opaque fill also
+  removes.
+- **The menu was not the engine's menu, and it had no resolution row.** The
+  VIDEO view now carries the engine's `video mode` row (`r_mode`) with all 33
+  of its modes plus auto and custom, in the engine's own order, and applying it
+  restarts the level at that mode (measured: selecting 1366x768 reloads with
+  `+set r_mode 17` and the drawing buffer becomes 1366x768). The rows were
+  audited against Qwasm2's `src/client/menu/menu.c` and
+  `src/client/menu/videomenu.c`: GAME now has easy, medium, hard, hard+, load
+  game, save game, credits; OPTIONS has OGG music and free look, the engine's
+  crosshair and pause values, and reset defaults before go to console; VIDEO
+  has the engine's color light row, `fullscreen` (three values), no/yes
+  vertical sync, the full 16x multisampling list and the engine's
+  pixelated/standard/trilinear filters. See
+  [Presentation fixes](docs/presentation-fixes.md) for the row-by-row audit and
+  the rows this app cannot make work.
+
 ## Presentation fixes: the menu, the view weapon, the models and the HUD
 
 ### Fixed

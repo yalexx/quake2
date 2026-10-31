@@ -132,8 +132,17 @@ var Module;
     // frame, 91 and up draws none, whatever cl_gun says), and a restored
     // config.cfg from an older session can carry a wider one. Without this the
     // app boots with cl_gun 1 and no gun in hand. A URL can still override it.
+    // The crosshair is the engine's own 2D cross. At its default
+    // `crosshair_scale` of 1 it is a 7x7 pixel plus on this build (measured at
+    // 1280x720: 7x7 at scale 1, 14x14 at scale 2, 21x21 at scale 3, and no
+    // larger above 3), so at the box's 2560x1440 display it disappears against
+    // the scene. Scale 3 is the engine's own maximum and makes it a visible
+    // 21x21 cross at both sizes. `crosshair 1` is set explicitly because a
+    // restored userdata/config.cfg can carry `crosshair 0`, which would leave
+    // no crosshair at all whatever the scale. A URL can still override either
+    // value, as it can every default here.
     let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1",
-      "+set", "cl_gun", "1", "+set", "fov", "90"];
+      "+set", "cl_gun", "1", "+set", "fov", "90", "+set", "crosshair", "1", "+set", "crosshair_scale", "3"];
     const extra = queryArguments();
     args = args.concat(extra);
     // Boot straight into the game, as the app is meant to: with no map on the
@@ -855,6 +864,23 @@ var Module;
     return button.classList && button.classList.contains("setting");
   }
 
+  // A row can carry one cvar (`data-cvar`) or several it sets together
+  // (`data-cvars`), as the engine's ui scale row does with the menu, console
+  // and HUD scales. The row's displayed value is the first cvar's value.
+  function rowCvars(button) {
+    if (button.dataset.cvars) return button.dataset.cvars.split(",").map(function (one) { return one.trim(); }).filter(Boolean);
+    return button.dataset.cvar ? [button.dataset.cvar] : [];
+  }
+
+  function defaultIndex(button) {
+    const values = button.dataset.values ? button.dataset.values.split(",") : [];
+    const wanted = button.dataset.default;
+    if (wanted === undefined) return 0;
+    let index = values.indexOf(wanted);
+    if (index < 0) index = values.findIndex(function (one) { return Number(one) === Number(wanted); });
+    return index >= 0 ? index : 0;
+  }
+
   function readValue(button) {
     const values = button.dataset.values ? button.dataset.values.split(",") : [];
     const labels = button.dataset.labels ? button.dataset.labels.split(",") : null;
@@ -864,7 +890,12 @@ var Module;
     if (!Number.isFinite(index) || index < 0 || index >= values.length) index = 0;
     const value = values[index];
     const label = labels ? (labels[index] || value) : value + suffix;
-    return { value: value, label: label, index: index, count: values.length, changed: value !== button.dataset.default };
+    // `data-default` is what Reset returns to; `data-baseline` is what the
+    // page was actually started with. A value handed to the engine on the
+    // start-up line (r_mode from the URL, a cvar chosen in an earlier visit)
+    // is the running value, not a pending change.
+    const baseline = button.dataset.baseline !== undefined ? button.dataset.baseline : button.dataset.default;
+    return { value: value, label: label, index: index, count: values.length, changed: value !== baseline };
   }
 
   function showSetting(button) {
@@ -896,14 +927,27 @@ var Module;
     return values;
   }
 
+  function initializeSettings() {
+    for (const button of menuPanel.querySelectorAll(".setting[data-cvar], .setting[data-cvars]")) {
+      button.dataset.index = String(defaultIndex(button));
+      if (button.dataset.default !== undefined) button.dataset.baseline = button.dataset.default;
+      showSetting(button);
+    }
+  }
+
   function syncSettingsFromUrl() {
     const applied = appliedSettings();
-    for (const button of menuPanel.querySelectorAll(".setting[data-cvar]")) {
-      const value = applied[button.dataset.cvar.toLowerCase()];
+    for (const button of menuPanel.querySelectorAll(".setting[data-cvar], .setting[data-cvars]")) {
+      const cvar = rowCvars(button)[0];
+      if (!cvar) continue;
+      const value = applied[cvar.toLowerCase()];
       if (value === undefined) continue;
       const values = (button.dataset.values || "").split(",");
       const index = values.findIndex(function (one) { return one === value || Number(one) === Number(value); });
-      if (index >= 0) button.dataset.index = String(index);
+      if (index >= 0) {
+        button.dataset.index = String(index);
+        button.dataset.baseline = values[index];
+      }
       showSetting(button);
     }
     refreshApply();
@@ -911,9 +955,10 @@ var Module;
 
   function changedSettings() {
     const changed = [];
-    for (const button of menuPanel.querySelectorAll(".setting[data-cvar]")) {
+    for (const button of menuPanel.querySelectorAll(".setting[data-cvar], .setting[data-cvars]")) {
       const read = readValue(button);
-      if (read && read.changed) changed.push([button.dataset.cvar, read.value]);
+      if (!read || !read.changed) continue;
+      for (const cvar of rowCvars(button)) changed.push([cvar, read.value]);
     }
     return changed;
   }
@@ -928,17 +973,23 @@ var Module;
     const changed = changedSettings();
     if (!changed.length) { showBanner("Nothing to apply", 2500); return; }
     const commands = [];
-    for (const [cvar, value] of changed) commands.push("+set", cvar, value);
+    for (const [cvar, value] of changed) {
+      // The engine's "fullscreen window" mode also switches r_mode to auto
+      // (video mode -2), exactly as its own video menu does.
+      commands.push("+set", cvar, value);
+      if (cvar === "vid_fullscreen" && value === "2") commands.push("+set", "r_mode", "-2");
+    }
     showBanner("Restarting the level with " + changed.length + " change" + (changed.length === 1 ? "" : "s") + "…", 6000);
     reloadWith(commands);
   }
 
   function resetSettings(view) {
     const commands = [];
-    for (const button of menuPanel.querySelectorAll('.menu-view[data-view="' + view + '"] .setting[data-cvar]')) {
-      button.dataset.index = "0";
+    for (const button of menuPanel.querySelectorAll('.menu-view[data-view="' + view + '"] .setting[data-cvar], .menu-view[data-view="' + view + '"] .setting[data-cvars]')) {
+      if (button.dataset.default === undefined) continue;
+      button.dataset.index = String(defaultIndex(button));
       showSetting(button);
-      commands.push("+set", button.dataset.cvar, button.dataset.default);
+      for (const cvar of rowCvars(button)) commands.push("+set", cvar, button.dataset.default);
     }
     refreshApply();
     showBanner("Restoring the defaults…", 5000);
@@ -988,9 +1039,10 @@ var Module;
     else if (action === "reset-video") resetSettings("video");
     else if (action === "reset-options") resetSettings("options");
     else if (action === "quit") quitGame();
-    else if (action === "note") showBanner((button && button.dataset.note ? button.dataset.note : "That") + " is not part of this box build.", 3200);
+    else if (action === "note") showBanner(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.", 4200);
   }
 
+  initializeSettings();
   syncSettingsFromUrl();
 
   // Roving focus: the item under the pointer becomes the focused item, so mouse
