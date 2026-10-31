@@ -1403,8 +1403,15 @@ function compareBand(a, b, band) {
 // bright boot's cvars are written into config.cfg and would otherwise carry
 // the 5/5 brightness into the next resolution's "dark" pair (measured: the
 // 2560 dark pair booted at background luma 139 instead of the spawn's ~49).
+// The bright pair uses the menu maximum colour intensity with overbrights at
+// 2: at the menu's default 1.3 the same spawn only reached a background luma
+// median of 46.7, so the "brighter background" check had no pixels above 100
+// and could not pass. Measured across boots at 2: the spawn lands around 80-90,
+// which is far enough above the dark pair to prove the blend on a lit surface
+// while staying far enough below the bone tint (#ddb589, luma 186) that the
+// per-channel blend still has contrast to solve an alpha from.
 const DARK_STARTUP = "&+set&gl3_intensity&2.0&+set&gl3_overbrightbits&1.3";
-const BRIGHT_STARTUP = "&+set&gl3_intensity&5&+set&gl3_overbrightbits&1.3";
+const BRIGHT_STARTUP = "&+set&gl3_intensity&5&+set&gl3_overbrightbits&2";
 
 async function stableScreenshot() {
   let buffer = await screenshotBuffer();
