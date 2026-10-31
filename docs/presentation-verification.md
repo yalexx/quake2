@@ -168,6 +168,10 @@ at both resolutions once the shotgun was in hand..
   later (an ammo count once a weapon with ammo is in hand) is found.
 - **Multiplayer entries are informational**: this box build is single-player;
   the panel keeps the engine's MULTIPLAYER labels and says so.
+- **Settings display after `apply`.** The acceptance run opens the VIDEO and
+  OPTIONS views but does not change a value; the rows' value display was
+  verified separately headless (a page booted with `+set vid_gamma 1.8` shows
+  brightness 1.8, a plain boot shows 1.6).
 - **Not exercised headless:** audio, pointer lock and mouse look, firing, game
   saves, the Fullscreen API.
 - **No PR.** The work is committed on the project branch only.
