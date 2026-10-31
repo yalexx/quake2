@@ -1101,7 +1101,11 @@ async function hudCheck(label) {
   try {
     // One console line, not five commands: each console visit pauses the game
     // and types through the software renderer, and the box is not always idle.
-    await consoleBridge.run("sv_cheats 1;god;give shotgun;give shells;use shotgun", 180000);
+    // 2560x1440 on SwiftShader measures ~0.8 fps, so the same handoff needs a
+    // bigger budget there; a bigger budget costs nothing when the engine
+    // answers quickly, because the wait ends on the console's reply.
+    const armBudget = /^2560x1440/.test(label) ? 420000 : 180000;
+    await consoleBridge.run("sv_cheats 1;god;give shotgun;give shells;use shotgun", armBudget);
   } catch (error) {
     note(label + ": could not give a weapon with ammo (" + error.message + ")");
   }
