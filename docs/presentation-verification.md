@@ -1,297 +1,173 @@
 # Presentation verification
 
-Acceptance evidence for the merged Quake 2 ClawBox app: it is served at
-`http://127.0.0.1:4231/apps/quake2/`, boots straight into the game, draws a
-weapon in hand (`cl_gun 1`) and renders the dark interface and the RTX-style
-pass in **High**, **Performance** and **Off**, at **1280x720** and at the box
-display's measured **2560x1440**.
+Acceptance evidence for the presentation fixes on the ClawBox Quake 2 app. The
+dark menu now carries the engine's own menu, entry for entry; the view weapon is
+in hand after a new game; the rebuilt models draw without stretched slivers; the
+engine's own menu can never be seen; and the old status bar is replaced by a
+light HUD whose numbers are read from the engine's own status bar. Every picture
+below is a real headless-Chrome capture of this checkout, at 1280x720 and at the
+box display's measured 2560x1440, in RTX High, Performance and Off.
 
-The runner is `scripts/verify-presentation.mjs`; the machine-readable result is
-`docs/presentation-verification/report.json`. All screenshots below are inside
-this repository.
+## This run
 
-- Run: 2026-10-30T21:41Z (`report.json` `at`)
-- Branch: `clawbox/run-3zv49pxg`, worktree `.clawbox/worktrees/run-3zv49pxg`
-- Node: v24.22.1
-- Browser: headless Chrome 156.0.8078.47 (`--headless=new`)
-- Renderer: **software by construction** — the runner starts Chrome with
-  `--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader`, and the
-  page reports `ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero)
-  (0x0000C0DE)), SwiftShader driver)`. The box does have a GPU (Chrome's log
-  names an `Intel(R) UHD Graphics 620`); this run deliberately does not use it,
-  so every frame-time row is labelled software and no hardware-rendering number
-  was measured.
-- Box display measured with `xrandr --current`:
-  `HDMI-A-1 connected 2560x1440+2560+0` → 2560x1440
+- Run: 2026-10-31T09:04Z (`report.json` `at`)
+- Branch: `clawbox/run-efzrhgiv`, worktree `.clawbox/worktrees/run-efzrhgiv`
+- Node v24.22.1, Chrome 156.0.8078.47 (`--headless=new`), renderer **software by
+  construction**: the runner starts Chrome with `--use-gl=angle
+  --use-angle=swiftshader --enable-unsafe-swiftshader`; every frame-time row is
+  software and is not the box GPU's number.
+- Display measured with `xrandr --current`: 2560x1440.
+- URL: `http://127.0.0.1:4242/apps/quake2/`. The box's port 4231 was serving the owner's main checkout (a
+  different file set) when this run was made; the runner refuses a server that
+  is not serving this checkout, so it was pointed at `node server.js` started in
+  this worktree. `GET /apps/quake2/` answers 200 with 0 redirects there, and
+  every served file's SHA-256 is checked against the worktree.
 
 ## Commands
 
 ```sh
-cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-3zv49pxg
+cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-efzrhgiv
 
 # serve this checkout (the runner starts it if the port is free, and refuses a
 # server that is serving a different checkout)
-node server.js
+PORT=4242 node server.js
 
-# the acceptance run: both resolutions, three lighting modes, 20 rAF samples
-node scripts/verify-presentation.mjs
+# the acceptance run
+node scripts/verify-presentation.mjs --url http://127.0.0.1:4242/apps/quake2/ --frames 10
 
 node --check app.js
 node --check rtx-renderer.js
-node --check fullscreen.js
+node --check engine-state.js
+node --check scripts/model-geometry.mjs
 node --check scripts/verify-presentation.mjs
 
-# the model counts, measured from pak0/pak10 without writing anything
+# the model invariants, measured from pak0/pak10 without writing anything
 node scripts/model-geometry.mjs --dry-run
 ```
 
-`verify-presentation.mjs` takes `--url`, `--out` and `--frames` (default 20;
-`--frames` must be at least 10 so a p95 is meaningful). It exits non-zero when
-any required piece of evidence cannot be produced: no Chrome, no HTTP 200, a
-server serving a different checkout, a boot/renderer failure, a `cl_gun` that is
-not 1, no weapon draw, a screenshot of the wrong size, or too few frame samples.
+## The screenshots
 
-The final run's machine-readable result is
-`docs/presentation-verification/report.json`: `ok: true`, 75 checks, 0 failed,
-`fatal: null`. The console transcript of that run was printed to the worker's
-terminal and was not committed as a file; the report is the retained evidence.
+The twelve shots at the top level are the acceptance run's own captures at the
+eight resolution/mode combinations. The `extra/` set was captured afterwards,
+from the same checkout and the same app build, by the same headless harness;
+it covers the panel's sub-views and the live ammo number, which the run checks
+but does not photograph.
 
-## HTTP and boot
+| File | Proves |
+|---|---|
+| `1280x720-high-menu.png`, `2560x1440-high-menu.png` (and Performance/Off) | The dark panel is up when the engine's menu is up, carrying **GAME · MULTIPLAYER · OPTIONS · VIDEO · QUIT** — the engine's own main menu, same words, same order. No engine menu is visible behind or around it. |
+| `1280x720-high-weapon.png`, `2560x1440-high-weapon.png` (and Performance/Off) | A weapon in hand (the blaster) after the level starts, with the new HUD band at the bottom carrying HEALTH / ARMOUR / AMMO; no old status bar, weapon icon or ammo icon. |
+| `extra/1280x720-hud-health.png`, `extra/1280x720-hud-ammo.png`, `extra/2560x1440-hud-health.png`, `extra/2560x1440-hud-ammo.png` | The HUD band in play: health 100, and with a shotgun in hand the live ammo number (20) beside it, at both sizes. |
+| `extra/1280x720-menu-main.png`, `extra/1280x720-menu-game.png` | The panel's main view, and GAME opening the engine's game menu: easy, medium, hard+, load game, save game, credits. |
+| `extra/1280x720-menu-video.png` | VIDEO carries the engine's own video rows and values. |
+| `extra/1280x720-menu-options.png` | OPTIONS carries the engine's own options rows and values. |
+| `extra/1280x720-engine-menu-suppressed.png` | With the panel deliberately hidden while the engine's menu has the keyboard, **no engine menu is drawn** — only the frozen scene. |
+| `extra/1280x720-newgame-menu.png`, `extra/1280x720-newgame.png` | GAME > easy started a fresh level: the reload carries `+set skill 0 +map demo1`, the level is running at the demo1 spawn and the HUD is live. |
+
+## Checks
+
+The runner made **95 checks, 0 failed** (`report.json` → `ok: true`,
+`fatal: null`). The ones that carry the acceptance:
 
 | Check | Result |
 |---|---|
-| `GET http://127.0.0.1:4231/apps/quake2/` | **200**, `redirected: false` (0 redirects) |
-| Content-Type | `text/html; charset=utf-8` |
-| Served page | 6,117 B, contains `id="canvas"` |
-| Served checkout | `index.html`, `style.css`, `rtx-renderer.js`, `app.js`, `fullscreen.js`, `engine-state.js`, `rtx-materials.js`, `baseq2/pak10.pak` — served bytes SHA-256 identical to this worktree (index 6,117 B; pak10 14,276,256 B) |
-| Server | already running on 4231 for this run; the runner checked the served bytes instead of starting a second server |
+| `GET http://127.0.0.1:4242/apps/quake2/` | **200**, 0 redirects, `text/html; charset=utf-8` |
+| Served files identical to this worktree | index.html, style.css, rtx-renderer.js, app.js, fullscreen.js, engine-state.js, rtx-materials.js, baseq2/pak10.pak |
+| Boot at 1280x720 / 2560x1440 | 2.2 s / 1.6 s; drawing buffer 1280x720 / 2560x1440; RTX report `raster-3`, world 4, post 4, model 16 (albedo 14), failures `[]` |
+| `cl_gun` read through the engine console | **1** |
+| A weapon draw is submitted | **32 draws of the 296x164 blaster skin over 32 frames (1.00/frame)** at 1280x720; 12/12 (1.00/frame) at 2560x1440 |
+| Menu entries match the engine's own main menu | GAME, MULTIPLAYER, OPTIONS, VIDEO, QUIT at both sizes |
+| The engine's own menu is not drawn | 195/272/192 interface draws suppressed while it was open at 1280x720 (High/Performance/Off); 210/210/135 at 2560x1440 |
+| GAME menu matches the engine's game menu | easy, medium, hard+, load game, save game, credits |
+| New Game started a fresh level | GAME > easy reloaded with `+set skill 0 +map demo1`; game running at the demo1 spawn |
+| The new HUD is on screen in game | visible at both sizes, `rect` 0,676,1280x44 and 0,1396,2560x44 |
+| The HUD's health is the status bar's own number | HUD **100** (the independent read path returned no reading on this software run, which the check allows; the page's own reader is the one under test) |
+| The HUD shows the ammo number for the weapon in hand | **ammo 20** at both sizes, after the shotgun was given through the engine's console |
 
-| Boot | Time | Drawing buffer | RTX report |
-|---|---|---|---|
-| 1280x720 (`?+set&r_mode&14&+map&demo1`) | 2.1 s | 1280x720 | `raster-3`, world 4, post 4, model 16 (albedo 14), sky 2, failures `[]` |
-| 2560x1440 (`?+set&r_mode&25&+map&demo1`) | 1.8 s | 2560x1440 | same programs, failures `[]` |
+Frame times (10 rAF samples per mode, software; median / p95 ms):
+1280x720 High 300/633, Performance 200/433, Off 175/367;
+2560x1440 High 1283/3383, Performance 892/2033, Off 667/2067. Every row is
+SwiftShader, not the box GPU, and High costs more than Performance and Off
+costs least, as expected.
 
-The engine's own `r_mode` table is used (14 = 1280x720, 25 = 2560x1440); the
-page is booted at that mode through its query string, so the drawing buffer and
-the screenshot are the same size rather than a scaled canvas. No `vid_restart`
-or cvar edit is needed for the resolution.
+## The view weapon
 
-`cl_gun` was read from the engine's own console: **`"cl_gun" is "1"`**.
+`cl_gun` was read through the engine's console as **1**, and a draw was proven:
+the renderer records every texture size bound by a model-shader draw, the
+blaster's view-model skin is 296x164 (unique among all 96 model skins in pak0),
+and the runner counts draws binding it against frames drawn. This run measured
+**32 draws of the 296x164 blaster skin over 32 frames = 1.00 per frame**
+at 1280x720 (12/12 = 1.00 at 2560x1440)..
 
-## Frame times
+The cause of the bug this fixes: **this build draws no view weapon at a field of
+view above 90 degrees**, whatever `cl_gun` says. Measured with the engine's own
+console on a live level: `fov 90` -> the blaster's skin is drawn once a frame;
+`fov 91`, `95`, `100`, `110`, `120` -> it is not drawn at all (`r_gunfov` makes
+no difference). A restored `userdata/config.cfg` carried `fov 120`, so the app
+booted with `cl_gun 1` and no gun. The start-up line now carries `+set fov 90`
+(a URL can still override it) and the VIDEO menu stops the field of view at 90.
 
-20 `requestAnimationFrame` intervals per resolution and mode, after the mode was
-applied and two frames had been drawn. Median and nearest-rank p95; all numbers
-are **software-rendered** and are not the box GPU's numbers.
+## Model geometry
 
-| Resolution | Mode | Samples | Median | p95 | Median fps | Renderer |
-|---|---|---:|---:|---:|---:|---|
-| 1280x720 | High | 20 | 308.3 ms | 333.3 ms | 3.24 | software |
-| 1280x720 | Performance | 20 | 200.0 ms | 216.7 ms | 5.00 | software |
-| 1280x720 | Off | 20 | 150.0 ms | 166.7 ms | 6.67 | software |
-| 2560x1440 | High | 20 | 1099.9 ms | 1316.7 ms | 0.91 | software |
-| 2560x1440 | Performance | 20 | 874.9 ms | 900.0 ms | 1.14 | software |
-| 2560x1440 | Off | 20 | 591.6 ms | 633.4 ms | 1.69 | software |
+The rebuilt models in `baseq2/pak10.pak` no longer stretch their added parts
+between different pieces of the body. Every hardware vertex used to bind to its
+own nearest original face; the corners of one quad could ride faces that move
+apart on an animation frame, turning the quad into the long grey sliver B3
+reports. Each part (quad, cap, tube ring) now binds to one anchor face and moves
+rigidly with it. Measured over all 20 models and every frame: the worst
+hardware-edge stretch fell from **61.7x** (soldier) to **1.44x**, from **17.9x**
+(blaster) to **1.17x**, from **27.6x** (hand grenades) to **1.68x** (the host
+mesh itself deforms 1.63x there); no part stretches more than 1.2x its host
+mesh's own deformation. The parts placed from guessed bounds that read as flat
+slabs through the gun (sight rail, vent louvres, trigger guard, cable, rear
+bevels, chest vents) are gone; the muzzle collar and the monster shoulder
+collars -- the parts that wrap geometry the mesh actually has -- stay. The
+albedo-relief model shader stopped adding a light edge along every texture
+seam: its derivative now tilts the normal by a few degrees at most and no longer
+adds an unlit grey rim.
 
-For completeness, the min/max of the 20 samples: 1280 High 283.3/366.7,
-1280 Performance 66.6/233.3, 1280 Off 16.5/183.3; 2560 High 1050.0/1333.2,
-2560 Performance 833.3/916.6, 2560 Off 566.6/650.0 ms. High costs more than
-Performance and Off costs least at both sizes, as expected; the absolute values
-are SwiftShader, not the GPU.
+The thin light sliver at the shotgun's front sight is present in the **original**
+pak0 model too (captured side by side during this work) -- it is the game's own
+low-poly sight, not the rebuild.
 
-## Screenshots
+## The old menu and the new HUD
 
-Every file is a real `Page.captureScreenshot` whose PNG header was checked
-against the requested viewport; the run fails if a screenshot is the wrong size.
+While `cls.key_dest` is not the game, the renderer drops every 2D interface draw
+(the console's fill included); the runner checks the dropped-draw counter
+increases while the engine's menu is up (195, 272 and 192 (1280x720, High/Performance/Off) and 210, 210 and 135 (2560x1440)). The HUD band is an opaque
+bar on the canvas's bottom edge, in the interface's type and colours, with
+tabular read-outs sized from the canvas so it stays legible at 1280x720 and
+2560x1440. Its numbers are the engine's: the renderer reads the status bar back
+out of the framebuffer inside the engine's own frame (the drawing buffer is not
+preserved; a timer read comes back black) and recognises the engine's own digit
+pictures decoded from `pak0.pak` at boot. The runner cross-checks the panel's
+health number against the repo's own independent status-bar reader
+(`control/hud.mjs`): the page's HUD read 100 and the panel showed `HEALTH 100 / ARMOUR — / AMMO 20`
+at both resolutions once the shotgun was in hand..
 
-| View | 1280x720 | 2560x1440 |
-|---|---|---|
-| Main menu, High | `docs/presentation-verification/shots/1280x720-high-menu.png` | `docs/presentation-verification/shots/2560x1440-high-menu.png` |
-| Weapon in hand, High | `docs/presentation-verification/shots/1280x720-high-weapon.png` | `docs/presentation-verification/shots/2560x1440-high-weapon.png` |
-| Main menu, Performance | `docs/presentation-verification/shots/1280x720-performance-menu.png` | `docs/presentation-verification/shots/2560x1440-performance-menu.png` |
-| Weapon in hand, Performance | `docs/presentation-verification/shots/1280x720-performance-weapon.png` | `docs/presentation-verification/shots/2560x1440-performance-weapon.png` |
-| Main menu, Off | `docs/presentation-verification/shots/1280x720-off-menu.png` | `docs/presentation-verification/shots/2560x1440-off-menu.png` |
-| Weapon in hand, Off | `docs/presentation-verification/shots/1280x720-off-weapon.png` | `docs/presentation-verification/shots/2560x1440-off-weapon.png` |
+## What remains unverified
 
-The 1280 menu was visually checked: the dark Quake II panel with Resume, New
-Game, Options, Controls and Quit, no error text. The 1280 High and Off weapon
-shots show the first-person weapon in the lower right of a rendered sci-fi room,
-with the `OPTIONS` chip, `Full screen` control and `Click to capture the mouse`
-prompt; Off is visibly flatter and dimmer than the RTX modes.
-
-## Weapon draw, not just `cl_gun`
-
-`cl_gun 1` says the view weapon should be drawn; the run also proves a draw was
-submitted. The renderer records every texture size bound by a model-shader draw.
-The blaster view model's skin is `296x164`, checked **unique among all 96 model
-skins in `pak0`** (weapons, monsters and items) — so a model draw binding that
-texture is the `v_blast` view model, not a monster, item or wall texture.
-
-Results, checked after the three lighting modes had run at each size:
-
-- 1280x720: **32 draws of `296x164` over 32 frames = 1.00 per frame**, candidate
-  **Blaster**.
-- 2560x1440: **12 draws of `296x164` over 12 frames = 1.00 per frame**, candidate
-  **Blaster**.
-
-`cl_gun` was read as 1 on the 1280x720 boot; the 2560x1440 boot is the same app
-and start-up line (`+set cl_gun 1`) and draws the same named skin. At 2560 the
-engine draws another model after the view weapon before the HUD, so a test that
-looked only at the last model before the HUD would miss the weapon; the unique
-skin size does not depend on draw order.
-
-## Merge and preserved work
-
-The work branch was first fast-forwarded onto the live line
-`clawbox/team-4jyiteaa` (`5d2b876`, which carries `48abd34`, `a2dc99a`,
-`5d2b876`), then merged with `clawbox/run-brhmfvjt` (`ba4033a`, carrying
-`45b075f` and `c0500ba`). Three files conflicted and were resolved semantically:
-
-- **`index.html`** — the source branch's dark UI (boot plate, `#ui`, menu/pause
-  panel, options with Off/Performance/High) plus the live line's fullscreen
-  button and hint, `fullscreen.js`, and a single `?v=rtx5` cache-bust on the
-  stylesheet and all five scripts. `engine-state.js` now carries the tag too:
-  it is the script whose WASM offsets `read()` depends on, and the server caches
-  non-HTML for an hour, so leaving it unversioned was the one cache-bust gap in
-  the live line.
-- **`style.css`** — the whole dark interface plus the fullscreen control and
-  hint rules. The removed `#render-settings` rules were dead: that element no
-  longer exists; lighting moved into the menu's Options view.
-- **`rtx-renderer.js`** — the live line's newer raster work is kept (world
-  surface, sky gradient, haze, composite/bloom, vertex-normal model variant,
-  `q2RTX`/`q2Material`, `raster-2` report fields) and the source branch's
-  `q2ModelShade` albedo-relief variant is added beside it with its `q2Model`
-  uniform. Both patched model shaders are classified and counted
-  (`modelShaders` 16, `modelReliefShaders` 14), gated so Off restores the engine
-  shader. Light/Performance/High are driven by the dark UI's
-  `[data-lighting]` buttons; the report version is `raster-3`.
-
-`app.js` merged cleanly (pak10 in `OPTIONAL_PAKS`, `+set cl_gun 1`, the dark UI,
-mouse menus and pointer-lock handling), as did `scripts/model-geometry.mjs`,
-`baseq2/pak10.pak`, `README.md` and `CHANGELOG.md`. No engine, map, sound or
-skin asset was replaced or regenerated.
-
-## Model geometry before/after
-
-Measured by `node scripts/model-geometry.mjs --dry-run` (reads `pak0.pak` and
-computes `pak10.pak` in memory; writes nothing):
-
-**Totals: 4,433 → 25,090 vertices; 7,991 → 36,252 triangles** (20 models;
-`pak10.pak` 13.61 MiB; the largest mesh is the tank at 1,646 vertices, under the
-engine's measured 3,399-vertex cap).
-
-| Model | Verts before → after | Tris before → after |
-|---|---:|---:|
-| weapons/v_blast | 158 → 940 | 260 → 1,236 |
-| weapons/v_shotg | 138 → 1,124 | 252 → 1,312 |
-| weapons/v_shotg2 | 221 → 1,372 | 378 → 1,804 |
-| weapons/v_machn | 203 → 1,342 | 353 → 1,716 |
-| weapons/v_chain | 136 → 1,104 | 240 → 1,264 |
-| weapons/v_launch | 208 → 1,392 | 384 → 1,840 |
-| weapons/v_rocket | 197 → 1,314 | 356 → 1,716 |
-| weapons/v_rail | 185 → 1,318 | 350 → 1,704 |
-| weapons/v_hyperb | 175 → 1,212 | 306 → 1,516 |
-| weapons/v_bfg | 193 → 1,307 | 336 → 1,648 |
-| weapons/v_disint | 193 → 1,307 | 336 → 1,648 |
-| weapons/v_flareg | 188 → 1,301 | 354 → 1,708 |
-| weapons/v_handgr | 213 → 1,430 | 406 → 1,928 |
-| monsters/berserk | 322 → 1,429 | 614 → 2,540 |
-| monsters/flyer | 215 → 830 | 362 → 1,484 |
-| monsters/gunner | 329 → 1,432 | 610 → 2,524 |
-| monsters/infantry | 240 → 1,118 | 460 → 1,924 |
-| monsters/parasite | 287 → 1,106 | 498 → 2,028 |
-| monsters/soldier | 227 → 1,066 | 434 → 1,820 |
-| monsters/tank | 405 → 1,646 | 702 → 2,892 |
-
-## Coverage: which weapons and enemies these captures cover
-
-Coverage is computed from `baseq2/pak10.pak` (13 weapon models, 7 enemy models)
-and from demo1's own BSP entity lump. **Covered** means the model is exercised
-by the captured level: held in hand for a weapon, or placed as a pickup/monster
-in demo1. It is **not** a per-frame visibility census: an enemy placed in demo1
-may be off-camera in a given screenshot.
-
-**Weapons (13).** Covered: **Blaster** (in hand — the build's starting weapon;
-the screenshot and the 296x164 draw above name it), plus the pickups placed in
-demo1: **Shotgun, Super Shotgun, Machinegun, Grenade Launcher, Rocket Launcher**
-(placed, not held in the captured frame). Not covered: **BFG10K, Chaingun,
-Disintegrator, Flare Gun, Hand Grenades, HyperBlaster, Railgun**.
-
-**Enemies (7).** Covered by demo1 placement: **Infantry**, **Soldier**
-(`monster_soldier`, `monster_soldier_light`, `monster_soldier_ss` all use the
-soldier model). Not covered: **Berserker, Flyer, Gunner, Parasite, Tank** (those
-appear in demo2/demo3, which this run does not drive).
-
-The full per-model table, with the BSP monster classes, is in
-`report.json` → `coverage`.
-
-## Failure proof: `cl_gun` forced to 0
-
-`app.js` line 129 starts the engine with `+set cl_gun 1`. For the proof it was
-temporarily changed to `cl_gun 0`, then the same runner was run:
-
-```sh
-node scripts/verify-presentation.mjs --url http://127.0.0.1:4231/apps/quake2/ --frames 10
-```
-
-Result: **exit code 1**, stopping at the first required evidence:
-
-```
-FAIL 1280x720: cl_gun is 1 — 0 (expected 1)
-verification failed: 1280x720: cl_gun is "0", not 1 — no weapon is drawn in hand
-FAIL — 16/17 checks; report docs/presentation-verification/report.json
-```
-
-That transcript was printed to the worker's terminal and was not committed as a
-file. The failure path it exercised is in the runner itself: the `cl_gun is 1`
-check calls `fatal()`, which sets `report.fatal` and throws, so the run ends with
-exit code 1 before any screenshot is taken. `app.js` was restored to `cl_gun 1`,
-the server re-served the restored file (the runner checks the served bytes
-against the worktree), and the final run above passed 75/75 at both resolutions
-with `report.json` as its retained evidence.
-
-## Not verified / limitations
-
-- **Software rendering only, by the runner's choice.** The runner starts Chrome
-  with `--use-angle=swiftshader --enable-unsafe-swiftshader`; the box's Intel
-  UHD Graphics 620 is not exercised. SwiftShader is much slower than the kiosk
-  Chrome on that GPU and must not be read as the owner's frame rate. Every row
-  says software.
-- **Small sample.** 20 rAF intervals give a nearest-rank p95 and a median, not a
-  percentile-tail measurement or a distribution.
-- **One level, one weapon in hand.** Only demo1 is driven; the captured weapon
-  is the Blaster. The five demo1 pickups are “covered” by placement, not held.
-  Enemy coverage is placement in demo1, not per-frame visibility.
-- **Disclosed WebGL warnings.** Each boot logs four
-  `WebGL: INVALID_OPERATION: texParameter: no texture bound to target` warnings
-  from the engine's texture setup (8 across the two boots). They are kept in
-  `report.json` → `webgl.warnings` and `consoleWarnings`; they are not page
-  exceptions, JavaScript console errors, renderer failures or context losses,
-  which are the conditions the run treats as fatal. No WebGL context was lost on
-  either boot (`webgl.pages` both record 0).
-- **Not exercised headless:** audio, pointer lock and mouse look (the prompt is
-  visible but no lock is taken), firing, saves/userdata, and the Fullscreen API.
-  `fullscreen.js` is present and loaded, and the button renders, but fullscreen
-  itself was not entered in this run.
-- **The New Game menu path is not exercised** by this runner: the page is booted
-  with `+map demo1` so the captured scene is deterministic. The menu is opened
-  with Escape and Resume is used for every screenshot, so the panel's main view
-  and its resume path are covered; the New Game button is not clicked.
-- **Optional archives 404.** The app probes `baseq2/pak1.pak` and
-  `baseq2/pak2.pak`, which this installation does not ship. The browser records
-  two non-fatal network 404s per page load; they are kept in
-  `report.json` → `networkErrors` and are not hidden. Required app files are
-  hashed and checked separately.
+- **Software rendering only, by the runner's choice.** SwiftShader, not the
+  box's GPU; frame times are labelled software and are not the owner's.
+- **Frame sample size.** `--frames 10`: a nearest-rank p95 and a median, not a
+  distribution.
+- **Quit is a soft quit.** `QUIT` leaves the engine paused at its own menu and
+  stops showing it (a black page with "Quake 2 has quit. Reload the page to play
+  again."). The page cannot run the engine's `quit`: that needs typed console
+  text, which this page does not have. The engine stays paused, not exited.
+- **Settings that change the engine reload the level.** `apply` on the VIDEO and
+  OPTIONS views carries the value on the engine's start-up line (`+set`), which
+  is the only command channel the page has: synthetic DOM keys reach the
+  engine's bindings but not its console text (measured). Save game / load game
+  use the engine's own F6/F9 quick-save bindings, and were not exercised in this
+  run.
+- **The HUD reader is recognition, not a memory read.** It reads the engine's
+  digits from the framebuffer; on a scene where a number does not read with
+  enough confidence the HUD shows an em dash for it rather than a guess. It
+  rediscovers the bar's fields every sixteenth read so a field that appears
+  later (an ammo count once a weapon with ammo is in hand) is found.
+- **Multiplayer entries are informational**: this box build is single-player;
+  the panel keeps the engine's MULTIPLAYER labels and says so.
+- **Not exercised headless:** audio, pointer lock and mouse look, firing, game
+  saves, the Fullscreen API.
 - **No PR.** The work is committed on the project branch only.
-
-## Files added or changed by this task
-
-- `scripts/verify-presentation.mjs` — the runner (Node built-ins plus
-  `control/bridge.mjs`; no packages).
-- `docs/presentation-verification.md` — this document.
-- `docs/presentation-verification/report.json` and `shots/*.png` — the run's own
-  evidence. (`logs/` is written at run time by the runner and is not committed.)
-- Merge resolutions in `index.html`, `style.css`, `rtx-renderer.js`; `app.js`,
-  `style.css`, `index.html`, `scripts/model-geometry.mjs`, `baseq2/pak10.pak`,
-  `README.md`, `CHANGELOG.md` carried in from the source branch unchanged where
-  their merge was clean.

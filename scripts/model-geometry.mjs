@@ -254,6 +254,9 @@ function triNormal(a, b, c) {
 // ---------------------------------------------------------------------------
 
 const PHONG_BLEND = Number(process.env.Q2_PHONG || 0.6);
+// How far a projected edge midpoint may move from the straight midpoint, as a
+// fraction of the edge it splits.
+const MIDPOINT_LIMIT = Number(process.env.Q2_MIDPOINT_LIMIT || 0.12);
 
 // --- surface relaxation -----------------------------------------------------
 // Enemy meshes are blocky by construction: boxy limbs and a boxy head. A few
@@ -322,7 +325,16 @@ function buildRefined(model, opts) {
       const na = normals[a], nb = normals[b];
       const ta = sub(m, mul(na, dot(sub(m, pa), na)));
       const tb = sub(m, mul(nb, dot(sub(m, pb), nb)));
-      const p = lerp(m, mid(ta, tb), PHONG_BLEND);
+      let p = lerp(m, mid(ta, tb), PHONG_BLEND);
+      // The tangent-plane projection can throw a midpoint well off the edge
+      // where two very different normals meet (a sharp sight, a barrel rim),
+      // and a midpoint that far out turns its four child triangles into thin
+      // spikes. Bound the move to a fraction of the edge it splits: the
+      // rounding survives, the sliver does not.
+      const moved = sub(p, m);
+      const reach = len(moved);
+      const limit = len(sub(pa, pb)) * MIDPOINT_LIMIT;
+      if (reach > limit && reach > 1e-9) p = add(m, mul(moved, limit / reach));
       index = finalVerts.length;
       finalVerts.push({ kind: "s", a, b, delta: sub(p, m) });
       restPos.push(p);
@@ -410,27 +422,38 @@ function basisOf(a, b, c, fallback = null) {
   return [e0n, cross(nn, e0n), nn];
 }
 
-// Bind one hardware vertex to the original surface: nearest point on the
-// nearest original face, stored as barycentrics plus an offset in that face's
-// own frame, so every generated vertex follows the game's animation exactly.
-function bindVertex(context, p, normalIndex = 0) {
+// Bind one hardware vertex to the original surface: nearest point on a face of
+// the original mesh, stored as barycentrics plus an offset in that face's own
+// frame, so every generated vertex follows the game's animation exactly.
+//
+// The face is chosen once per *part*, not once per vertex. Choosing it per
+// vertex let the four corners of one quad bind to four different faces; at rest
+// that is invisible (every face agrees with the mesh), but on any animation
+// frame where those faces move differently the quad is stretched between them
+// and becomes a long thin grey sliver -- measured on the rebuilt soldier and
+// the blaster, whose hardware quads span a shoulder and a gun. `anchor` is the
+// point the part is placed around (a quad's centre, a cap's centre, a tube
+// ring's centre): the face nearest *it* is the one face every vertex of that
+// part rides on, so the part moves rigidly with one piece of the body.
+function bindVertex(context, p, normalIndex = 0, anchor = null) {
   const { model, rest } = context;
-  let best = { distance: Infinity, tri: 0, bary: [1, 0, 0], point: rest[0] };
+  const probe = anchor || p;
+  let best = { distance: Infinity, tri: 0 };
   for (let t = 0; t < model.tris.length; t++) {
     const tri = model.tris[t];
-    const a = rest[tri.v[0]], b = rest[tri.v[1]], c = rest[tri.v[2]];
-    const hit = closestOnTriangle(p, a, b, c);
-    const d = len(sub(p, hit.point));
-    if (d < best.distance) best = { distance: d, tri: t, bary: hit.bary, point: hit.point };
+    const hit = closestOnTriangle(probe, rest[tri.v[0]], rest[tri.v[1]], rest[tri.v[2]]);
+    const d = len(sub(probe, hit.point));
+    if (d < best.distance) best = { distance: d, tri: t };
   }
   const tri = model.tris[best.tri];
   const a = rest[tri.v[0]], b = rest[tri.v[1]], c = rest[tri.v[2]];
   const basis = basisOf(a, b, c);
-  const delta = sub(p, best.point);
+  const hit = closestOnTriangle(p, a, b, c);
+  const delta = sub(p, hit.point);
   const deltaLocal = [dot(delta, basis[0]), dot(delta, basis[1]), dot(delta, basis[2])];
   const index = context.finalVerts.length;
   context.finalVerts.push({
-    kind: "h", tri: best.tri, bary: best.bary, deltaLocal,
+    kind: "h", tri: best.tri, bary: hit.bary, deltaLocal,
     restBasis: basis, st: null, normal: normalIndex,
   });
   context.restPos.push(p);
@@ -461,8 +484,8 @@ function makeParts(context) {
   });
   const added = [];
   const uvFor = (patchDef, u, v) => [patchDef.x + 0.5 + u * (patchDef.size - 1), patchDef.y + 0.5 + v * (patchDef.size - 1)];
-  function vertex(p, uv) {
-    const index = bindVertex(context, p, 0);
+  function vertex(p, uv, anchor = null) {
+    const index = bindVertex(context, p, 0, anchor);
     const stIndex = context.st.length;
     context.st.push([Math.round(uv[0]), Math.round(uv[1])]);
     context.finalVerts[index].stIndex = stIndex;
@@ -476,10 +499,13 @@ function makeParts(context) {
   }
   function quad(patchDef, p0, p1, p2, p3, uvs) {
     const [uv0, uv1, uv2, uv3] = uvs || [[0, 0], [1, 0], [1, 1], [0, 1]];
-    const i0 = vertex(p0, uvFor(patchDef, uv0[0], uv0[1]));
-    const i1 = vertex(p1, uvFor(patchDef, uv1[0], uv1[1]));
-    const i2 = vertex(p2, uvFor(patchDef, uv2[0], uv2[1]));
-    const i3 = vertex(p3, uvFor(patchDef, uv3[0], uv3[1]));
+    // One face for the whole quad: its own centre decides which piece of the
+    // body it rides, so the quad can never be stretched between two of them.
+    const anchor = mid(mid(p0, p1), mid(p2, p3));
+    const i0 = vertex(p0, uvFor(patchDef, uv0[0], uv0[1]), anchor);
+    const i1 = vertex(p1, uvFor(patchDef, uv1[0], uv1[1]), anchor);
+    const i2 = vertex(p2, uvFor(patchDef, uv2[0], uv2[1]), anchor);
+    const i3 = vertex(p3, uvFor(patchDef, uv3[0], uv3[1]), anchor);
     tri(i0, i1, i2);
     tri(i0, i2, i3);
   }
@@ -516,13 +542,13 @@ function makeParts(context) {
     }
     if (caps) {
       for (let i = 1; i < sides - 1; i++) {
-        const c0 = vertex(p0, uvFor(patchDef, 0.5, 0.5));
-        const a = vertex(r0[i + 1], uvFor(patchDef, 0.85, 0.85));
-        const b = vertex(r0[i], uvFor(patchDef, 0.15, 0.85));
+        const c0 = vertex(p0, uvFor(patchDef, 0.5, 0.5), p0);
+        const a = vertex(r0[i + 1], uvFor(patchDef, 0.85, 0.85), p0);
+        const b = vertex(r0[i], uvFor(patchDef, 0.15, 0.85), p0);
         tri(c0, a, b);
-        const c1 = vertex(p1, uvFor(patchDef, 0.5, 0.5));
-        const d = vertex(r1[i], uvFor(patchDef, 0.85, 0.85));
-        const e = vertex(r1[i + 1], uvFor(patchDef, 0.15, 0.85));
+        const c1 = vertex(p1, uvFor(patchDef, 0.5, 0.5), p1);
+        const d = vertex(r1[i], uvFor(patchDef, 0.85, 0.85), p1);
+        const e = vertex(r1[i + 1], uvFor(patchDef, 0.15, 0.85), p1);
         tri(c1, d, e);
       }
     }
@@ -576,92 +602,13 @@ function addWeaponHardware(context) {
     notes.push("muzzle");
   }
 
-  // Sight rail: a low rail over the top faces, with a front blade and a rear
-  // notch block.
-  const top = info.filter((t) => t.n[2] > 0.55 && t.area > 0.2)
-    .filter((t) => t.center[0] > lo[0] + span(0) * 0.28 && t.center[0] < hi[0] - span(0) * 0.12);
-  if (top.length) {
-    const tb = bounds(top.flatMap((t) => [t.a, t.b, t.c]));
-    const railX0 = tb.center[0] - tb.size[0] * 0.34;
-    const railX1 = tb.center[0] + tb.size[0] * 0.34;
-    const railY = tb.center[1];
-    const railZ = tb.hi[2] + 0.16;
-    box([(railX0 + railX1) / 2, railY, railZ], [Math.max(1.0, (railX1 - railX0) / 2), 0, 0], [0, 0.36, 0], [0, 0, 0.17], patches.steel);
-    box([railX1 - 0.3, railY, railZ + 0.6], [0.5, 0, 0], [0, 0.5, 0], [0, 0, 0.6], patches.steel);
-    box([railX0 + 0.5, railY, railZ + 0.42], [0.4, 0, 0], [0, 0.4, 0], [0, 0, 0.4], patches.dark);
-    notes.push("rail");
-  }
-
-  // Vent ribs on the side with the most vertical surface, in the receiver band.
-  const sides = info.filter((t) => Math.abs(t.n[1]) > 0.62 && t.area > 0.15)
-    .filter((t) => t.center[2] > lo[2] + span(2) * 0.3 && t.center[2] < hi[2] - span(2) * 0.15)
-    .filter((t) => t.center[0] > lo[0] + span(0) * 0.25 && t.center[0] < hi[0] - span(0) * 0.2);
-  if (sides.length) {
-    let sum = 0;
-    for (const t of sides) sum += Math.sign(t.n[1]) * t.area;
-    const sideSign = sum >= 0 ? 1 : -1;
-    const chosen = sides.filter((t) => Math.sign(t.n[1]) === sideSign);
-    const sb = bounds(chosen.flatMap((t) => [t.a, t.b, t.c]));
-    const sideY = sideSign > 0 ? sb.hi[1] : sb.lo[1];
-    const xHalf = Math.max(0.7, sb.size[0] * 0.16);
-    const zHalf = Math.max(0.65, sb.size[2] * 0.11);
-    // A shallow housing plate ties the ribs to the receiver, so they read as
-    // louvres in a panel rather than three rods stuck to the side.
-    box([sb.center[0], sideY + sideSign * 0.06, sb.center[2]], [xHalf, 0, 0], [0, 0.1, 0], [0, 0, zHalf], patches.steel);
-    for (let i = 0; i < 2; i++) {
-      const z = sb.center[2] - zHalf * 0.42 + i * zHalf * 0.84;
-      box([sb.center[0], sideY + sideSign * 0.19, z], [xHalf * 0.9, 0, 0], [0, 0.14, 0], [0, 0, 0.16], patches.dark);
-    }
-    notes.push("vents");
-  }
-
-  // Trigger guard: an arc under the receiver where the grip meets the body.
-  const lowBand = info.filter((t) => t.center[2] < lo[2] + span(2) * 0.45)
-    .filter((t) => t.center[0] > lo[0] + span(0) * 0.2 && t.center[0] < hi[0] - span(0) * 0.3);
-  if (lowBand.length) {
-    const lb = bounds(lowBand.flatMap((t) => [t.a, t.b, t.c]));
-    const guardX = lb.center[0];
-    const guardZ = lb.center[2] + 0.4;
-    const guardY = lb.center[1];
-    const radius = Math.max(1.1, Math.min(span(1), span(2)) * 0.14);
-    const arc = [];
-    for (let i = 0; i <= 6; i++) {
-      const a = -0.35 + (i / 6) * Math.PI * 1.15;
-      arc.push([guardX + Math.cos(a) * radius, guardY, guardZ - Math.sin(a) * radius * 1.15]);
-    }
-    tube(arc, 0.5, 6, patches.grip);
-    box(arc[0], [0.72, 0, 0], [0, 0.62, 0], [0, 0, 0.55], patches.grip);
-    box(arc[arc.length - 1], [0.72, 0, 0], [0, 0.62, 0], [0, 0, 0.55], patches.grip);
-    notes.push("guard");
-  }
-
-  // Cable: a slack run that hugs the underside of the receiver, so it reads as
-  // cabling along the body rather than a loop hanging in the air.
-  const cx0 = lo[0] + span(0) * 0.2, cx1 = hi[0] - span(0) * 0.2;
-  const cy = b.center[1] - span(1) * 0.16;
-  const cablePoints = [];
-  for (let i = 0; i <= 5; i++) {
-    const t = i / 5;
-    const x = cx0 + (cx1 - cx0) * t;
-    let floorZ = lo[2] + span(2) * 0.2;
-    const near = context.rest.filter((p) => Math.abs(p[0] - x) < span(0) * 0.06 && Math.abs(p[1] - cy) < span(1) * 0.4);
-    if (near.length) floorZ = Math.min(...near.map((p) => p[2]));
-    cablePoints.push([x, cy, floorZ - 0.22 - Math.sin(t * Math.PI) * span(2) * 0.025]);
-  }
-  tube(cablePoints, 0.42, 6, patches.dark);
-  for (const index of [0, cablePoints.length - 1]) {
-    box(cablePoints[index], [0.62, 0, 0], [0, 0.62, 0], [0, 0, 0.5], patches.steel);
-  }
-  notes.push("cable");
-
-  // Bevel strips on the rear edges: low wedges that catch the rim light instead
-  // of leaving a bare block corner.
-  const rear = info.filter((t) => t.n[0] < -0.45 && t.area > 0.25 && t.center[0] < lo[0] + span(0) * 0.4);
-  if (rear.length) {
-    const rb = bounds(rear.flatMap((t) => [t.a, t.b, t.c]));
-    box([rb.center[0] - 0.2, rb.center[1], rb.center[2]], [0.35, 0, 0], [0, rb.size[1] * 0.34, 0], [0, 0, 0.4], patches.steel);
-    notes.push("bevel");
-  }
+  // The other parts this pass used to add -- sight rail, vent louvres, trigger
+  // guard, cable and rear bevels -- are gone. Each was placed from guessed
+  // bounds and sat a little off the surface it was meant to detail; on a
+  // magnified view weapon they read as flat untextured slabs and thin slivers
+  // stuck through the gun, not as hardware. What is left is the one part that
+  // can be placed from the model itself: the muzzle collar, which wraps the
+  // barrel's own forward faces and cannot float.
 
   context.tris = context.tris.concat(parts.added);
   return notes.join("+");
@@ -671,20 +618,13 @@ function addWeaponHardware(context) {
 // cannot fight the animation: chest vents and shoulder collars.
 function addMonsterHardware(context) {
   const parts = makeParts(context);
-  const { patches, box, cylinder, info, bounds: b } = parts;
+  const { patches, cylinder, info, bounds: b } = parts;
   const size = b.size;
   const span = (k) => Math.max(0.001, size[k]);
   const notes = [];
-  const front = info.filter((t) => t.n[0] > 0.55 && t.area > 0.5)
-    .filter((t) => t.center[2] > b.lo[2] + span(2) * 0.45 && t.center[2] < b.lo[2] + span(2) * 0.8);
-  if (front.length) {
-    const fb = bounds(front.flatMap((t) => [t.a, t.b, t.c]));
-    const x = fb.hi[0] + 0.2;
-    for (let i = 0; i < 3; i++) {
-      box([x, fb.center[1] - 1.8 + i * 1.8, fb.center[2]], [0.28, 0, 0], [0, 0.55, 0], [0, 0, 0.32], patches.dark);
-    }
-    notes.push("vents");
-  }
+  // Chest vents were placed in front of the torso from guessed bounds and read
+  // as flat slabs hanging off the body; the shoulder collars below wrap boxes
+  // the mesh already has, so they are the part kept.
   const shoulders = info.filter((t) => t.n[2] > 0.6 && t.area > 0.6)
     .filter((t) => t.center[2] > b.lo[2] + span(2) * 0.68 && Math.abs(t.center[1] - b.center[1]) > span(1) * 0.18);
   if (shoulders.length) {

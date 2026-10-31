@@ -125,19 +125,35 @@ var Module;
     // r_retexturing makes the engine look for textures/<map>/<name>.png before
     // the .wal it is about to draw, which is how the 4x wall art in pak9 reaches
     // the game (Yamagi draws it at the WAL's own size). The query string is
-    // appended after these, so a URL can still turn it off.
-    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1", "+set", "cl_gun", "1"];
-    if (window.location.search.length > 1) {
-      const extra = window.location.search.substr(1).split("&").filter(Boolean).map(function (arg) {
-        try {
-          return decodeURIComponent(arg);
-        } catch (error) {
-          return arg;
-        }
-      });
-      args = args.concat(extra);
-    }
+    // appended after these, so a URL can still turn any of it off.
+    //
+    // `fov 90` is not a preference: on this build the engine draws no view
+    // weapon at a field of view above 90 (measured: 90 draws the blaster every
+    // frame, 91 and up draws none, whatever cl_gun says), and a restored
+    // config.cfg from an older session can carry a wider one. Without this the
+    // app boots with cl_gun 1 and no gun in hand. A URL can still override it.
+    let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1",
+      "+set", "cl_gun", "1", "+set", "fov", "90"];
+    const extra = queryArguments();
+    args = args.concat(extra);
+    // Boot straight into the game, as the app is meant to: with no map on the
+    // start-up line the engine sits in its attract-demo loop (and the engine's
+    // own main menu is one key away). The query can still choose a map.
+    const asksForMap = extra.some(function (arg) { return arg === "+map" || arg === "map"; });
+    if (!asksForMap) args = args.concat(["+map", "demo1"]);
     return args;
+  }
+
+  // The query string as engine arguments, decoded one per "&".
+  function queryArguments() {
+    if (window.location.search.length <= 1) return [];
+    return window.location.search.substr(1).split("&").filter(Boolean).map(function (arg) {
+      try {
+        return decodeURIComponent(arg);
+      } catch (error) {
+        return arg;
+      }
+    });
   }
 
   // ---- Saved games -------------------------------------------------------
@@ -509,6 +525,9 @@ var Module;
         FS.write(pakDestFile, pakData, 0, pakSize, 0);
         FS.close(pakDestFile);
       }
+      // The HUD reader needs the engine's own digit pictures; hand it the
+      // archives before MemFS copies are the only ones left.
+      if (window.quake2Hud && window.quake2Hud.usePaks) window.quake2Hud.usePaks(pakDict);
       // MemFS holds its own copy now; drop ours so the buffers can be freed.
       pakDict = {};
       if (userStore && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
@@ -590,6 +609,7 @@ var Module;
       canvasElement.style.width = "calc(min(" + dVW + ", " + dVH + " * " + aspX + "))";
       canvasElement.style.height = "calc(min(" + dVH + ", " + dVW + " * " + aspY + "))";
       canvasElement.style.marginTop = "calc(0.5 * (" + dVH + " - (min(" + dVH + ", " + dVW + " * " + aspY + "))))";
+      placeHud();
     },
 
     softExit: function (status) {
@@ -643,47 +663,52 @@ var Module;
   };
 
   // ---- Interface ---------------------------------------------------------
-  // The game's own menu and HUD stay exactly as they are; this layer is the
-  // presentation around them. Escape still opens the engine's menu (which is
-  // what pauses the single-player simulation), and the moment `cls.key_dest`
-  // reads 3 this dark panel comes up over it. Every action that needs the
-  // engine is sent as a synthetic key sequence into the game's own console, so
-  // nothing here replaces gameplay state.
+  // The engine's menu is replaced by this panel, entry for entry: its main
+  // menu is GAME, MULTIPLAYER, OPTIONS, VIDEO, QUIT; GAME opens easy, medium,
+  // hard+, load game, save game, credits; OPTIONS and VIDEO are the engine's
+  // own settings menus, row for row. The engine still runs its menu state --
+  // that is what pauses a single-player game -- but rtx-renderer.js drops its
+  // pixels while the keyboard is away from the game, so the old menu can never
+  // be seen on Escape, on a pause or at boot.
+  //
+  // Nothing here types into the engine's console: synthetic DOM keys reach the
+  // engine's key bindings but not its console text (measured), so a command is
+  // either a start-up argument on a reload or one of the engine's own bound
+  // keys. That is also why a New Game reloads the page with `+map` on the
+  // start-up line instead of typing `map` at a console nobody can read.
 
   const menuLayer = document.getElementById("menu-layer");
   const menuPanel = document.getElementById("menu");
   const optionsChip = document.getElementById("options-chip");
+  const lightingChip = document.getElementById("lighting-chip");
+  const lightingPanel = document.getElementById("lighting-panel");
   const bannerElement = document.getElementById("banner");
   const bannerTextElement = document.getElementById("banner-text");
   const promptElement = document.getElementById("prompt");
-  const hudBand = document.getElementById("hud-band");
+  const hudElement = document.getElementById("hud");
+  const hudReadouts = {
+    health: document.getElementById("hud-health"),
+    armour: document.getElementById("hud-armour"),
+    ammo: document.getElementById("hud-ammo"),
+  };
   const menuViews = Array.from(document.querySelectorAll(".menu-view"));
 
   const ui = {
     open: false,
     view: "main",
     closing: false, // Resume/map close: ignore key_dest 3 for a moment
-    passthrough: false, // our own synthetic keys must reach the engine
     bannerTimer: 0,
     prompt: false,
+    hudAt: 0,
+    consoleAt: 0, // when the engine's console last owned the keyboard
   };
 
   const ESCAPE_KEY = { key: "Escape", code: "Escape", vk: 27, ch: 27 };
-  const GRAVE_KEY = { key: "`", code: "Backquote", vk: 192, ch: 96 };
-  const ENTER_KEY = { key: "\r", code: "Enter", vk: 13, ch: 13 };
-  const CHAR_KEYS = {
-    " ": { key: " ", code: "Space", vk: 32 },
-    ".": { key: ".", code: "Period", vk: 190 },
-    "-": { key: "-", code: "Minus", vk: 189 },
-    "_": { key: "_", code: "Minus", vk: 189, shift: true },
-    "/": { key: "/", code: "Slash", vk: 191 },
-    "\\": { key: "\\", code: "Backslash", vk: 220 },
-    ";": { key: ";", code: "Semicolon", vk: 186 },
-    "'": { key: "'", code: "Quote", vk: 222 },
-    ",": { key: ",", code: "Comma", vk: 188 },
-    "=": { key: "=", code: "Equal", vk: 187 },
-    "+": { key: "+", code: "Equal", vk: 187, shift: true },
-  };
+  // The engine's own quick save/load keys: F6 is bound to "Quick Saving…;
+  // save quick" and F9 to the load in the shipped config. A keydown reaches the
+  // engine's bindings (a synthetic Escape opens its menu), unlike console text.
+  const QUICK_SAVE_KEY = { key: "F6", code: "F6", vk: 117 };
+  const QUICK_LOAD_KEY = { key: "F9", code: "F9", vk: 120 };
 
   function sleep(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -700,17 +725,6 @@ var Module;
   function engineKeyDest() {
     const state = engineSnapshot();
     return state && typeof state.keyDest === "number" ? state.keyDest : null;
-  }
-
-  function keyDescriptor(ch) {
-    if (/^[a-z]$/i.test(ch)) {
-      const upper = ch.toUpperCase();
-      return { key: ch.toLowerCase(), code: "Key" + upper, vk: upper.charCodeAt(0), ch: ch.charCodeAt(0) };
-    }
-    if (/^[0-9]$/.test(ch)) return { key: ch, code: "Digit" + ch, vk: ch.charCodeAt(0), ch: ch.charCodeAt(0) };
-    const known = CHAR_KEYS[ch];
-    if (!known) return null;
-    return { key: known.key, code: known.code, vk: known.vk, ch: ch.charCodeAt(0), shift: known.shift };
   }
 
   // A synthetic keyboard event the engine's SDL layer reads exactly like a real
@@ -736,30 +750,16 @@ var Module;
     dispatchKey("keyup", descriptor);
   }
 
-  // Runs one Quake 2 console command through the game's own console.
-  async function runCommand(command) {
-    ui.passthrough = true;
-    try {
-      canvasElement.focus();
-      let dest = engineKeyDest();
-      if (dest === 3) { tapKey(ESCAPE_KEY); await sleep(300); dest = engineKeyDest(); }
-      if (dest !== 1) { tapKey(GRAVE_KEY); await sleep(360); }
-      if (engineKeyDest() !== 1) { tapKey(GRAVE_KEY); await sleep(360); }
-      for (const ch of command) {
-        const descriptor = keyDescriptor(ch);
-        if (!descriptor) continue;
-        dispatchKey("keydown", descriptor);
-        dispatchKey("keypress", descriptor);
-        dispatchKey("keyup", descriptor);
-        await sleep(20);
-      }
-      tapKey(ENTER_KEY);
-      await sleep(480);
-      if (engineKeyDest() === 1) { tapKey(GRAVE_KEY); await sleep(280); }
-      return true;
-    } finally {
-      ui.passthrough = false;
-    }
+  // ---- Reloading with engine arguments ------------------------------------
+  // Every action that needs an engine command the app cannot type is done by
+  // reloading with it on the engine's start-up line: the same arguments the
+  // page was opened with, then the new ones (the last +set/+map wins). The
+  // boot is local and cached, so this is a second or two.
+
+  function reloadWith(commands) {
+    const parts = window.location.search.replace(/^\?/, "").split("&").filter(Boolean);
+    const next = parts.concat(commands);
+    window.location.search = "?" + next.join("&");
   }
 
   // ---- Menu presentation -------------------------------------------------
@@ -769,13 +769,20 @@ var Module;
   }
 
   function visibleButtons() {
-    return Array.from(visibleView().querySelectorAll("button")).filter(function (button) { return !button.disabled; });
+    return Array.from(visibleView().querySelectorAll("button")).filter(function (button) {
+      return !button.disabled && (button.offsetParent !== null || button.getClientRects().length > 0);
+    });
   }
 
   function setView(view) {
     ui.view = view;
     for (const section of menuViews) section.hidden = section.dataset.view !== view;
-    const first = visibleButtons()[0];
+    // The main view opens with Resume focused, not GAME. The panel also comes
+    // up when the engine's own menu opens by itself (a console command, a lost
+    // pointer lock), and a stray Enter must not start a new game from there;
+    // Enter on Resume puts the game back exactly where it was.
+    const resume = view === "main" ? menuPanel.querySelector('[data-action="resume"]') : null;
+    const first = resume || visibleButtons()[0];
     if (first) first.focus({ preventScroll: true });
   }
 
@@ -788,8 +795,10 @@ var Module;
     menuLayer.hidden = false;
     document.body.classList.add("menu-open");
     optionsChip.hidden = true;
+    lightingChip.hidden = true;
+    lightingPanel.hidden = true;
+    lightingChip.setAttribute("aria-expanded", "false");
     promptElement.hidden = true;
-    hudBand.classList.remove("live");
     setView(view || "main");
   }
 
@@ -813,40 +822,147 @@ var Module;
   function resumeGame() {
     hideMenu();
     ui.closing = true;
-    ui.passthrough = true;
     tapKey(ESCAPE_KEY); // the engine's own menu closes and the game resumes
-    ui.passthrough = false;
     clearTimeout(resumeGame.closingTimer);
     resumeGame.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
     canvasElement.focus();
     if (Module._attemptPointerLock) Module._attemptPointerLock();
   }
 
-  async function startMap(name) {
-    ui.closing = true;
-    hideMenu();
-    showBanner("Loading " + name, 9000);
-    await runCommand("map " + name);
-    ui.closing = false;
-    canvasElement.focus();
+  function pauseForKey(key) {
+    // The engine only reads its bindings while the game has the keyboard, so a
+    // paused menu is closed first and reopened after the key.
+    const dest = engineKeyDest();
+    if (dest === 3) tapKey(ESCAPE_KEY);
+    setTimeout(function () {
+      tapKey(key);
+      // Put the pause back: an unlocked pointer or a saved game would otherwise
+      // leave the game running behind the panel.
+      setTimeout(function () {
+        if (!ui.open && engineKeyDest() === 0) tapKey(ESCAPE_KEY);
+        ui.closing = false;
+      }, 300);
+    }, dest === 3 ? 260 : 0);
   }
 
-  async function quitGame() {
-    ui.closing = true;
+  // ---- Settings -----------------------------------------------------------
+  // Each row cycles through the values the engine accepts; `apply` reloads with
+  // the changed cvars on the start-up line, which is the one command channel
+  // this page has. The engine reads its own config.cfg first, so a value set
+  // here is a start-up override, not a rewrite of the player's config.
+
+  function settingButton(button) {
+    return button.classList && button.classList.contains("setting");
+  }
+
+  function readValue(button) {
+    const values = button.dataset.values ? button.dataset.values.split(",") : [];
+    const labels = button.dataset.labels ? button.dataset.labels.split(",") : null;
+    const suffix = button.dataset.suffix || "";
+    if (!values.length) return null;
+    let index = Number(button.dataset.index || 0);
+    if (!Number.isFinite(index) || index < 0 || index >= values.length) index = 0;
+    const value = values[index];
+    const label = labels ? (labels[index] || value) : value + suffix;
+    return { value: value, label: label, index: index, count: values.length, changed: value !== button.dataset.default };
+  }
+
+  function showSetting(button) {
+    const read = readValue(button);
+    const valueElement = button.querySelector(".value");
+    if (read && valueElement) valueElement.textContent = read.label;
+    if (read) button.classList.toggle("changed", read.changed);
+  }
+
+  function cycleSetting(button) {
+    const values = button.dataset.values ? button.dataset.values.split(",") : [];
+    if (!values.length) return;
+    const index = (Number(button.dataset.index || 0) + 1) % values.length;
+    button.dataset.index = String(index);
+    showSetting(button);
+    refreshApply();
+  }
+
+  function changedSettings() {
+    const changed = [];
+    for (const button of menuPanel.querySelectorAll(".setting[data-cvar]")) {
+      const read = readValue(button);
+      if (read && read.changed) changed.push([button.dataset.cvar, read.value]);
+    }
+    return changed;
+  }
+
+  function refreshApply() {
+    const changed = changedSettings();
+    const text = changed.length ? changed.length + " change" + (changed.length === 1 ? "" : "s") : "no changes";
+    for (const hint of menuPanel.querySelectorAll("#apply-hint, #apply-hint-options")) hint.textContent = text;
+  }
+
+  function applySettings() {
+    const changed = changedSettings();
+    if (!changed.length) { showBanner("Nothing to apply", 2500); return; }
+    const commands = [];
+    for (const [cvar, value] of changed) commands.push("+set", cvar, value);
+    showBanner("Restarting the level with " + changed.length + " change" + (changed.length === 1 ? "" : "s") + "…", 6000);
+    reloadWith(commands);
+  }
+
+  function resetSettings(view) {
+    const commands = [];
+    for (const button of menuPanel.querySelectorAll('.menu-view[data-view="' + view + '"] .setting[data-cvar]')) {
+      button.dataset.index = "0";
+      showSetting(button);
+      commands.push("+set", button.dataset.cvar, button.dataset.default);
+    }
+    refreshApply();
+    showBanner("Restoring the defaults…", 5000);
+    reloadWith(commands);
+  }
+
+  // ---- Actions ------------------------------------------------------------
+
+  function startNewGame(skill) {
+    showBanner("Starting a new game…", 6000);
+    reloadWith(["+set", "skill", String(skill), "+map", "demo1"]);
+  }
+
+  function quickSave() {
+    showBanner("Quick saving…", 2500);
+    pauseForKey(QUICK_SAVE_KEY);
+  }
+
+  function quickLoad() {
+    showBanner("Quick loading…", 2500);
+    pauseForKey(QUICK_LOAD_KEY);
+  }
+
+  function quitGame() {
+    // Leave the engine paused (its menu is what pauses a single-player game)
+    // and stop showing it. The page cannot run the engine's `quit` -- that
+    // needs typed console text -- but a paused, dark page is what leaving
+    // looks like, and reloading brings the game back.
+    if (engineKeyDest() === 0) tapKey(ESCAPE_KEY);
     hideMenu();
-    showBanner("Closing Quake II", 4000);
-    await runCommand("quit");
-    ui.closing = false;
+    canvasElement.style.display = "none";
+    showMessage("Quake 2 has quit.", "Reload the page to play again.");
   }
 
   function doAction(action, button) {
     if (action === "resume") resumeGame();
-    else if (action === "newgame") setView("newgame");
-    else if (action === "options") setView("options");
-    else if (action === "controls") setView("controls");
     else if (action === "back") setView("main");
+    else if (action === "game") setView("game");
+    else if (action === "multiplayer") setView("multiplayer");
+    else if (action === "options") setView("options");
+    else if (action === "video") setView("video");
+    else if (action === "credits") setView("credits");
+    else if (action === "newgame" && button) startNewGame(button.dataset.skill || "1");
+    else if (action === "loadgame") quickLoad();
+    else if (action === "savegame") quickSave();
+    else if (action === "apply") applySettings();
+    else if (action === "reset-video") resetSettings("video");
+    else if (action === "reset-options") resetSettings("options");
     else if (action === "quit") quitGame();
-    else if (action === "map" && button && button.dataset.map) startMap(button.dataset.map);
+    else if (action === "note") showBanner((button && button.dataset.note ? button.dataset.note : "That") + " is not part of this box build.", 3200);
   }
 
   // Roving focus: the item under the pointer becomes the focused item, so mouse
@@ -861,13 +977,14 @@ var Module;
   menuPanel.addEventListener("click", function (event) {
     const button = event.target.closest("button");
     if (!button || !menuPanel.contains(button)) return;
-    doAction(button.dataset.action, button);
+    if (settingButton(button) && button.dataset.cvar) { cycleSetting(button); return; }
+    if (button.dataset.action) doAction(button.dataset.action, button);
   });
 
   // While the panel is up it owns the keyboard: the engine's own menu must not
   // scroll underneath it, and pointer lock must not be requested behind it.
   window.addEventListener("keydown", function (event) {
-    if (!ui.open || ui.passthrough) return;
+    if (!ui.open) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const buttons = visibleButtons();
@@ -889,21 +1006,69 @@ var Module;
   }, true);
 
   window.addEventListener("keyup", function (event) {
-    if (!ui.open || ui.passthrough) return;
+    if (!ui.open) return;
     event.preventDefault();
     event.stopImmediatePropagation();
   }, true);
 
+  lightingChip.addEventListener("click", function () {
+    const open = lightingPanel.hidden;
+    lightingPanel.hidden = !open;
+    lightingChip.setAttribute("aria-expanded", String(open));
+  });
+
   optionsChip.addEventListener("click", function () {
     // Opening from the chip asks the engine for its menu, which is the pause.
     showMenu("options");
-    ui.passthrough = true;
     tapKey(ESCAPE_KEY);
-    ui.passthrough = false;
     ui.closing = true;
     clearTimeout(optionsChip.closingTimer);
     optionsChip.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
   });
+
+  // ---- HUD ---------------------------------------------------------------
+  // The engine's status bar is covered by this band; rtx-renderer reads its
+  // numbers back out of the canvas and dispatches them here.
+
+  function placeHud() {
+    if (!hudElement) return;
+    const rect = canvasElement.getBoundingClientRect();
+    if (!rect.width || !rect.height) return;
+    const bufferHeight = canvasElement.height || rect.height;
+    // The engine's status bar is 24 buffer pixels tall; the band is a little
+    // taller so nothing of it shows above the read-out.
+    const band = Math.max(44, Math.round((34 / bufferHeight) * rect.height));
+    hudElement.style.left = rect.left + "px";
+    hudElement.style.width = rect.width + "px";
+    hudElement.style.height = band + "px";
+    hudElement.style.bottom = Math.max(0, window.innerHeight - rect.bottom) + "px";
+  }
+
+  function showHudValues(values) {
+    if (!values) return;
+    for (const key of ["health", "armour", "ammo"]) {
+      const element = hudReadouts[key];
+      if (!element) continue;
+      const value = values[key];
+      element.textContent = typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
+    }
+  }
+
+  window.addEventListener("quake2hud", function (event) {
+    showHudValues(event.detail);
+  });
+
+  function syncHud(playing) {
+    if (!hudElement) return;
+    hudElement.hidden = !playing;
+    if (!playing) return;
+    placeHud();
+    const now = performance.now();
+    if (now - ui.hudAt > 900) {
+      ui.hudAt = now;
+      if (window.quake2Hud && window.quake2Hud.read) showHudValues(window.quake2Hud.read());
+    }
+  }
 
   // `cls.key_dest` is the engine's own word for who owns the keyboard: 0 game,
   // 1 console, 3 menu. Polling it is how the panel follows the real game state
@@ -913,18 +1078,29 @@ var Module;
     const dest = state && typeof state.keyDest === "number" ? state.keyDest : null;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
-    const playing = dest === 0 && !ui.open;
-    hudBand.classList.toggle("live", playing && visible);
+    const playing = dest === 0 && !ui.open && visible;
+    syncHud(playing && engineRunning);
     optionsChip.hidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
+    lightingChip.hidden = optionsChip.hidden;
+    if (lightingChip.hidden) { lightingPanel.hidden = true; lightingChip.setAttribute("aria-expanded", "false"); }
     const showPrompt = playing && visible && !locked && engineRunning;
     if (showPrompt !== ui.prompt) {
       ui.prompt = showPrompt;
       promptElement.hidden = !showPrompt;
     }
-    if (dest === 3 && !ui.open && !ui.closing) showMenu("main");
-    else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
+    if (dest === 1) ui.consoleAt = performance.now();
+    if (dest === 3 && !ui.open && !ui.closing) {
+      // A menu that opens within a moment of the console is the console's own
+      // trailing Escape (the way a harness closes it), not the player asking
+      // for the menu: close it again instead of putting the panel up, so a
+      // console session cannot leave the menu owning the keyboard behind the
+      // panel.
+      if (performance.now() - ui.consoleAt < 1500) tapKey(ESCAPE_KEY);
+      else showMenu("main");
+    } else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
   }
   setInterval(syncInterface, 120);
+  window.addEventListener("resize", placeHud);
 
   // Browsers take Escape for themselves while the pointer is locked: it leaves
   // the lock and the page never sees the key, so the engine's own menu would
@@ -938,9 +1114,7 @@ var Module;
       const dest = engineKeyDest();
       if (dest === 3) { showMenu("main"); return; }
       if (dest !== 0) return;
-      ui.passthrough = true;
       tapKey(ESCAPE_KEY);
-      ui.passthrough = false;
       setTimeout(function () {
         if (!ui.open && engineKeyDest() === 3) showMenu("main");
       }, 260);

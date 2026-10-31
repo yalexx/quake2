@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx5">
+<link rel="stylesheet" href="style.css?v=rtx6">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -30,10 +30,27 @@
 </div>
 
 <!-- The interface layer: near-black translucent panels, 1px rules and a muted
-     amber accent. It sits above the canvas but never takes a click during play. -->
+     amber accent. The HUD band replaces the engine's status bar: the engine
+     still draws it (that is where the live numbers are read from), and the
+     opaque band covers it while this lighter read-out shows the same values in
+     the interface's own type. -->
 <div id="ui">
-  <div id="hud-band" aria-hidden="true"></div>
+  <div id="hud" aria-hidden="true">
+    <span class="hud-stat"><span class="hud-label">HEALTH</span><b id="hud-health">&mdash;</b></span>
+    <span class="hud-stat"><span class="hud-label">ARMOUR</span><b id="hud-armour">&mdash;</b></span>
+    <span class="hud-stat hud-ammo"><span class="hud-label">AMMO</span><b id="hud-ammo">&mdash;</b></span>
+  </div>
   <button id="options-chip" type="button">Options</button>
+  <button id="lighting-chip" type="button" aria-expanded="false" aria-controls="lighting-panel">Lighting</button>
+  <div id="lighting-panel" hidden>
+    <div class="segmented" role="group" aria-label="Lighting mode">
+      <button type="button" data-lighting="off">Off</button>
+      <button type="button" data-lighting="performance">Performance</button>
+      <button type="button" data-lighting="high">High</button>
+    </div>
+    <small id="rtx-status">Raster lighting · no ray tracing</small>
+    <small>Off returns every light to the engine's original shading.</small>
+  </div>
   <div id="banner" role="status" aria-live="polite" hidden><span id="banner-text"></span></div>
   <div id="prompt" hidden><span>Click to capture the mouse</span></div>
 
@@ -45,62 +62,109 @@
         <p class="menu-meta">BaseQ2 <i>·</i> single player</p>
       </header>
 
+      <!-- The engine's main menu, entry for entry: GAME, MULTIPLAYER, OPTIONS,
+           VIDEO, QUIT. -->
       <div class="menu-view" data-view="main">
         <nav class="menu-list" aria-label="Main menu">
-          <button type="button" data-action="resume"><span class="label">Resume</span><span class="hint">Esc</span></button>
-          <button type="button" data-action="newgame"><span class="label">New Game</span><span class="hint">›</span></button>
-          <button type="button" data-action="options"><span class="label">Options</span><span class="hint">›</span></button>
-          <button type="button" data-action="controls"><span class="label">Controls</span><span class="hint">›</span></button>
-          <button type="button" data-action="quit"><span class="label">Quit</span><span class="hint">›</span></button>
+          <button type="button" data-action="game"><span class="label">GAME</span><span class="hint">›</span></button>
+          <button type="button" data-action="multiplayer"><span class="label">MULTIPLAYER</span><span class="hint">›</span></button>
+          <button type="button" data-action="options"><span class="label">OPTIONS</span><span class="hint">›</span></button>
+          <button type="button" data-action="video"><span class="label">VIDEO</span><span class="hint">›</span></button>
+          <button type="button" data-action="quit"><span class="label">QUIT</span><span class="hint">›</span></button>
         </nav>
       </div>
 
-      <div class="menu-view" data-view="newgame" hidden>
-        <p class="view-title">New Game</p>
-        <nav class="menu-list" aria-label="Choose a mission">
-          <button type="button" data-action="map" data-map="demo1"><span class="label">Outer Base</span><span class="hint">demo1</span></button>
-          <button type="button" data-action="map" data-map="demo2"><span class="label">Installation</span><span class="hint">demo2</span></button>
-          <button type="button" data-action="map" data-map="demo3"><span class="label">Security Complex</span><span class="hint">demo3</span></button>
-          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
+      <!-- GAME: the engine's own game menu (easy, medium, hard+, load game,
+           save game, credits). The three skills start a new game at that
+           skill; the last two use the engine's own quick-save keys. -->
+      <div class="menu-view" data-view="game" hidden>
+        <p class="view-title">GAME</p>
+        <nav class="menu-list" aria-label="Game">
+          <button type="button" data-action="newgame" data-skill="0"><span class="label">easy</span><span class="hint">new game</span></button>
+          <button type="button" data-action="newgame" data-skill="1"><span class="label">medium</span><span class="hint">new game</span></button>
+          <button type="button" data-action="newgame" data-skill="2"><span class="label">hard+</span><span class="hint">new game</span></button>
+          <button type="button" data-action="loadgame"><span class="label">load game</span><span class="hint">F9</span></button>
+          <button type="button" data-action="savegame"><span class="label">save game</span><span class="hint">F6</span></button>
+          <button type="button" data-action="credits"><span class="label">credits</span><span class="hint">›</span></button>
         </nav>
       </div>
 
+      <!-- MULTIPLAYER: the engine's entries. This box runs the single-player
+           build, so the entries explain that rather than pretending. -->
+      <div class="menu-view" data-view="multiplayer" hidden>
+        <p class="view-title">MULTIPLAYER</p>
+        <nav class="menu-list" aria-label="Multiplayer">
+          <button type="button" data-action="note" data-note="Join network server"><span class="label">Join network server</span></button>
+          <button type="button" data-action="note" data-note="Start network server"><span class="label">Start network server</span></button>
+          <button type="button" data-action="note" data-note="Player Setup"><span class="label">Player Setup</span></button>
+          <button type="button" data-action="note" data-note="Customize Controls"><span class="label">Customize Controls</span></button>
+        </nav>
+        <p class="field-help">This box build is single player: its network menus are in the engine but networking is not part of this app.</p>
+      </div>
+
+      <!-- VIDEO: the engine's video menu, row for row. -->
+      <div class="menu-view" data-view="video" hidden>
+        <p class="view-title">VIDEO</p>
+        <nav class="menu-list menu-list-settings" aria-label="Video">
+          <button type="button" class="setting setting-info" data-info="renderer"><span class="label">renderer</span><span class="value" id="video-renderer">OpenGL ES3</span></button>
+          <button type="button" class="setting" data-cvar="vid_gamma" data-values="1.0,1.2,1.4,1.6,1.8,2.0" data-default="1.6" data-suffix=""><span class="label">brightness</span><span class="value">1.6</span></button>
+          <button type="button" class="setting" data-cvar="fov" data-values="80,85,90" data-default="90" data-suffix=""><span class="label">field of view</span><span class="value">90</span></button>
+          <button type="button" class="setting" data-cvar="gl3_intensity" data-values="1.0,1.4,2.0,2.5" data-default="2.0" data-suffix=""><span class="label">color intensity</span><span class="value">2.0</span></button>
+          <button type="button" class="setting" data-cvar="gl3_overbrightbits" data-values="1.0,1.3,1.6,2.0" data-default="1.3" data-suffix=""><span class="label">overbrights</span><span class="value">1.3</span></button>
+          <button type="button" class="setting" data-cvar="r_menuscale" data-values="1,2" data-default="1" data-suffix="x"><span class="label">ui scale</span><span class="value">1x</span></button>
+          <button type="button" class="setting" data-cvar="vid_fullscreen" data-values="0,1" data-default="0" data-labels="no,yes"><span class="label">full screen</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="r_vsync" data-values="0,1" data-default="0" data-labels="off,on"><span class="label">vertical sync</span><span class="value">off</span></button>
+          <button type="button" class="setting" data-cvar="r_anisotropic" data-values="0,2,4,8,16" data-default="0" data-labels="off,2x,4x,8x,16x"><span class="label">aniso filtering</span><span class="value">off</span></button>
+          <button type="button" class="setting" data-cvar="r_msaa_samples" data-values="0,2,4" data-default="0" data-labels="off,2x,4x"><span class="label">multisampling</span><span class="value">off</span></button>
+          <button type="button" class="setting" data-cvar="gl_texturemode" data-values="GL_LINEAR_MIPMAP_LINEAR,GL_NEAREST" data-default="GL_LINEAR_MIPMAP_LINEAR" data-labels="linear,nearest"><span class="label">texture filter</span><span class="value">linear</span></button>
+          <button type="button" data-action="reset-video"><span class="label">reset to default</span></button>
+          <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint">no changes</span></button>
+        </nav>
+        <p class="field-help">field of view stops at 90: this build draws no view weapon above it (measured: 91° and up drops the gun). Applying restarts the level with the new values.</p>
+      </div>
+
+      <!-- OPTIONS: the engine's options menu, row for row. -->
       <div class="menu-view" data-view="options" hidden>
-        <p class="view-title">Options</p>
-        <div class="field">
-          <span class="field-label">Lighting</span>
-          <div class="segmented" role="group" aria-label="Lighting mode">
-            <button type="button" data-lighting="off">Off</button>
-            <button type="button" data-lighting="performance">Performance</button>
-            <button type="button" data-lighting="high">High</button>
-          </div>
-        </div>
-        <div class="field field-note">
-          <span class="field-label">Renderer</span>
-          <small id="rtx-status">Raster lighting · no ray tracing</small>
-        </div>
-        <p class="field-help">Off returns every light to the engine's original shading. Performance and High add the RTX-style material and model pass; High adds dynamic-light highlights and bloom.</p>
-        <nav class="menu-list menu-list-sub" aria-label="Options">
-          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
+        <p class="view-title">OPTIONS</p>
+        <nav class="menu-list menu-list-settings" aria-label="Options">
+          <button type="button" class="setting" data-cvar="s_volume" data-values="0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0" data-default="0.7" data-suffix=""><span class="label">effects volume</span><span class="value">0.7</span></button>
+          <button type="button" class="setting" data-cvar="ogg_volume" data-values="0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0" data-default="0.7" data-suffix=""><span class="label">OGG volume</span><span class="value">0.7</span></button>
+          <button type="button" class="setting" data-cvar="ogg_shuffle" data-values="0,1" data-default="0" data-labels="off,on"><span class="label">OGG shuffle</span><span class="value">off</span></button>
+          <button type="button" class="setting setting-info" data-info="backend"><span class="label">sound backend</span><span class="value">SDL</span></button>
+          <button type="button" class="setting" data-cvar="sensitivity" data-values="2,4,6,8,10,12,16" data-default="6" data-suffix=".0"><span class="label">mouse speed</span><span class="value">6.0</span></button>
+          <button type="button" class="setting" data-cvar="cl_run" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">always run</span><span class="value">yes</span></button>
+          <button type="button" class="setting" data-cvar="m_pitch" data-values="0.022,-0.022" data-default="0.022" data-labels="no,yes"><span class="label">invert mouse</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="lookstrafe" data-values="0,1" data-default="0" data-labels="no,yes"><span class="label">lookstrafe</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="crosshair" data-values="0,1,2" data-default="1" data-labels="none,cross,dot"><span class="label">crosshair</span><span class="value">cross</span></button>
+          <button type="button" class="setting" data-cvar="vid_pauseonfocuslost" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">pause on minimized</span><span class="value">yes</span></button>
+          <button type="button" data-action="note" data-note="Customize Controls"><span class="label">customize buttons</span></button>
+          <button type="button" data-action="note" data-note="Customize Gamepad"><span class="label">customize gamepad</span></button>
+          <button type="button" data-action="note" data-note="Go to console"><span class="label">go to console</span><span class="hint">hidden in this app</span></button>
+          <button type="button" data-action="reset-options"><span class="label">reset defaults</span></button>
+          <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint-options">no changes</span></button>
         </nav>
+        <p class="field-help">Applying restarts the level with the new values; the engine reads them from its own start-up line, not from a visible console.</p>
       </div>
 
-      <div class="menu-view" data-view="controls" hidden>
-        <p class="view-title">Controls</p>
-        <dl class="keys">
-          <div><dt>Move</dt><dd><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></dd></div>
-          <div><dt>Look</dt><dd>Mouse</dd></div>
-          <div><dt>Fire</dt><dd>Left mouse</dd></div>
-          <div><dt>Weapons</dt><dd><kbd>1</kbd>–<kbd>0</kbd> · wheel</dd></div>
-          <div><dt>Jump</dt><dd><kbd>Space</kbd></dd></div>
-          <div><dt>Menu</dt><dd><kbd>Esc</kbd></dd></div>
-        </dl>
-        <nav class="menu-list menu-list-sub" aria-label="Controls">
-          <button type="button" data-action="back"><span class="label">Back</span><span class="hint">‹</span></button>
-        </nav>
+      <div class="menu-view" data-view="credits" hidden>
+        <p class="view-title">CREDITS</p>
+        <div class="credits">
+          <p><b>Quake II</b> &middot; id Software, 1997</p>
+          <p>Programming: John Carmack, Michael Abrash, John Cash</p>
+          <p>Design: Tim Willits, John Romero, Sandy Petersen</p>
+          <p>Art: Adrian Carmack, Kevin Cloud, Paul Steed</p>
+          <p>Music: Sonic Mayhem &middot; Sound: Nine Inch Nails</p>
+          <p>Engine: Yamagi Quake II (Qwasm2 WebAssembly build)</p>
+        </div>
       </div>
 
-      <footer class="menu-foot"><span>↑ ↓ select</span><span>Enter open</span><span>Esc resume</span></footer>
+      <footer class="menu-foot">
+        <span>↑ ↓ select</span><span>Enter open</span><span>Esc back</span>
+        <span class="foot-back">
+          <button type="button" data-action="resume">Resume</button>
+          <button type="button" data-action="back">Back</button>
+        </span>
+      </footer>
     </section>
   </div>
 </div>
@@ -108,10 +172,10 @@
 <!-- Live engine state, read out of the WASM memory. Loaded first and inert at
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
-<script src="engine-state.js?v=rtx5"></script>
-<script src="rtx-materials.js?v=rtx5"></script>
-<script src="rtx-renderer.js?v=rtx5"></script>
-<script src="app.js?v=rtx5"></script>
-<script src="fullscreen.js?v=rtx5"></script>
+<script src="engine-state.js?v=rtx6"></script>
+<script src="rtx-materials.js?v=rtx6"></script>
+<script src="rtx-renderer.js?v=rtx6"></script>
+<script src="app.js?v=rtx6"></script>
+<script src="fullscreen.js?v=rtx6"></script>
 </body>
 </html>

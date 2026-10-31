@@ -7,6 +7,77 @@ the archive, where the art lives, the commands and the measurements behind them
 way and what closed them, because those are the parts a reader cannot recover
 from the files as they now stand.
 
+## Presentation fixes: the menu, the view weapon, the models and the HUD
+
+### Fixed
+
+- **The dark menu did not match the menu it replaces.** The panel now carries
+  the engine's own main menu, entry for entry and in its order -- GAME,
+  MULTIPLAYER, OPTIONS, VIDEO, QUIT -- with GAME opening the engine's game menu
+  (easy, medium, hard+, load game, save game, credits), and VIDEO and OPTIONS
+  reproducing the engine's own settings menus row for row (renderer, brightness,
+  field of view, color intensity, overbrights, ui scale, full screen, vertical
+  sync, aniso filtering, multisampling, texture filter, reset to default, apply;
+  effects volume, OGG volume, OGG shuffle, sound backend, mouse speed, always
+  run, invert mouse, lookstrafe, crosshair, pause on minimized, customize
+  buttons, customize gamepad, go to console, reset defaults). The labels come
+  from the engine's own strings and its rendered menus, captured at 1280x720.
+  Settings that change the engine (field of view, brightness, volumes, ...) are
+  applied by reloading the page with `+set` on the engine's start-up line:
+  synthetic DOM keys reach the engine's bindings but not its console text
+  (measured), so a console is not a command channel this page has. New Game is
+  a reload with `+set skill N +map demo1` for the same reason.
+
+- **No gun in hand after New Game.** The cause is `fov` above 90: this build
+  draws no view weapon at a field of view wider than 90 degrees, whatever
+  `cl_gun` says (measured with the engine console: at 90 the blaster's 296x164
+  skin is drawn once a frame, at 91 and up it is not drawn at all). A
+  `userdata/config.cfg` restored from an earlier session carried `fov 120`, so
+  the app booted with `cl_gun 1` and no gun. The start-up line now sets
+  `+set fov 90` (a URL can still override it), the new VIDEO menu stops the
+  field of view at 90 and says why, and the acceptance runner that read
+  `cl_gun` now measures a real weapon draw (296x164 bound once per frame).
+
+- **The menu's GAME entry started nothing, and the console typing was fake.**
+  `runCommand` typed console commands with synthetic KeyboardEvents; they
+  reached the engine's key bindings but never its console text (measured: the
+  cvar it tried to set did not change, and the console stayed open). It is
+  gone. Actions that need an engine command now use the one channel that works
+  -- start-up arguments on a reload -- and save/load use the engine's own bound
+  quick-save/quick-load keys.
+
+- **Grey lines through the rebuilt models.** Every hardware vertex used to pick
+  its own nearest original face, so the corners of one quad could ride faces
+  that move apart on an animation frame: the quad stretched into a long grey
+  sliver (measured worst edge stretch 61.7x on the soldier, 17.9x on the
+  blaster). Each part (quad, cap, tube ring) now anchors to one face and moves
+  rigidly with it: the worst hardware-edge stretch across all 20 models is
+  1.7x, and no more than 1.2x the host mesh's own deformation. The parts placed
+  from guessed bounds that read as flat slabs through the gun (sight rail, vent
+  louvres, trigger guard, cable, rear bevels, chest vents) are gone; the muzzle
+  collar and the monster shoulder collars -- the parts that wrap geometry the
+  mesh actually has -- stay. The albedo-relief model shader also stopped adding
+  a light edge along every texture seam: the derivative now tilts the normal by
+  at most a few degrees and no longer adds an unlit grey rim.
+
+- **The engine's own menu could still be seen.** At Escape, on a pause and at
+  boot the engine draws its own menu behind the panel. While `cls.key_dest` is
+  not the game (menu or console) the renderer now drops every 2D interface draw
+  (the console's fill included), so nothing of the old interface can appear;
+  the 3D scene stays composited on screen. The panel follows `key_dest`, and a
+  menu that opens in the moment after a console session (a harness closing the
+  console) is closed again instead of being shown behind the panel.
+
+- **The old status bar.** The engine's ammo/weapon icons and digits are covered
+  by the new HUD: an opaque band on the canvas's bottom edge, in the interface's
+  own type and colours, with tabular HEALTH / ARMOUR / AMMO read-outs sized
+  from the canvas so it stays legible at 1280x720 and at 2560x1440. The numbers
+  are the engine's own: the renderer reads the status bar back out of the
+  framebuffer and recognises the engine's own digit pictures (decoded from
+  `pak0.pak` at boot, no embedded font), the same technique `control/hud.mjs`
+  uses for its screenshots. The verifier cross-checks the panel's health number
+  against an independent read of the status bar.
+
 ## Interface, first-person weapon and model geometry
 
 ### Fixed

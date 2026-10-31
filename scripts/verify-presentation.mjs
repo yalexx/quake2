@@ -29,6 +29,7 @@ import path from "node:path";
 import { execFileSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { QuakeControl } from "../control/bridge.mjs";
+import { canvasStrip, readHealth } from "../control/hud.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DEFAULT_URL = "http://127.0.0.1:4231/apps/quake2/";
@@ -115,6 +116,8 @@ const report = {
   webglPages: [],
   webglWarnings: [],
   clGun: null,
+  menu: null,
+  hud: null,
   weaponDraw: null,
   weaponDraws: [],
   modes: [],
@@ -467,6 +470,11 @@ function state() {
       statusText: document.getElementById("status") ? document.getElementById("status").textContent : "",
       detailText: document.getElementById("detail") ? document.getElementById("detail").textContent : "",
       menuHidden: document.getElementById("menu-layer") ? document.getElementById("menu-layer").hidden : null,
+      menuView: (() => { const visible = Array.from(document.querySelectorAll(".menu-view")).find((view) => !view.hidden); return visible ? visible.dataset.view : null; })(),
+      menuEntries: Array.from(document.querySelectorAll('.menu-view[data-view="main"] .label')).map((label) => label.textContent.trim()),
+      hud: (() => { const hud = document.getElementById("hud"); return hud ? { hidden: hud.hidden, text: hud.textContent.replace(/\s+/g, " ").trim(),
+        rect: (() => { const box = hud.getBoundingClientRect(); return [Math.round(box.left), Math.round(box.top), Math.round(box.width), Math.round(box.height)]; })() } : null; })(),
+      q2hud: window.quake2Hud && window.quake2Hud.read ? window.quake2Hud.read() : null,
       verify: window.__q2verify || null,
     };
   })()`);
@@ -569,7 +577,7 @@ class EngineConsole {
       }
     } catch { /* the page will report the real failure */ }
   }
-  async run(text) {
+  async run(text, timeoutMs = 90000) {
     if (!this.control) await this.connect();
     const now = await state();
     if (!(now.engine && now.engine.keyDestName === "game" && now.menuHidden === true)) {
@@ -578,7 +586,7 @@ class EngineConsole {
       await ensureGame("console command " + text);
     }
     await this.ensureConsoleClosed();
-    return withTimeout(this.control.command(text, { tail: 12 }), 90000, "engine console command " + JSON.stringify(text));
+    return withTimeout(this.control.command(text, { tail: 12 }), timeoutMs, "engine console command " + JSON.stringify(text));
   }
   async runUntilEcho(text, attempts = 3) {
     let last = null;
@@ -971,9 +979,29 @@ async function readClGun(label) {
   if (!(await ensureGame("cl_gun check"))) fatal(label + ": the game did not resume after reading cl_gun");
 }
 
+// Start demo1 again through the engine's own console: the death camera and a
+// finished demo both leave a player that draws no weapon, and the measurement
+// is of the app, not of the game's state.
+async function restartDemo1(label) {
+  if (!(await ensureGame("restarting demo1"))) fatal(label + ": the game is not in game to restart demo1");
+  await consoleBridge.runUntilEcho("map demo1");
+  await sleep(1200);
+  await waitDemo1(label);
+}
+
 async function weaponDrawCheck(label) {
   console.log("\n  " + label + " weapon draw");
   if (!(await ensureGame("weapon draw"))) fatal(label + ": the game is not in game for the weapon-draw check");
+  // A dead player submits no view weapon whatever cl_gun says; the death
+  // camera is the game's state, not a presentation bug. Restart demo1 for the
+  // measurement the way runModes does for its captures.
+  {
+    const now = await state();
+    if (now.engine && now.engine.dead) {
+      note(label + ": player was dead before the weapon-draw check; restarting demo1");
+      await restartDemo1(label);
+    }
+  }
 
   // Put the composite back on: Off persists in localStorage across reloads and
   // skips the composite, so postDraws would not count frames on this boot.
@@ -1026,6 +1054,112 @@ async function weaponDrawCheck(label) {
   }
 }
 
+// The new HUD: it must be on screen in game, its health number must be the one
+// the engine's own status bar carries (read independently with the repo's
+// reader), and it must show the ammo of a weapon that has ammo.
+// After a reload the console bridge's page target is stale; `waitDemo1` is
+// what every other capture path uses to know the level is up again.
+async function animateDemo1(label) {
+  try {
+    await waitFor(async () => {
+      const now = await state();
+      return now.engine && now.engine.ok && now.engine.keyDestName === "game" && now.menuHidden === true &&
+        now.rtx && (now.rtx.worldDraws > 0 || now.rtx.postDraws > 0);
+    }, 90000, 1000, "the new level to draw");
+  } catch (error) {
+    note(label + ": the new level did not draw cleanly: " + error.message);
+  }
+}
+
+async function hudCheck(label) {
+  console.log("\n  " + label + " HUD");
+  if (!(await ensureGame("the HUD check"))) fatal(label + ": the game is not in game for the HUD check");
+  await sleep(1500);
+  let now = await state();
+  // A dead player's HUD is the death camera's: restart the level before
+  // reading it, and keep the player alive for the ammo read below.
+  if (now.engine && now.engine.dead) {
+    note(label + ": player was dead before the HUD check; restarting demo1");
+    await restartDemo1(label);
+    now = await state();
+  }
+  check(label + ": the new HUD is on screen in game", Boolean(now.hud && now.hud.hidden === false),
+    "the HUD band visible over the canvas bottom", JSON.stringify(now.hud));
+  let independent = null;
+  try {
+    const strip = await canvasStrip(consoleBridge.control, { band: 40 });
+    if (strip) independent = readHealth(strip.png, strip.readOptions).health;
+  } catch (error) {
+    note(label + ": the status bar could not be read independently (" + error.message + ")");
+  }
+  const page = now.q2hud || {};
+  check(label + ": the HUD's health is the status bar's own number",
+    typeof page.health === "number" && page.health > 0 && (independent === null || page.health === independent),
+    "the page's HUD health equals the status bar reading", "HUD " + page.health + ", status bar " + independent);
+  // A weapon with ammo, handed over by the engine's own console, so the ammo
+  // field has a number to read.
+  try {
+    // One console line, not five commands: each console visit pauses the game
+    // and types through the software renderer, and the box is not always idle.
+    await consoleBridge.run("sv_cheats 1;god;give shotgun;give shells;use shotgun", 180000);
+  } catch (error) {
+    note(label + ": could not give a weapon with ammo (" + error.message + ")");
+  }
+  await ensureGame("after giving a weapon with ammo");
+  // The bar now carries an ammo number the reader has not seen before; ask it
+  // to find every field again instead of waiting for its own sixteenth read.
+  await evaluate("window.quake2Hud && window.quake2Hud.rediscover ? window.quake2Hud.rediscover() : null");
+  let ammo = null;
+  for (let i = 0; i < 30; i++) {
+    await sleep(1000);
+    if (!(await ensureGame("the ammo read"))) continue;
+    now = await state();
+    ammo = now.q2hud && now.q2hud.ammo;
+    if (typeof ammo === "number" && ammo > 0) break;
+    if (i === 10) await evaluate("window.quake2Hud && window.quake2Hud.rediscover ? window.quake2Hud.rediscover() : null");
+  }
+  check(label + ": the HUD shows the ammo number for the weapon in hand",
+    typeof ammo === "number" && ammo > 0, "the shotgun's shell count", "ammo " + ammo);
+  if (!report.hud) report.hud = {};
+  report.hud[label] = { page: now.q2hud, independentHealth: independent, hud: now.hud };
+  await ensureGame("after the HUD check");
+}
+
+// The happy path the menu promises: GAME > easy starts a new game. The app
+// hands the map to the engine on its start-up line (it cannot type into the
+// console), so the page reloads; this waits for the new page and the new game.
+async function newGameCheck(label) {
+  console.log("\n  " + label + " new game");
+  if (!(await ensureGame("the New Game check"))) fatal(label + ": the game is not in game for the New Game check");
+  if (!(await openMenu())) fatal(label + ": the main menu did not open for the New Game check");
+  await click('[data-action="game"]');
+  await sleep(400);
+  const entries = await evaluate(`Array.from(document.querySelectorAll('.menu-view[data-view="game"] .label')).map((label) => label.textContent.trim())`);
+  const engineEntries = ["easy", "medium", "hard+", "load game", "save game", "credits"];
+  check("GAME menu matches the engine's own game menu", JSON.stringify(entries) === JSON.stringify(engineEntries),
+    engineEntries.join(", "), (entries || []).join(", "));
+  await click('[data-action="newgame"][data-skill="0"]');
+  await sleep(2500);
+  let last = null;
+  try {
+    await waitFor(async () => {
+      const now = await state();
+      const position = now.engine && now.engine.position;
+      last = { key: now.engine && now.engine.keyDestName, position, menuHidden: now.menuHidden, url: await evaluate("location.search") };
+      return now.engine && now.engine.ok && now.engine.keyDestName === "game" && now.menuHidden === true && position &&
+        Math.abs(position.x) + Math.abs(position.y) + Math.abs(position.z) > 1;
+    }, 180000, 1000, "the new game to start");
+  } catch (error) {
+    fatal(label + ": the New Game did not start: " + error.message + " — last " + JSON.stringify(last));
+  }
+  check(label + ": New Game started a fresh level", true, "a running demo1 one reload after GAME > easy", JSON.stringify(last));
+  report.newGame = { label, ...last };
+  if (!report.menu) report.menu = { entries: null };
+  report.menu.gameEntries = entries;
+  await consoleBridge.reconnect();
+  await animateDemo1(label);
+}
+
 async function runModes(resolution) {
   for (const level of LIGHT_LEVELS) {
     console.log("\n  " + resolution.label + " / " + level);
@@ -1035,13 +1169,27 @@ async function runModes(resolution) {
       await waitDemo1(resolution.label);
     }
     await setLighting(level);
+    const beforeMenu = await status();
     if (!(await openMenu())) fatal("the main menu did not open at " + resolution.label + " / " + level);
     await setLighting(level); // keep the chosen mode while the menu is up
-    await waitFrames(2);
+    await waitFrames(3);
     const menuState = await state();
     check("main menu visible at " + resolution.label + " / " + level,
       menuState.menuHidden === false && menuState.engine && menuState.engine.keyDestName === "menu",
       "menu-layer visible", "menuHidden " + menuState.menuHidden + ", key_dest " + (menuState.engine && menuState.engine.keyDestName));
+    // B1: the panel carries the engine's own main menu, entry for entry.
+    const engineMenu = ["GAME", "MULTIPLAYER", "OPTIONS", "VIDEO", "QUIT"];
+    check("menu entries match the engine's own main menu at " + resolution.label,
+      JSON.stringify(menuState.menuEntries) === JSON.stringify(engineMenu),
+      engineMenu.join(", "), (menuState.menuEntries || []).join(", "));
+    if (!report.menu) report.menu = { entries: menuState.menuEntries, engineOrder: engineMenu, views: {} };
+    // B4: while the engine's menu owns the keyboard its 2D draws are dropped,
+    // so the old menu cannot show. The renderer counts every dropped draw.
+    const afterMenuStatus = await status();
+    const suppressed = (afterMenuStatus.suppressedDraws || 0) - (beforeMenu.suppressedDraws || 0);
+    check("the engine's own menu is not drawn at " + resolution.label + " / " + level,
+      suppressed > 0, "the renderer drops the engine menu's 2D draws",
+      suppressed + " interface draws suppressed while the menu was open");
     await capture(resolution.label + "-" + level + "-menu.png", resolution.width, resolution.height,
       { view: "main menu", resolution: resolution.label, level, software: report.renderer ? /swiftshader|software|subzero|llvmpipe/i.test(String(report.renderer.renderer)) : null });
 
@@ -1091,6 +1239,8 @@ async function run() {
     // Check the weapon after the modes: the first view-weapon draw can lag the
     // level start, and the screenshots have already exercised the scene by now.
     await weaponDrawCheck(resolution.label);
+    await hudCheck(resolution.label);
+    if (resolution.label === "1280x720") await newGameCheck(resolution.label);
     const pageState = await state();
     report.webglPages.push({
       resolution: resolution.label,
