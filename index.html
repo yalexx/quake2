@@ -30,16 +30,9 @@
 </div>
 
 <!-- The interface layer: near-black translucent panels, 1px rules and a muted
-     amber accent. The HUD band replaces the engine's status bar: the engine
-     still draws it (that is where the live numbers are read from), and the
-     opaque band covers it while this lighter read-out shows the same values in
-     the interface's own type. -->
+     amber accent. It stops at the canvas's controls: the engine's own status
+     bar owns the canvas's bottom band, with nothing drawn over it. -->
 <div id="ui">
-  <div id="hud" aria-hidden="true">
-    <span class="hud-stat"><span class="hud-label">HEALTH</span><b id="hud-health">&mdash;</b></span>
-    <span class="hud-stat"><span class="hud-label">ARMOUR</span><b id="hud-armour">&mdash;</b></span>
-    <span class="hud-stat hud-ammo"><span class="hud-label">AMMO</span><b id="hud-ammo">&mdash;</b></span>
-  </div>
   <button id="options-chip" type="button">Options</button>
   <button id="lighting-chip" type="button" aria-expanded="false" aria-controls="lighting-panel">Lighting</button>
   <div id="lighting-panel" hidden>
@@ -119,7 +112,7 @@
           <button type="button" class="setting" data-cvar="gl3_intensity" data-values="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0,3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,4.0,4.1,4.2,4.3,4.4,4.5,4.6,4.7,4.8,4.9,5.0" data-default="2.0" data-suffix=""><span class="label">color intensity</span><span class="value">2.0</span></button>
           <button type="button" class="setting" data-cvar="gl3_overbrightbits" data-values="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0,3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,4.0,4.1,4.2,4.3,4.4,4.5,4.6,4.7,4.8,4.9,5.0" data-default="1.3" data-suffix=""><span class="label">overbrights</span><span class="value">1.3</span></button>
           <button type="button" class="setting" data-cvar="gl3_colorlight" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">color light</span><span class="value">yes</span></button>
-          <button type="button" class="setting setting-info" data-action="note" data-note="ui scale: this app keeps the engine's HUD at 1x because it reads the status bar's digits back out of the frame; the menu and HUD are drawn by the page at a fixed scale"><span class="label">ui scale</span><span class="value">1x (fixed)</span></button>
+          <button type="button" class="setting setting-info" data-action="note" data-note="ui scale: this app keeps the engine's HUD at 1x because it reads the status bar's digits back out of the frame; the menu is drawn by the page at a fixed scale"><span class="label">ui scale</span><span class="value">1x (fixed)</span></button>
           <button type="button" class="setting" data-cvar="vid_fullscreen" data-values="0,1,2" data-default="0" data-labels="no,native fullscreen,fullscreen window"><span class="label">fullscreen</span><span class="value">no</span></button>
           <button type="button" class="setting" data-cvar="r_vsync" data-values="0,1" data-default="0" data-labels="no,yes"><span class="label">vertical sync</span><span class="value">no</span></button>
           <button type="button" class="setting" data-cvar="r_anisotropic" data-values="0,2,4,8,16" data-default="0" data-labels="off,2x,4x,8x,16x"><span class="label">aniso filtering</span><span class="value">off</span></button>

@@ -7,6 +7,36 @@ the archive, where the art lives, the commands and the measurements behind them
 way and what closed them, because those are the parts a reader cannot recover
 from the files as they now stand.
 
+## A palette-tinted, half-transparent crosshair, and the engine's own HUD
+
+### Fixed
+
+- **The crosshair was an opaque white plus.** The engine draws its crosshair as
+  an 8x8 white picture (`pics/ch1-3.pcx`, palette index 15) through a 2D shader
+  that alpha-tests and does not blend. `rtx-renderer.js` now patches that shader
+  to mix the texel with the game palette's rusted amber (`pics/colormap.pcx`
+  index 52, `#cf974b`) blended with its bone (index 251, `#ebd3c7`) — the tint
+  is `#ddb589` — and to multiply the output alpha by 0.5, and turns on the
+  engine's own source-alpha blend for that one draw. No image asset changed;
+  `crosshair 0` still submits no crosshair draw and `crosshair_scale` still
+  sets the engine's own size. The values are the start-up cvars
+  `q2_crosshair_alpha 0.5` and `q2_crosshair_tint ddb589`, and
+  `window.quake2RTX.crosshair({alpha, tint})` changes them live.
+- **A page band covered the engine's status bar.** The `#hud` element, its
+  styles, its read-out code, `quake2hud` listener and canvas sizing are gone.
+  The engine's own status bar with health, armour and ammo is visible and
+  unoccluded at boot and in game at 1280x720 and 2560x1440, and no page element
+  paints over the canvas's bottom band. The fullscreen control keeps its
+  clearance above the engine bar; fullscreen-on-open, the `?v=` cache-bust
+  tags, `+map demo1` and `+set fov 90` are unchanged.
+- **The acceptance runner now measures the new presentation.** It grew from
+  126 to 148 checks: the 17 band-era checks are replaced by no-#hud, engine
+  status-bar health/ammo readability, digits-inside-the-band and
+  no-page-element-over-the-band checks at both resolutions, plus the
+  crosshair's on/off draws, palette tint, size and measured alpha over a dark
+  and a bright background. Run:
+  `node scripts/verify-presentation.mjs --url http://127.0.0.1:4398/apps/quake2/`.
+
 ## Crosshair, old HUD, text-only health and menu parity
 
 ### Fixed

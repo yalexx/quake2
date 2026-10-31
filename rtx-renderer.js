@@ -13,7 +13,49 @@
   if (!['performance', 'high'].includes(preset)) preset = 'performance';
   const report = { version: 'raster-3', worldShaders: 0, postShaders: 0, modelShaders: 0, modelReliefShaders: 0,
     skyShaders: 0, matchedTextures: 0, materials: {}, failures: [], postDraws: 0, worldDraws: 0, modelDraws: 0,
-    modelTextureDraws: {}, lastModelSkinDraws: {}, skyDraws: 0, uiDraws: 0, fboSkips: 0, suppressedDraws: 0, supported: false };
+    modelTextureDraws: {}, lastModelSkinDraws: {}, skyDraws: 0, uiDraws: 0, fboSkips: 0, suppressedDraws: 0,
+    crosshairDraws: 0, supported: false };
+
+  // The engine draws its crosshair as an 8x8 white picture (pics/ch1-3.pcx,
+  // palette index 15) through a 2D shader that alpha-tests and does not blend.
+  // The picture is tinted and made translucent here, in that shader, so no
+  // image asset changes and crosshair 0 (no draw) and crosshair_scale (the
+  // engine's own quad size) keep working untouched. The defaults are the game
+  // palette's rusted amber (index 52, #cf974b) blended with its bone (index
+  // 251, #ebd3c7), and half opacity. Both are start-up cvars the app sets; a
+  // URL can override them and window.quake2RTX.crosshair() changes them live.
+  const crosshair = { alpha: 0.5, tint: [221, 181, 137] };
+  function startUpCvars() {
+    const values = {};
+    const tokens = location.search.replace(/^\?/, '').split('&').filter(Boolean).map(function (token) {
+      try { return decodeURIComponent(token); } catch (_) { return token; }
+    });
+    for (let i = 0; i + 2 < tokens.length; i++) {
+      if (tokens[i] === '+set' || tokens[i] === 'set') values[tokens[i + 1].toLowerCase()] = tokens[i + 2];
+    }
+    return values;
+  }
+  function parseTint(value) {
+    if (typeof value !== 'string') return null;
+    const hex = /^#?([0-9a-f]{6})$/i.exec(value.trim());
+    if (hex) { const n = parseInt(hex[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+    const parts = value.split(',').map(Number);
+    if (parts.length === 3 && parts.every(function (one) { return Number.isFinite(one) && one >= 0 && one <= 255; })) {
+      return parts.map(Math.round);
+    }
+    return null;
+  }
+  function hexTint(tint) {
+    return '#' + tint.map(function (one) { return one.toString(16).padStart(2, '0'); }).join('');
+  }
+  const bootCvars = startUpCvars();
+  const bootAlpha = Number(bootCvars.q2_crosshair_alpha);
+  if (bootCvars.q2_crosshair_alpha !== undefined && Number.isFinite(bootAlpha)) {
+    crosshair.alpha = Math.max(0, Math.min(1, bootAlpha));
+  }
+  const bootTint = parseTint(bootCvars.q2_crosshair_tint);
+  if (bootTint) crosshair.tint = bootTint;
+  let pendingCrosshair = false;
   let gl, current, textureUnit = 0, dirty = true, sceneDirty = false, composite = null;
   let worldThisFrame = false, skyPending = true, lastModelSkins = [];
   // `cls.key_dest` as this frame found it, sampled once at the frame's clear so
@@ -62,7 +104,22 @@
   }
   window.quake2RTX = {
     set(on, level = preset) { enabled = !!on; preset = level === 'high' ? 'high' : 'performance'; update(); return this.status(); },
+    // Live crosshair presentation: { alpha, tint } where alpha is 0..1 and tint
+    // is [r, g, b] or '#rrggbb'. The boot cvars q2_crosshair_alpha and
+    // q2_crosshair_tint set the same values from the start-up line.
+    crosshair(options = {}) {
+      if (options.alpha !== undefined) {
+        const alpha = Number(options.alpha);
+        if (Number.isFinite(alpha)) crosshair.alpha = Math.max(0, Math.min(1, alpha));
+      }
+      const tint = Array.isArray(options.tint) ? options.tint.map(Number) : parseTint(options.tint);
+      if (tint && tint.length === 3 && tint.every(function (one) { return Number.isFinite(one); })) {
+        crosshair.tint = tint.map(function (one) { return Math.max(0, Math.min(255, Math.round(one))); });
+      }
+      return { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) };
+    },
     status() { return { ...report, enabled: mode() > 0, quality: preset, mode: mode(),
+      crosshair: { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) },
       programs: Array.from(programs.values()).map(p=>p.kind) }; }
   };
   update();
@@ -837,6 +894,20 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       return { kind: 'sky', source: source.replace('void main()', skyFunctions+'\nvoid main()')
         .replace('vec3 col = color.rgb * intensity2D;', 'vec3 col = q2SkyTint(color.rgb * intensity2D);') };
     }
+    // The engine's 2D crosshair picture shader: an alpha-tested 8x8 pic drawn
+    // with GL_BLEND off. The tint is mixed after the engine's gamma so the
+    // drawn colour is the palette colour exactly; the picture's alpha is
+    // multiplied by the requested opacity, and the draw wrapper turns blending
+    // on only for this picture. q2Crosshair is 0 on every other 2D draw, so
+    // nothing else is touched.
+    if (type === gl.FRAGMENT_SHADER && source.includes('if(texel.a <= 0.666) discard;')
+        && source.includes('texel.rgb *= intensity2D;')) {
+      return { kind: 'ui', source: source.replace('void main()',
+        'uniform float q2Crosshair;\nuniform vec4 q2CrosshairTint;\nvoid main()')
+        .replace('outColor.rgb = pow(texel.rgb, vec3(gamma));',
+          'outColor.rgb = pow(texel.rgb, vec3(gamma)); outColor.rgb = mix(outColor.rgb, q2CrosshairTint.rgb, q2Crosshair);')
+        .replace('outColor.a = texel.a;', 'outColor.a = texel.a * mix(1.0, q2CrosshairTint.a, q2Crosshair);') };
+    }
     if (type === gl.VERTEX_SHADER && source.includes('passColor = vertColor*overbrightbits;') && source.includes('void main()')) {
       return { kind: 'modelVertex', source: source.replace('void main()', 'out vec3 q2ModelNormal;\nout vec3 q2ModelPos;\nout vec3 q2ModelEye;\nvoid main()')
         .replace('passColor = vertColor*overbrightbits;',
@@ -887,6 +958,10 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       const modelLocation = gl.getUniformLocation(program,'q2Model');
       const skyLocation = gl.getUniformLocation(program,'q2Sky');
       const skyViewportLocation = gl.getUniformLocation(program,'q2SkyViewport');
+      // Present only on the 2D crosshair picture program (added by transform).
+      const crosshairLocation = gl.getUniformLocation(program,'q2Crosshair');
+      const crosshairTintLocation = gl.getUniformLocation(program,'q2CrosshairTint');
+      const textureLocation = gl.getUniformLocation(program,'tex');
       const originals = gl.getAttachedShaders(program).map(shader => shaders.get(shader)?.original || '');
       const is2D = originals.some(source => /uniform\s+uni2D\b/.test(source));
       // Two model shader variants are patched: the one the live line shaded
@@ -896,7 +971,9 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       const kind = skyLocation ? 'sky' : isModel && materialLocation ? 'model' :
         modelLocation ? 'modelRelief' :
         materialLocation ? 'world' : modeLocation ? 'post' : is2D ? 'ui' : 'original';
-      programs.set(program,{ kind, modeLocation, materialLocation, modelLocation, skyLocation, skyViewportLocation,
+      programs.set(program,{ program, kind, modeLocation, materialLocation, modelLocation, skyLocation, skyViewportLocation,
+        crosshairLocation: crosshairLocation || null, crosshairTintLocation: crosshairTintLocation || null,
+        textureLocation: textureLocation || null, textureUnit: null, lastCrosshair: null, lastCrosshairTint: null,
         lastMode: -1, lastModel: -1, lastTexture: null, lastSky: -1 });
       if (kind === 'world') report.worldShaders++;
       if (kind === 'post') report.postShaders++;
@@ -957,7 +1034,28 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       }
     }
 
-    function uniforms() {
+    // Which texture unit the 2D picture shader samples. The engine binds its
+    // sampler once when the program is made; read it lazily, not per draw.
+    function crosshairSamplerUnit() {
+      if (current.textureUnit === null) {
+        try { current.textureUnit = current.textureLocation ? gl.getUniform(current.program, current.textureLocation) : 0; }
+        catch (_) { current.textureUnit = 0; }
+        if (typeof current.textureUnit !== 'number') current.textureUnit = 0;
+      }
+      return current.textureUnit;
+    }
+    // The engine's crosshair is the only 2D picture draw of a 8x8 texture:
+    // pics/ch1-3.pcx are the cross/dot/angle pictures and all three are 8x8,
+    // drawn as one four-vertex triangle strip. The HUD's digits (16x24 cells)
+    // and its art (22x29, 32x32) are not, so the gate cannot colour them.
+    function isCrosshairDraw(drawMode, drawCount) {
+      if (!current || !current.crosshairLocation) return false;
+      if (drawMode !== gl.TRIANGLE_STRIP || drawCount !== 4) return false;
+      const texture = bound[crosshairSamplerUnit()];
+      return Boolean(texture) && textureSizes.get(texture) === '8x8';
+    }
+    function uniforms(drawMode, drawCount) {
+      pendingCrosshair = false;
       if (current?.kind === 'ui') {
         // The engine draws the view weapon after every entity and the HUD
         // after that, so the first 2D draw of a frame names the skins of the
@@ -967,6 +1065,21 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         }
         lastModelSkins = [];
         report.uiDraws++;
+        if (current.crosshairLocation) {
+          const on = isCrosshairDraw(drawMode, drawCount);
+          if (on) { report.crosshairDraws++; pendingCrosshair = true; }
+          const flag = on ? 1 : 0;
+          if (current.lastCrosshair !== flag) {
+            gl.uniform1f(current.crosshairLocation, flag);
+            current.lastCrosshair = flag;
+          }
+          const key = crosshair.alpha + '|' + crosshair.tint.join(',');
+          if (current.lastCrosshairTint !== key) {
+            gl.uniform4f(current.crosshairTintLocation, crosshair.tint[0] / 255, crosshair.tint[1] / 255,
+              crosshair.tint[2] / 255, crosshair.alpha);
+            current.lastCrosshairTint = key;
+          }
+        }
         armHudRead();
         if (sceneDirty) {
           sceneDirty = false;
@@ -1022,8 +1135,30 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       else if (current.kind==='world') { report.worldDraws++; sceneDirty=true; worldThisFrame=true; }
       return false;
     }
-    gl.drawElements = (...args) => { if (uniforms()) return; return native.drawElements(...args); };
-    gl.drawArrays = (...args) => { if (uniforms()) return; return native.drawArrays(...args); };
+    // The engine's 2D picture pass draws the crosshair with blending off and
+    // alpha-tests its texture, so the shader's 0.5 alpha would otherwise mean
+    // nothing. Turn on the engine's own standard source-alpha blend for this
+    // one draw and restore the state its cache believes in afterwards.
+    function drawCrosshair(method, args) {
+      const wasBlend = gl.isEnabled(gl.BLEND);
+      const srcRGB = gl.getParameter(gl.BLEND_SRC_RGB), dstRGB = gl.getParameter(gl.BLEND_DST_RGB);
+      const srcAlpha = gl.getParameter(gl.BLEND_SRC_ALPHA), dstAlpha = gl.getParameter(gl.BLEND_DST_ALPHA);
+      if (!wasBlend) gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      native[method](...args);
+      gl.blendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+      if (!wasBlend) gl.disable(gl.BLEND);
+    }
+    gl.drawElements = (...args) => {
+      if (uniforms(args[0], args[1])) return;
+      if (pendingCrosshair) return drawCrosshair('drawElements', args);
+      return native.drawElements(...args);
+    };
+    gl.drawArrays = (...args) => {
+      if (uniforms(args[0], args[2])) return;
+      if (pendingCrosshair) return drawCrosshair('drawArrays', args);
+      return native.drawArrays(...args);
+    };
     // Upstream only uses its scene FBO underwater. On land, copy the finished
     // default framebuffer at the first 2D draw, composite, then restore every
     // touched GL binding/state so the engine's state cache and HUD stay valid.

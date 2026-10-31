@@ -141,8 +141,15 @@ var Module;
     // restored userdata/config.cfg can carry `crosshair 0`, which would leave
     // no crosshair at all whatever the scale. A URL can still override either
     // value, as it can every default here.
+    // The crosshair's colour and opacity are presentation, not engine state:
+    // rtx-renderer.js reads these two values off this start-up line and applies
+    // them in the 2D shader that draws the engine's 8x8 crosshair picture. The
+    // defaults are half opacity and the game palette's rusted amber blended
+    // with its bone (#ddb589; palette entries 52 and 251 in pics/colormap.pcx).
+    // A URL can still override either, as it can every default here.
     let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1",
-      "+set", "cl_gun", "1", "+set", "fov", "90", "+set", "crosshair", "1", "+set", "crosshair_scale", "3"];
+      "+set", "cl_gun", "1", "+set", "fov", "90", "+set", "crosshair", "1", "+set", "crosshair_scale", "3",
+      "+set", "q2_crosshair_alpha", "0.5", "+set", "q2_crosshair_tint", "ddb589"];
     const extra = queryArguments();
     args = args.concat(extra);
     // Boot straight into the game, as the app is meant to: with no map on the
@@ -467,6 +474,13 @@ var Module;
 
   // ---- Module: every callback the Qwasm2 engine uses ---------------------
 
+  // The exact start-up line handed to the engine. The acceptance runner reads
+  // this from the page to prove the app's own defaults (crosshair 1, scale 3,
+  // the palette tint and opacity) without a console visit; it is the same array
+  // the engine receives.
+  const engineArguments = buildArguments();
+  try { window.quake2StartupArguments = engineArguments.slice(); } catch (error) { /* optional */ }
+
   Module = {
     _canLockPointer: true,
     _depsLastLeft: 0,
@@ -618,7 +632,6 @@ var Module;
       canvasElement.style.width = "calc(min(" + dVW + ", " + dVH + " * " + aspX + "))";
       canvasElement.style.height = "calc(min(" + dVH + ", " + dVW + " * " + aspY + "))";
       canvasElement.style.marginTop = "calc(0.5 * (" + dVH + " - (min(" + dVH + ", " + dVW + " * " + aspY + "))))";
-      placeHud();
     },
 
     softExit: function (status) {
@@ -660,7 +673,7 @@ var Module;
       Module._canLockPointer = true;
     },
 
-    arguments: buildArguments(),
+    arguments: engineArguments,
 
     // The engine resolves index.wasm and the ref_*/game_*.wasm libraries
     // against its own script directory, but the file packager asks for
@@ -694,12 +707,6 @@ var Module;
   const bannerElement = document.getElementById("banner");
   const bannerTextElement = document.getElementById("banner-text");
   const promptElement = document.getElementById("prompt");
-  const hudElement = document.getElementById("hud");
-  const hudReadouts = {
-    health: document.getElementById("hud-health"),
-    armour: document.getElementById("hud-armour"),
-    ammo: document.getElementById("hud-ammo"),
-  };
   const menuViews = Array.from(document.querySelectorAll(".menu-view"));
 
   const ui = {
@@ -708,7 +715,6 @@ var Module;
     closing: false, // Resume/map close: ignore key_dest 3 for a moment
     bannerTimer: 0,
     prompt: false,
-    hudAt: 0,
     consoleAt: 0, // when the engine's console last owned the keyboard
   };
 
@@ -1106,49 +1112,10 @@ var Module;
     optionsChip.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
   });
 
-  // ---- HUD ---------------------------------------------------------------
-  // The engine's status bar is covered by this band; rtx-renderer reads its
-  // numbers back out of the canvas and dispatches them here.
-
-  function placeHud() {
-    if (!hudElement) return;
-    const rect = canvasElement.getBoundingClientRect();
-    if (!rect.width || !rect.height) return;
-    const bufferHeight = canvasElement.height || rect.height;
-    // The engine's status bar is 24 buffer pixels tall; the band is a little
-    // taller so nothing of it shows above the read-out.
-    const band = Math.max(44, Math.round((34 / bufferHeight) * rect.height));
-    hudElement.style.left = rect.left + "px";
-    hudElement.style.width = rect.width + "px";
-    hudElement.style.height = band + "px";
-    hudElement.style.bottom = Math.max(0, window.innerHeight - rect.bottom) + "px";
-  }
-
-  function showHudValues(values) {
-    if (!values) return;
-    for (const key of ["health", "armour", "ammo"]) {
-      const element = hudReadouts[key];
-      if (!element) continue;
-      const value = values[key];
-      element.textContent = typeof value === "number" && Number.isFinite(value) ? String(value) : "—";
-    }
-  }
-
-  window.addEventListener("quake2hud", function (event) {
-    showHudValues(event.detail);
-  });
-
-  function syncHud(playing) {
-    if (!hudElement) return;
-    hudElement.hidden = !playing;
-    if (!playing) return;
-    placeHud();
-    const now = performance.now();
-    if (now - ui.hudAt > 900) {
-      ui.hudAt = now;
-      if (window.quake2Hud && window.quake2Hud.read) showHudValues(window.quake2Hud.read());
-    }
-  }
+  // The engine's own status bar is the only HUD: nothing is drawn over the
+  // canvas's bottom band. rtx-renderer.js still reads its digits back out of
+  // the frame for the control harness (`window.quake2Hud`); that reader is
+  // independent of the page's DOM and stays.
 
   // `cls.key_dest` is the engine's own word for who owns the keyboard: 0 game,
   // 1 console, 3 menu. Polling it is how the panel follows the real game state
@@ -1159,7 +1126,6 @@ var Module;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
     const playing = dest === 0 && !ui.open && visible;
-    syncHud(playing && engineRunning);
     optionsChip.hidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
     lightingChip.hidden = optionsChip.hidden;
     if (lightingChip.hidden) { lightingPanel.hidden = true; lightingChip.setAttribute("aria-expanded", "false"); }
@@ -1180,7 +1146,6 @@ var Module;
     } else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
   }
   setInterval(syncInterface, 120);
-  window.addEventListener("resize", placeHud);
 
   // Browsers take Escape for themselves while the pointer is locked: it leaves
   // the lock and the page never sees the key, so the engine's own menu would

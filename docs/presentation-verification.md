@@ -2,42 +2,43 @@
 
 Acceptance evidence for the presentation fixes on the ClawBox Quake 2 app. The
 dark menu carries the engine's own menu, entry for entry (including its
-resolution row); the view weapon is in hand after a new game; the engine's own
-crosshair is visible in the centre of the frame; the rebuilt models draw
-without stretched slivers; the engine's own menu can never be seen; and the old
-status bar is completely hidden behind an opaque, text-only HUD whose numbers
-are read from the engine's own status bar. Every picture below is a real
-headless-Chrome capture of this checkout, at 1280x720 and at the box display's
-measured 2560x1440, in RTX High, Performance and Off. The owner's four reports
-B1-B4 and the row-by-row menu audit are documented in
+resolution row); the view weapon is in hand after a new game; the rebuilt
+models draw without stretched slivers; the engine's own menu can never be seen;
+the engine's own status bar is the HUD, with readable health and ammo digits in
+the canvas's bottom band and no page element over it; and the engine's own
+crosshair is half transparent in the game palette's rusted amber/bone, still
+hidden by `crosshair 0` and still sized by `crosshair_scale`. Every picture
+below is a real headless-Chrome capture of this checkout, at 1280x720 and at
+the box display's measured 2560x1440, in RTX High, Performance and Off. The
+measurements and the row-by-row menu audit are documented in
 [Presentation fixes](presentation-fixes.md).
 
 ## This run
 
-- Run: 2026-10-31T15:33Z (`report.json` `at`)
-- Branch: `clawbox/run-bpy0a0bz`, worktree `.clawbox/worktrees/run-bpy0a0bz`
+- Run: RUN_AT (`report.json` `at`)
+- Branch: `clawbox/run-0ku0fj1g`, worktree `.clawbox/worktrees/run-0ku0fj1g`
 - Node v24.22.1, Chrome 156.0.8078.47 (`--headless=new`), renderer **software by
   construction**: the runner starts Chrome with `--use-gl=angle
   --use-angle=swiftshader --enable-unsafe-swiftshader`; every frame-time row is
   software and is not the box GPU's number.
 - Display measured with `xrandr --current`: 2560x1440.
-- URL: `http://127.0.0.1:4242/apps/quake2/`. The box's port 4231 was serving the owner's main checkout (a
-  different file set) when this run was made; the runner refuses a server that
-  is not serving this checkout, so it was pointed at `node server.js` started in
-  this worktree. `GET /apps/quake2/` answers 200 with 0 redirects there, and
-  every served file's SHA-256 is checked against the worktree.
+- URL: `http://127.0.0.1:4398/apps/quake2/`. Port 4231 was serving another
+  checkout when this run was made; the runner refuses a server that is not
+  serving this checkout, so it was pointed at `node server.js` started in this
+  worktree. `GET /apps/quake2/` answers 200 with 0 redirects there, and every
+  served file's SHA-256 is checked against the worktree.
 
 ## Commands
 
 ```sh
-cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-bpy0a0bz
+cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-0ku0fj1g
 
 # serve this checkout (the runner starts it if the port is free, and refuses a
 # server that is serving a different checkout)
-PORT=4242 node server.js
+PORT=4398 node server.js
 
 # the acceptance run
-node scripts/verify-presentation.mjs --url http://127.0.0.1:4242/apps/quake2/ --frames 10
+node scripts/verify-presentation.mjs --url http://127.0.0.1:4398/apps/quake2/ --frames 10
 
 node --check app.js
 node --check rtx-renderer.js
@@ -52,24 +53,25 @@ node scripts/model-geometry.mjs --dry-run
 ## The screenshots
 
 The twelve `<resolution>-<mode>-menu/weapon.png` shots are the acceptance run's
-own captures at the six resolution/mode combinations. The B1-B4 pair
-(`1280x720-crosshair.png` / `-crosshair-off.png`), the old-HUD pair
-(`-hud-underneath.png` / `-hud-covered.png`), the resolution pair
+own captures at the six resolution/mode combinations. The crosshair pairs
+(`<resolution>-crosshair-{dark,dark-off,bright,bright-off}.png`), the engine
+status bar (`<resolution>-statusbar.png`), the resolution pair
 (`-resolution-menu.png` / `-resolution-applied.png`) and the happy-path frame
-(`-newgame-first-area.png`) are written by the same run at 1280x720. The
-`1280x720-menu-*.png` sub-view shots were captured afterwards from the same
-checkout by the same headless harness; the rows and values they show are also
-checked programmatically by the run.
+(`-newgame-first-area.png`) are written by the same run. The `1280x720-menu-*`
+sub-view shots were captured afterwards from the same checkout by the same
+headless harness; the rows and values they show are also checked
+programmatically by the run.
 
 | File | Proves |
 |---|---|
 | `1280x720-high-menu.png`, `2560x1440-high-menu.png` (and Performance/Off) | The dark panel is up when the engine's menu is up, carrying **GAME · MULTIPLAYER · OPTIONS · VIDEO · QUIT** — the engine's own main menu, same words, same order. No engine menu is visible behind or around it. |
-| `1280x720-high-weapon.png`, `2560x1440-high-weapon.png` (and Performance/Off) | A weapon in hand (the blaster) after the level starts, with the new HUD band at the bottom carrying HEALTH / ARMOUR / AMMO; no old status bar, weapon icon or ammo icon. |
-| `1280x720-crosshair.png`, `1280x720-crosshair-off.png` | B1: the engine's own crosshair is drawn at the centre of the live frame, and the same spawn with only `crosshair 0` has none. The pair differs in a compact centre cluster and the arm-vs-ring score is 190.2 on / 15.4 off. |
-| `1280x720-hud-underneath.png`, `1280x720-hud-covered.png` | B2/B3: with the new HUD hidden the engine's old status bar is underneath (218 bright pixels in the band); with the opaque HUD shown, 0 of 41,920 sampled pixels outside the read-out differ from the solid fill. HEALTH is text only — no rule, underline or shadow. |
-| `1280x720-resolution-menu.png`, `1280x720-resolution-applied.png` | B4: VIDEO > `video mode` at the engine's 1366x768 (r_mode 17), marked as one change; Apply reloads with `+set r_mode 17` and the engine's drawing buffer is 1366x768. |
+| `1280x720-high-weapon.png`, `2560x1440-high-weapon.png` (and Performance/Off) | A weapon in hand (the blaster) after the level starts, with the **engine's own status bar** at the bottom; no page band. |
+| `<resolution>-crosshair-dark.png`, `<resolution>-crosshair-dark-off.png` | The crosshair and the same spawn with `crosshair 0` over the dark view, at both resolutions. |
+| `<resolution>-crosshair-bright.png`, `<resolution>-crosshair-bright-off.png` | The same spawn with the engine's colour intensity at its menu maximum, so the opacity is measured against a bright background too (same camera in both boots). |
+| `<resolution>-statusbar.png` | The engine's status bar in the canvas bottom band, with health and ammo readable; no page element in the band. |
+| `1280x720-resolution-menu.png`, `1280x720-resolution-applied.png` | VIDEO > `video mode` at the engine's 1366x768 (r_mode 17), marked as one change; Apply reloads with `+set r_mode 17` and the engine's drawing buffer is 1366x768. |
 | `1280x720-menu-main.png`, `1280x720-menu-game.png`, `1280x720-menu-multiplayer.png`, `1280x720-menu-options.png`, `1280x720-menu-video.png` | The panel's views: the engine's main menu, and GAME (easy, medium, hard, hard+, load game, save game, credits), MULTIPLAYER, OPTIONS (including OGG music, free look, none/cross/dot/angle and yes/no/unpause on re-focus) and VIDEO (including video mode, color light, fullscreen and the engine's filter labels). |
-| `1280x720-newgame-first-area.png` | GAME > easy started a fresh level: the reload carries `+set skill 0 +map demo1`, the level is running, and the first area has the crosshair, the opaque HUD and the text-only health on it. |
+| `1280x720-newgame-first-area.png` | GAME > easy started a fresh level: the reload carries `+set skill 0 +map demo1`, the level is running, and the first area has the crosshair and the engine status bar on it. |
 
 ## Checks
 
@@ -87,14 +89,17 @@ The runner made **126 checks, 0 failed** (`report.json` → `ok: true`,
 | The engine's own menu is not drawn | 195/255/192 interface draws suppressed while it was open at 1280x720 (High/Performance/Off); 224/210/160 at 2560x1440 |
 | GAME menu matches the engine's game menu | easy, medium, hard, hard+, load game, save game, credits |
 | Menu parity, every submenu | main, game, multiplayer, options and video rows match `menu.c`/`videomenu.c` in label and order; video mode has the engine's 35 values; crosshair, pause, OGG shuffle and texture filter have the engine's labels; the four skills are 0-3 |
-| B1: crosshair | `crosshair 1`, `crosshair_scale 3`; 529-pixel compact diff at the centre on the paired capture; arm-vs-ring score **190.2 on / 15.4 off** |
-| B2: old status bar | 218 bright engine pixels in the band when the HUD is hidden; **0 of 41,920** sampled pixels outside the new read-out differ from `#07090b` when it is shown |
-| B3: health read-out | transparent background, 0 borders, no underline/text-shadow/box-shadow; text only |
+| No `#hud` band | absent from the DOM at both sizes |
+| Engine status bar health | **STATUS_HEALTH** read from the bottom 40 canvas rows at both sizes |
+| Engine status bar ammo | **STATUS_AMMO** read from the bottom 40 canvas rows at both sizes |
+| Status bar digits inside the band | both numbers' rows inside the bottom 40 rows of a 720/1440-px canvas |
+| No page element over the band | enumerated elements in band `[]`, point hits `[]` at both sizes |
+| Crosshair on and scale | `crosshair 1`, `crosshair_scale 3`; arm-vs-ring score **CROSSHAIR_SCORE_ON on / CROSSHAIR_SCORE_OFF off** |
+| Crosshair alpha, dark background | **ALPHA_DARK** from the selected cross pixels (`crosshair 0` draws nothing; CROSSHAIR_DRAWS_OFF off frames) |
+| Crosshair alpha, bright background | **ALPHA_BRIGHT**; the two backgrounds differ in median luma by BACKGROUND_DELTA |
+| Crosshair full-opacity colour | every selected cross channel between its background and the game palette tint `#ddb589` (**BLEND_BETWEEN of BLEND_TOTAL**) |
 | B4: resolution row | `video mode` selected 1366x768 (r_mode 17), marked as one change; Apply reloaded with `+set r_mode 17` and the drawing buffer became 1366x768 |
 | New Game started a fresh level | GAME > easy reloaded with `+set skill 0 +map demo1`; game running at the demo1 spawn, with the first-area capture |
-| The new HUD is on screen in game | visible at both sizes, `rect` 0,676,1280x44 and 0,1396,2560x44 |
-| The HUD's health is the status bar's own number | HUD **100** (the independent read path returned no reading on this software run, which the check allows; the page's own reader is the one under test) |
-| The HUD shows the ammo number for the weapon in hand | **ammo 20** at both sizes, after the shotgun was given through the engine's console |
 
 Frame times (10 rAF samples per mode, software; median / p95 ms):
 1280x720 High 317/633, Performance 200/383, Off 150/300;

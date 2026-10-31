@@ -1,56 +1,145 @@
-# Presentation fixes: crosshair, old HUD, health and menu (B1-B4)
+# Presentation: a half-transparent palette crosshair, and the engine's own HUD
 
-Evidence for the four owner reports on the presentation build. Every picture
-below is a real headless-Chrome capture of this checkout, made by
-`scripts/verify-presentation.mjs` on `node server.js` serving this worktree.
-The browser is software-rendered by construction (`--use-gl=angle
+Evidence for the two current owner changes on top of the menu and resolution
+work kept below. Every picture is a real headless-Chrome capture of this
+checkout, made by `scripts/verify-presentation.mjs` on `node server.js` serving
+this worktree. The browser is software-rendered by construction (`--use-gl=angle
 --use-angle=swiftshader --enable-unsafe-swiftshader`), so the frame rates in
 `docs/presentation-verification/report.json` are SwiftShader, not this box's
-GPU. The final acceptance run is **126 checks, 0 failed** (`ok: true`,
-`fatal: null`) at 2026-10-31T15:33Z.
+GPU. The final acceptance run is **N_CHECKS checks, 0 failed** (`ok: true`,
+`fatal: null`) at RUN_AT, at 1280x720 and 2560x1440.
 
 ## What changed
 
-- **B1, crosshair.** The engine was already submitting its 2D crosshair; the
-  fault was that at the default `crosshair_scale 1` it is a 7x7 pixel plus on
-  this build, and a restored `userdata/config.cfg` can carry `crosshair 0`.
-  Measured at 1280x720 by turning only the crosshair cvar off and on: 7x7 at
-  scale 1, 14x14 at 2, 21x21 at 3, and no larger at 4, 6 or 8. The app's
-  start-up line now sets `+set crosshair 1 +set crosshair_scale 3` (the engine's
-  maximum), and a URL can still override either value.
-- **B2, old HUD bleed-through.** The band's background was a
-  `rgba(...,0.96)`/`rgba(...,0.9)` gradient, so the engine's digits and icons
-  under it were visible. It is now a solid `#07090b` fill with no border and no
-  box-shadow. The runner captures the same frame with the band hidden (the
-  engine's own status bar is there) and shown (the band covers it), then checks
-  every pixel outside the new read-out text.
-- **B3, health read-out.** The read-outs carry no border, underline,
-  text-shadow or box-shadow; the health number is text only in the same font
-  and position. The line the owner saw under HEALTH was the old status bar
-  showing through the translucent band, which B2's opaque fill removes.
-- **B4, resolution and menu parity.** VIDEO now carries the engine's own
-  `video mode` row (`r_mode`) with its 33 modes plus auto and custom, in the
-  engine's order, and applies it by restarting the level at that mode. The
-  other rows were audited against Qwasm2's `src/client/menu/menu.c` and
-  `src/client/menu/videomenu.c`; the corrections are listed below.
+- **The crosshair is half transparent and in the game's palette.** The engine
+  draws its crosshair as an 8x8 white picture (`pics/ch1-3.pcx`, palette index
+  15) through a 2D shader that alpha-tests and does not blend. No picture is
+  added or replaced: `rtx-renderer.js` patches that shader to mix the texel
+  with the game palette's rusted amber (`pics/colormap.pcx` index 52, `#cf974b`)
+  blended with its bone (index 251, `#ebd3c7`) — the tint is `#ddb589` — and to
+  multiply the output alpha by 0.5. The draw wrapper turns on the engine's own
+  `SRC_ALPHA`/`ONE_MINUS_SRC_ALPHA` blend for that one draw and restores the
+  blend state afterwards. `crosshair 0` still submits no crosshair draw, and
+  `crosshair_scale` still sets the engine's own quad size (21x21 at 3 on
+  1280x720, 25x24 at 3 on 2560x1440: the engine's 2D size follows the display). The
+  defaults are the start-up cvars `q2_crosshair_alpha 0.5` and
+  `q2_crosshair_tint ddb589`, which `app.js` appends to the engine line; a URL
+  can override either, and `window.quake2RTX.crosshair({alpha, tint})` changes
+  them live.
+- **The new health/ammo band is gone; the engine's own status bar is the HUD.**
+  `#hud` is removed from `index.html`, its rules from `style.css`, and its
+  read-out code, `quake2hud` listener and canvas sizing from `app.js`. The
+  engine's status bar with health, armour and ammo is visible and unoccluded at
+  boot and in game at both resolutions, and no page element paints over the
+  canvas's bottom band. The fullscreen control keeps its 52px clearance above
+  the engine bar instead of the band's old reservation; fullscreen-on-open, the
+  `?v=` cache-bust tags, `+map demo1` and `+set fov 90` are unchanged.
+
+## The acceptance suite: 126 -> N_CHECKS checks
+
+Seventeen checks were removed and thirty-nine added. Every removal is a band
+check whose subject no longer exists; every one is replaced by a check on the
+engine's own status bar or on the crosshair's new presentation.
+
+Removed (17):
+
+| Removed check | Why it is gone | Replaced by |
+|---|---|---|
+| `1280x720`/`2560x1440`: the new HUD is on screen in game | the band is deleted | no #hud element; engine status bar checks |
+| `1280x720`/`2560x1440`: the HUD's health is the status bar's own number | there is no page HUD to compare | status bar health readable in the canvas bottom band |
+| `1280x720`/`2560x1440`: the HUD shows the ammo number | there is no page HUD | status bar ammo readable in the canvas bottom band |
+| B2: the HUD band's fill is fully opaque | the band is deleted | no page element paints over the band |
+| B3: the health read-out is text only | the read-out is deleted | no #hud element exists |
+| screenshot `1280x720-hud-underneath.png` | the band is deleted | `-statusbar.png` (engine bar visible) |
+| screenshot `1280x720-hud-covered.png` | the band is deleted | `-statusbar-no-page-ui.png` diagnostic |
+| B2: the band's frame carries the old status bar | the band is deleted | engine status bar health/ammo digits |
+| B2: no old HUD pixel shows through the opaque band | the band is deleted | no page element paints over the band |
+| B1: crosshair on at boot | band-era 1280-only check | per-resolution crosshair on check |
+| B1: crosshair at the visible scale | band-era 1280-only check | per-resolution start-up value + size bounds check |
+| screenshot `1280x720-crosshair.png` | band-era pair | per-resolution dark/bright screenshots |
+| screenshot `1280x720-crosshair-off.png` | band-era pair | per-resolution dark/bright off screenshots |
+| B1: crosshair visible in the centre | band-era 1280-only check | per-resolution visible + alpha/tint checks |
+
+Added (39): per resolution (x2), the engine status bar's no-#hud, readable
+health, readable ammo, digits-inside-band, no-page-element-over-band checks and
+its screenshot (6 each); the crosshair's on-at-boot, scale-3, visible-cluster,
+crosshair-0-draws-nothing, size, alpha-over-dark, alpha-over-bright,
+two-backgrounds-differ, every-pixel-blended checks and four screenshots
+(13 each); and one palette-tint check.
 
 ## The captures
 
 | File | What it proves |
 |---|---|
-| [`shots/1280x720-crosshair.png`](presentation-verification/shots/1280x720-crosshair.png) | The engine's crosshair is drawn at the centre of the live frame after boot (`crosshair 1`, `crosshair_scale 3`). |
-| [`shots/1280x720-crosshair-off.png`](presentation-verification/shots/1280x720-crosshair-off.png) | The same demo1 spawn booted with only `+set crosshair 0`; the centre has no cross. The pair differs in a compact cluster at the centre (529 pixels in a 41x41 box around 640,360), and the cross measurement (mean luma on the arms minus a ring outside them) is **190.2 on / 15.4 off**. |
-| [`shots/1280x720-hud-underneath.png`](presentation-verification/shots/1280x720-hud-underneath.png) | With the new HUD hidden, the engine's own status bar is visible in the band's rectangle (bright old-HUD pixels are counted, not assumed). This is what has to be hidden. |
-| [`shots/1280x720-hud-covered.png`](presentation-verification/shots/1280x720-hud-covered.png) | The same frame with the new HUD shown: the band is the solid fill and no engine pixel shows through it. Outside the new read-out text, **0 of 41,920 sampled pixels** differ from `#07090b`. |
-| [`shots/1280x720-resolution-menu.png`](presentation-verification/shots/1280x720-resolution-menu.png) | VIDEO > `video mode` selected at the engine's 1366x768 (`r_mode 17`), marked as one pending change with `apply`. |
-| [`shots/1280x720-resolution-applied.png`](presentation-verification/shots/1280x720-resolution-applied.png) | After Apply the page reloaded with `+set r_mode 17` and the engine's drawing buffer is 1366x768; the crosshair and the opaque HUD are still there. |
-| [`shots/1280x720-menu-main.png`](presentation-verification/shots/1280x720-menu-main.png), [`-game`](presentation-verification/shots/1280x720-menu-game.png), [`-multiplayer`](presentation-verification/shots/1280x720-menu-multiplayer.png), [`-options`](presentation-verification/shots/1280x720-menu-options.png), [`-video`](presentation-verification/shots/1280x720-menu-video.png) | The panel's views on this build, with the engine's rows in order (including the four skills, OGG music/free look, the crosshair/pause values, video mode and color light). |
-| [`shots/1280x720-newgame-first-area.png`](presentation-verification/shots/1280x720-newgame-first-area.png) | The happy path: GAME > easy restarted demo1, and the first area has the crosshair, the opaque HUD and the text-only health on it. |
-| [`shots/1280x720-high-weapon.png`](presentation-verification/shots/1280x720-high-weapon.png) and the other mode shots | The acceptance captures now show the same fixes in every lighting mode: a visible crosshair, a solid HUD band with no old digits, and text-only HEALTH/ARMOUR/AMMO. |
+| [`shots/1280x720-crosshair-dark.png`](presentation-verification/shots/1280x720-crosshair-dark.png), [`-dark-off`](presentation-verification/shots/1280x720-crosshair-dark-off.png) | The crosshair and the same camera with `crosshair 0` over the dark spawn view. The off/on pair shares one background (the cvar is flipped by a bound engine key, not a console visit). |
+| [`shots/1280x720-crosshair-bright.png`](presentation-verification/shots/1280x720-crosshair-bright.png), [`-bright-off`](presentation-verification/shots/1280x720-crosshair-bright-off.png) | The same pair with the view turned to a lit surface, so the crosshair is measured against a bright background. |
+| `shots/2560x1440-crosshair-{dark,dark-off,bright,bright-off}.png` | The same four captures at the box display's native resolution. |
+| [`shots/1280x720-statusbar.png`](presentation-verification/shots/1280x720-statusbar.png), `shots/2560x1440-statusbar.png` | The engine's own status bar in the canvas bottom band with health and ammo readable, and no page band over it. |
+| `-statusbar-no-page-ui.png` | Diagnostic: the same band with every page interface element hidden (the engine bar is translucent, so this is reported, not used as the pass condition). |
+| [`shots/1280x720-resolution-menu.png`](presentation-verification/shots/1280x720-resolution-menu.png), [`-resolution-applied`](presentation-verification/shots/1280x720-resolution-applied.png) | VIDEO > `video mode` at 1366x768 (`r_mode 17`), and Apply restarting the level at that resolution. |
+| [`shots/1280x720-menu-main.png`](presentation-verification/shots/1280x720-menu-main.png), [`-game`](presentation-verification/shots/1280x720-menu-game.png), [`-multiplayer`](presentation-verification/shots/1280x720-menu-multiplayer.png), [`-options`](presentation-verification/shots/1280x720-menu-options.png), [`-video`](presentation-verification/shots/1280x720-menu-video.png) | The panel's views, with the engine's rows in order (including the four skills, OGG music/free look, the crosshair/pause values, video mode and color light). |
+| [`shots/1280x720-newgame-first-area.png`](presentation-verification/shots/1280x720-newgame-first-area.png) | GAME > easy restarted demo1, with the crosshair and the engine status bar on the live frame. |
 
-A nearest-neighbour enlargement of the HEALTH/100 area of
-`shots/1280x720-hud-covered.png` shows plain fill under both the label and the
-number; the pixel check above is the same fact in numbers.
+## Measured crosshair pixels
+
+The runner selects the 72 device pixels of the 8x8 picture at `crosshair_scale
+3` from the dark pair (the on/off differences above 45% of the strongest are
+one cross, 21x21 at 1280x720 and 25x24 at 2560x1440; the
+same offsets are then sampled on the bright pair) and solves, per channel,
+
+    on = alpha * tint + (1 - alpha) * background
+
+with `tint = #ddb589`, the midpoint of the game palette's rusted amber (index
+52, `#cf974b`) and bone (index 251, `#ebd3c7`). A crosshair that were opaque
+would give alpha 0 or a tint mismatch; one that were missing would give no
+cross pixels.
+
+| Resolution | Background | Background luma (median) | Measured alpha | Cross pixels | Cross bounds |
+|---|---|---|---|---|---|
+| 1280x720 | dark spawn | ALPHA_1280_DARK_BG | ALPHA_1280_DARK | ALPHA_1280_DARK_N | ALPHA_1280_DARK_BBOX |
+| 1280x720 | brightened spawn (colour intensity 5) | ALPHA_1280_BRIGHT_BG | ALPHA_1280_BRIGHT | ALPHA_1280_BRIGHT_N | ALPHA_1280_BRIGHT_BBOX |
+| 2560x1440 | dark spawn | ALPHA_2560_DARK_BG | ALPHA_2560_DARK | ALPHA_2560_DARK_N | ALPHA_2560_DARK_BBOX |
+| 2560x1440 | brightened spawn (colour intensity 5) | ALPHA_2560_BRIGHT_BG | ALPHA_2560_BRIGHT | ALPHA_2560_BRIGHT_N | ALPHA_2560_BRIGHT_BBOX |
+
+Every selected cross channel with enough contrast lies between its background
+and the full-opacity tint (BLEND_ON_DARK of BLEND_TOTAL on the dark pair), and
+`crosshair 0` submits zero crosshair draws over the sampled frames
+(DRAWS_OFF on both backgrounds). The live draw counter is CROSSHAIR_DRAWS_ON
+with the crosshair on.
+
+## The engine status bar
+
+| Resolution | Health | Ammo | Band rows | Page elements in the band |
+|---|---|---|---|---|
+| 1280x720 | STATUS_1280_HEALTH | STATUS_1280_AMMO | STATUS_1280_ROWS | STATUS_1280_OVERLAYS |
+| 2560x1440 | STATUS_2560_HEALTH | STATUS_2560_AMMO | STATUS_2560_ROWS | STATUS_2560_OVERLAYS |
+
+The two numbers are read by the page's own canvas-pixel status-bar reader
+inside the renderer (`window.quake2Hud`), with the repository's independent
+`control/hud.mjs` reader as a second reading; the band is the bottom 40 rows of
+the canvas's drawing buffer at each resolution. The overlay check enumerates
+every visible, painted DOM element whose box intersects those rows (and
+hit-tests sample points in them); the list is empty at both resolutions.
+
+## Crosshair colour and opacity controls
+
+The defaults live on the app's start-up line, which is the existing engine
+argument path:
+
+    +set q2_crosshair_alpha 0.5 +set q2_crosshair_tint ddb589
+
+A URL can override either (`?+set&q2_crosshair_alpha&0.35&+set&q2_crosshair_tint&c8a55e`);
+`q2_crosshair_tint` takes `rrggbb` or `r,g,b`. The same values can be changed
+live from the page with `window.quake2RTX.crosshair({ alpha: 0.35, tint: "#c8a55e" })`.
+They are deliberately not rows in the OPTIONS menu: that menu must remain the
+engine's own rows, row for row, and the acceptance runner checks it.
+
+## Previous run: menu and resolution work
+
+The menu audit below, the engine's own resolution row and the model/texture
+work were the preceding change; they are unchanged by this run and still
+checked by the same runner.
+
 
 ## The menu audit
 
@@ -126,6 +215,7 @@ reads the engine's drawing buffer back as 1366x768.
   its network menus exist in the engine but networking is not part of the app.
 - **Software rendering only.** Every frame time and capture is SwiftShader, not
   the box GPU. The crosshair size is the engine's own pixel size (21x21) at
+  1280x720 and 25x24 at 2560x1440;
   both 1280x720 and 2560x1440; the 2560 weapon capture measures an arm-vs-ring
   score of 113.8, so it is drawn there too, but the paired off/on diff was
   measured at 1280x720.

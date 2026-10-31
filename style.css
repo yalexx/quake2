@@ -144,73 +144,9 @@ canvas {
   font-family: inherit;
 }
 
-/* The HUD band. It is deliberately fully opaque: the engine still draws its
-   own status bar underneath (that is where the live numbers are read from),
-   and a translucent band let those digits and icons show through it. A solid
-   fill hides every engine pixel behind the band at both resolutions. There is
-   no rule, underline, shadow or per-readout bar: the read-outs are text only,
-   in the interface's own type, amber on the ammo. Sized from the canvas by
-   app.js so it hugs the game view at any resolution. */
-#hud {
-  position: fixed;
-  z-index: 4;
-  display: flex;
-  align-items: center;
-  gap: clamp(18px, 3vw, 44px);
-  box-sizing: border-box;
-  padding: 0 clamp(12px, 2vw, 30px);
-  background: #07090b;
-  border: 0;
-  box-shadow: none;
-  pointer-events: none;
-  user-select: none;
-}
-
-/* Text only: no rule, underline, shadow or background on the read-outs. */
-#hud .hud-stat,
-#hud .hud-label,
-#hud b {
-  background: none;
-  border: 0;
-  box-shadow: none;
-  text-decoration: none;
-  text-shadow: none;
-}
-
-#hud[hidden] {
-  display: none;
-}
-
-#hud .hud-stat {
-  display: flex;
-  align-items: baseline;
-  gap: clamp(6px, 0.8vw, 12px);
-  font-variant-numeric: tabular-nums;
-}
-
-#hud .hud-label {
-  color: var(--muted);
-  font-size: clamp(8px, 0.9vw, 11px);
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-}
-
-#hud b {
-  color: #ece4d2;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: clamp(16px, 1.9vw, 26px);
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: 0.04em;
-}
-
-#hud .hud-ammo {
-  margin-left: auto;
-}
-
-#hud .hud-ammo b {
-  color: var(--amber);
-}
+/* The canvas's bottom band belongs to the engine's own status bar. Nothing in
+   this layer is positioned over it: the controls sit at the top or well above
+   the bar, and the band is left to the game at every resolution. */
 
 #options-chip {
   position: absolute;
@@ -712,12 +648,13 @@ canvas {
   .menu-foot { margin-top: 10px; padding-top: 10px; }
 }
 /* Full screen: the app asks for it on open (fullscreen.js) and this is the
-   way back out. A game HUD lives on the canvas, so the control stays small,
-   dim and out of the way until it is wanted. */
+   way back out. The control stays small, dim and out of the way until it is
+   wanted. */
 #fullscreen-button {
   position: fixed;
   left: 12px;
-  /* Above the HUD band: the band owns the canvas's bottom edge. */
+  /* Clear of the engine's own status bar, which owns the canvas's bottom
+     edge: 52px is above the bar at every resolution this app runs. */
   bottom: 52px;
   z-index: 6;
   display: inline-flex;
