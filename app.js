@@ -883,6 +883,32 @@ var Module;
     refreshApply();
   }
 
+  // The values this page was started with, from its own query (`+set cvar
+  // value` pairs). Applying a setting reloads with the pair on the start-up
+  // line, and the menu then opens showing the value that is actually running
+  // rather than the build's default again.
+  function appliedSettings() {
+    const args = queryArguments();
+    const values = {};
+    for (let i = 0; i + 2 < args.length; i++) {
+      if ((args[i] === "+set" || args[i] === "set") && args[i + 1] !== undefined) values[args[i + 1].toLowerCase()] = args[i + 2];
+    }
+    return values;
+  }
+
+  function syncSettingsFromUrl() {
+    const applied = appliedSettings();
+    for (const button of menuPanel.querySelectorAll(".setting[data-cvar]")) {
+      const value = applied[button.dataset.cvar.toLowerCase()];
+      if (value === undefined) continue;
+      const values = (button.dataset.values || "").split(",");
+      const index = values.findIndex(function (one) { return one === value || Number(one) === Number(value); });
+      if (index >= 0) button.dataset.index = String(index);
+      showSetting(button);
+    }
+    refreshApply();
+  }
+
   function changedSettings() {
     const changed = [];
     for (const button of menuPanel.querySelectorAll(".setting[data-cvar]")) {
@@ -964,6 +990,8 @@ var Module;
     else if (action === "quit") quitGame();
     else if (action === "note") showBanner((button && button.dataset.note ? button.dataset.note : "That") + " is not part of this box build.", 3200);
   }
+
+  syncSettingsFromUrl();
 
   // Roving focus: the item under the pointer becomes the focused item, so mouse
   // hover and keyboard selection are always the same single highlight.
