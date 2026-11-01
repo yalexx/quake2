@@ -22,9 +22,11 @@
   // image asset changes and crosshair 0 (no draw) and crosshair_scale (the
   // engine's own quad size) keep working untouched. The defaults are the game
   // palette's rusted amber (index 52, #cf974b) blended with its bone (index
-  // 251, #ebd3c7), and half opacity. Both are start-up cvars the app sets; a
-  // URL can override them and window.quake2RTX.crosshair() changes them live.
-  const crosshair = { alpha: 0.5, tint: [221, 181, 137] };
+  // 251, #ebd3c7), and just under half opacity. Both are start-up cvars the app
+  // sets; a URL can override them and window.quake2RTX.crosshair() changes them
+  // live. The size is separate: aim.js in this file spreads it with the
+  // weapon in hand, the trigger and the crouch key (see drawSizedCrosshair).
+  const crosshair = { alpha: 0.45, tint: [221, 181, 137] };
   function startUpCvars() {
     const values = {};
     const tokens = location.search.replace(/^\?/, '').split('&').filter(Boolean).map(function (token) {
@@ -55,9 +57,170 @@
   }
   const bootTint = parseTint(bootCvars.q2_crosshair_tint);
   if (bootTint) crosshair.tint = bootTint;
+  // The tint/opacity uniform is re-uploaded only when its values change, so the
+  // comparison key is built when they do and not on every drawn frame.
+  let crosshairUniformKey = crosshair.alpha + '|' + crosshair.tint.join(',');
+
+  // The engine sizes its crosshair picture as 8 * crosshair_scale pixels and
+  // draws it at the centre of the drawing buffer. `crosshair_scale` is on the
+  // app's start-up line (3: the engine's own maximum, and the value the
+  // acceptance checks measure as a 21px cross); a URL can override it, and the
+  // engine caps the picture at 3 regardless. Reading it here is what keeps
+  // `crosshair_scale` meaningful once the crosshair is redrawn below.
+  const CROSSHAIR_ENGINE_MAX_SCALE = 3;
+  const BASE_CROSSHAIR_SCALE = (function () {
+    const raw = Number(bootCvars.crosshair_scale);
+    // Only a missing or unusable value falls back to the engine's maximum (the
+    // app's own default). A value below 1 is a real, smaller cross -- the
+    // engine sizes its picture as 8 * scale -- and treating it as the maximum
+    // drew a 24px cross where the engine would draw 4px.
+    if (bootCvars.crosshair_scale === undefined || !Number.isFinite(raw) || raw <= 0) return CROSSHAIR_ENGINE_MAX_SCALE;
+    return Math.min(CROSSHAIR_ENGINE_MAX_SCALE, raw);
+  })();
+
+  // Aiming aid: the crosshair's spread follows the weapon in hand, widens while
+  // the trigger is held and narrows while crouching. The blaster is the
+  // reference at 1.00 so the app's own default (blaster at rest) is exactly the
+  // engine's 21px scale-3 cross; heavier weapons spread wider. Two pairs of
+  // models share a skin size in pak0 (v_shotg2/v_hyperb, v_bfg/v_disint), so a
+  // pair carries the same spread and the skin size alone can name it.
+  const WEAPON_SPREAD = {
+    v_blast: 1.00, v_shotg: 1.08, v_machn: 1.12, v_shotg2: 1.20, v_hyperb: 1.20,
+    v_rail: 1.20, v_launch: 1.24, v_chain: 1.26, v_rocket: 1.28, v_handgr: 1.30,
+    v_bfg: 1.35, v_disint: 1.35,
+  };
+  const FIRE_SPREAD = 0.35;   // additional size at full trigger, relative
+  const CROUCH_SPREAD = 0.18; // removed fraction of the size while crouching
+  const SPREAD_LIMITS = [0.75, 2.2];
+  // Exponential approach: fast out, unhurried back, so the cross settles.
+  const FIRE_TAU_IN = 0.045, FIRE_TAU_OUT = 0.18, CROUCH_TAU = 0.07;
+
+  // skin size ("296x164") -> [models]; filled from pak0 by usePaks below.
+  const weaponSkins = new Map();
+  let crosshairWeapon = null;
+  let crosshairWeaponFactor = 1;
+  // The weapon-skin size drawn this frame. Only view weapons (v_*) use these
+  // sizes -- no monster or item skin in pak0 collides with any of them -- so
+  // this names the gun in hand even on frames where the engine draws it before
+  // some other model.
+  let weaponThisFrame = null;
+  const aim = {
+    firing: false, crouching: false, fireLevel: 0, crouchLevel: 0,
+    lastTick: 0, weaponModel: null, weaponPending: null, dynamic: false, reason: null,
+    drawn: 0, fallbackDraws: 0,
+  };
+
+  // ---- The trigger and the crouch key --------------------------------------
+  // The page sees the same trusted mouse and keyboard events the engine's SDL
+  // layer does (left button is +attack, C is +movedown in the shipped config).
+  // The state is cleared whenever the game does not own the keyboard, so a key
+  // held at the moment a menu opens can never leave the crosshair expanded.
+  function resetAimInput() {
+    aim.firing = false;
+    aim.crouching = false;
+  }
+  window.addEventListener("mousedown", function (event) {
+    if (event.button === 0) aim.firing = true;
+  }, true);
+  window.addEventListener("mouseup", function (event) {
+    if (event.button === 0) aim.firing = false;
+  }, true);
+  window.addEventListener("keydown", function (event) {
+    if (event.code === "KeyC" || event.key === "c" || event.key === "C") aim.crouching = true;
+  }, true);
+  window.addEventListener("keyup", function (event) {
+    if (event.code === "KeyC" || event.key === "c" || event.key === "C") aim.crouching = false;
+  }, true);
+  window.addEventListener("blur", resetAimInput);
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) resetAimInput();
+  });
+
+  // The weapon in hand, named by the skin size the engine binds for the view
+  // model it draws last before the 2D pass (the gun in hand; the same fact the
+  // acceptance checks use to name the blaster's draw). pak0's own skin headers
+  // supply the sizes, so no table of game data is embedded here.
+  function indexWeaponSkins(paks) {
+    let pak = null;
+    for (const name of Object.keys(paks || {})) {
+      if (/(^|\/)pak0\.pak$/i.test(name)) { pak = paks[name]; break; }
+    }
+    if (!pak || pak.byteLength < 16) return false;
+    const bytes = pak instanceof Uint8Array ? pak : new Uint8Array(pak);
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== "PACK") return false;
+    const directoryOffset = view.getInt32(4, true), directoryLength = view.getInt32(8, true);
+    if (directoryOffset < 12 || directoryLength <= 0 || directoryOffset + directoryLength > bytes.byteLength) return false;
+    let indexed = 0;
+    for (let at = directoryOffset; at + 64 <= directoryOffset + directoryLength; at += 64) {
+      let end = at;
+      while (end < at + 56 && bytes[end] !== 0) end++;
+      const name = String.fromCharCode.apply(null, bytes.subarray(at, end));
+      const match = /^models\/weapons\/(v_[a-z0-9]+)\/skin\.pcx$/.exec(name);
+      if (!match) continue;
+      const offset = view.getInt32(at + 56, true);
+      if (offset < 0 || offset + 16 > bytes.byteLength) continue;
+      const width = view.getUint16(offset + 8, true) - view.getUint16(offset + 4, true) + 1;
+      const height = view.getUint16(offset + 10, true) - view.getUint16(offset + 6, true) + 1;
+      if (!width || !height) continue;
+      const key = width + "x" + height;
+      const models = weaponSkins.get(key) || [];
+      if (!models.includes(match[1])) models.push(match[1]);
+      weaponSkins.set(key, models);
+      indexed++;
+    }
+    return indexed > 0;
+  }
+
+  function noteViewWeaponSkin(size) {
+    const models = weaponSkins.get(size);
+    if (!models || !models.length) return;
+    crosshairWeapon = models.join("/");
+    crosshairWeaponFactor = models.reduce(function (max, model) {
+      return Math.max(max, WEAPON_SPREAD[model] || 1);
+    }, 0);
+  }
+
+  // The size factor for this frame, smoothed toward the held keys. Called once
+  // per crosshair draw (once per frame), so the smoothing is frame-based.
+  function currentFactor() {
+    const factor = crosshairWeaponFactor * (1 + FIRE_SPREAD * aim.fireLevel) * (1 - CROUCH_SPREAD * aim.crouchLevel);
+    return Math.max(SPREAD_LIMITS[0], Math.min(SPREAD_LIMITS[1], factor));
+  }
+
+  function spreadFactor(now) {
+    const dt = aim.lastTick ? Math.min(0.25, Math.max(0, (now - aim.lastTick) / 1000)) : 0.016;
+    aim.lastTick = now;
+    const fireTarget = aim.firing ? 1 : 0;
+    const crouchTarget = aim.crouching ? 1 : 0;
+    const fireTau = aim.firing ? FIRE_TAU_IN : FIRE_TAU_OUT;
+    aim.fireLevel += (fireTarget - aim.fireLevel) * (1 - Math.exp(-dt / fireTau));
+    aim.crouchLevel += (crouchTarget - aim.crouchLevel) * (1 - Math.exp(-dt / CROUCH_TAU));
+    if (aim.fireLevel < 1e-4) aim.fireLevel = 0;
+    if (aim.crouchLevel < 1e-4) aim.crouchLevel = 0;
+    return currentFactor();
+  }
+
+  // `now` advances the smoothing (the draw path); without it the current levels
+  // are reported without moving them.
+  function crosshairSizes(now) {
+    const factor = now === undefined ? currentFactor() : spreadFactor(now);
+    const quadPx = Math.max(4, Math.round(8 * BASE_CROSSHAIR_SCALE * factor));
+    let opaque = 0;
+    if (quadPx >= 8) opaque = Math.round(7 * BASE_CROSSHAIR_SCALE * factor);
+    return { factor: factor, quadPx: quadPx, opaquePx: opaque, baseScale: BASE_CROSSHAIR_SCALE };
+  }
+
+  // Game mode (game-mode.js) removes the page interface; the status-bar
+  // read-back exists to feed that interface and is suspended while it is gone.
+  let gameModeActive = false;
+
   let pendingCrosshair = false;
   let gl, current, textureUnit = 0, dirty = true, sceneDirty = false, composite = null;
-  let worldThisFrame = false, skyPending = true, lastModelSkins = [];
+  // One shared empty list: the per-frame reset used to allocate a new array on
+  // every frame for a value the 2D pass only ever reads.
+  const NO_MODEL_SKINS = [];
+  let worldThisFrame = false, skyPending = true, lastModelSkins = NO_MODEL_SKINS;
   // `cls.key_dest` as this frame found it, sampled once at the frame's clear so
   // a draw call never pays for a memory read. 0 is the game, 1 the console and
   // 3 the engine's own menu: the interface the dark panel replaces. While
@@ -116,10 +279,62 @@
       if (tint && tint.length === 3 && tint.every(function (one) { return Number.isFinite(one); })) {
         crosshair.tint = tint.map(function (one) { return Math.max(0, Math.min(255, Math.round(one))); });
       }
+      crosshairUniformKey = crosshair.alpha + '|' + crosshair.tint.join(',');
       return { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) };
+    },
+    // The weapon in hand, the spread it implies and the size the next crosshair
+    // draw uses. `drawn` counts the replacement draws; `fallback` counts frames
+    // where the engine's own picture had to be used because the scaled program
+    // could not be built.
+    crosshairState() {
+      const sizes = crosshairSizes();
+      return {
+        alpha: crosshair.alpha,
+        tint: crosshair.tint.slice(),
+        tintHex: hexTint(crosshair.tint),
+        weapon: crosshairWeapon,
+        weaponFactor: crosshairWeaponFactor,
+        firing: aim.firing,
+        crouching: aim.crouching,
+        fireLevel: aim.fireLevel,
+        crouchLevel: aim.crouchLevel,
+        factor: sizes.factor,
+        baseScale: sizes.baseScale,
+        quadPx: sizes.quadPx,
+        opaquePx: sizes.opaquePx,
+        dynamic: aim.dynamic,
+        reason: aim.reason,
+        drawn: aim.drawn,
+        fallback: aim.fallbackDraws,
+        skins: Array.from(weaponSkins.keys()).length,
+      };
+    },
+    // The pak buffers app.js downloaded, before it frees them: pak0's weapon
+    // skin headers are how a view-model draw is named.
+    usePaks(paks) {
+      try {
+        indexWeaponSkins(paks);
+        aim.reason = weaponSkins.size ? null : "no weapon skins found in pak0";
+      } catch (error) {
+        aim.reason = "pak index failed: " + String(error && error.message ? error.message : error);
+        console.warn("Crosshair: could not index the weapon skins:", error);
+      }
+      return weaponSkins.size;
+    },
+    // Game mode (game-mode.js): the page interface is gone, so the status-bar
+    // read-back that feeds it is suspended; nothing else about the picture
+    // changes.
+    gameMode(on) {
+      gameModeActive = Boolean(on);
+      if (gameModeActive) resetAimInput();
+      update();
+      return gameModeActive;
     },
     status() { return { ...report, enabled: mode() > 0, quality: preset, mode: mode(),
       crosshair: { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) },
+      crosshairWeapon: crosshairWeapon, crosshairDynamic: aim.dynamic, gameMode: gameModeActive,
+      hudReads: hud.reads, hudAttempts: hud.attempts, hudMisses: hud.misses,
+      hudFamilies: Boolean(hud.families),
       programs: Array.from(programs.values()).map(p=>p.kind) }; }
   };
   update();
@@ -132,7 +347,14 @@
   let keyDestSampledAt = -Infinity;
   function readKeyDest() {
     try {
-      const state = window.quake2Engine && window.quake2Engine.read ? window.quake2Engine.read() : null;
+      // The single word, with no reading object built for it: this runs at
+      // every frame's clear, for the life of the page.
+      const engine = window.quake2Engine;
+      if (engine && typeof engine.keyDest === 'function') {
+        const dest = engine.keyDest();
+        if (typeof dest === 'number') return dest;
+      }
+      const state = engine && engine.read ? engine.read() : null;
       return state && typeof state.keyDest === 'number' ? state.keyDest : 0;
     } catch (_) { return 0; }
   }
@@ -169,7 +391,7 @@
     families: null,
     fields: null, // { health: {right}, armour: {right}, ammo: {right} }
     last: { health: null, armour: null, ammo: null, readAt: null },
-    reads: 0, misses: 0, lastError: null,
+    reads: 0, attempts: 0, misses: 0, lastError: null,
   };
 
   function pakEntries(buffer) {
@@ -465,7 +687,11 @@
     // Every so often the fields are found from scratch: a number that was not
     // on the bar before (the ammo count, once a weapon with ammo is in hand)
     // has to be discovered, and its field is not known until it is.
-    const discover = !hud.fields || hud.reads % 16 === 0;
+    // Counted per attempt, not per success: a bar that is not reading (a menu
+    // frame, a dark frame) used to leave `reads` still, so the expensive
+    // from-scratch scan ran on every retry instead of every 16th.
+    hud.attempts++;
+    const discover = !hud.fields || hud.attempts % 16 === 0;
     let numbers = [];
     if (!discover) {
       for (const key of ['health', 'armour', 'ammo']) {
@@ -529,7 +755,7 @@
     // nothing to schedule up front: reads are armed by drawn frames
   }
   function armHudRead() {
-    if (!hud.families) return;
+    if (!hud.families || gameModeActive) return;
     const now = performance.now();
     if (hudReadPending || now - hudLastRead < 1200) return;
     hudReadPending = true;
@@ -986,10 +1212,17 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
     gl.deleteProgram = program => { programs.delete(program); native.deleteProgram(program); };
     gl.useProgram = program => { current = programs.get(program); native.useProgram(program); dirty = true; };
     gl.clear = (...args) => {
-      sceneDirty = false; worldThisFrame = false; skyPending = true; lastModelSkins = [];
+      sceneDirty = false; worldThisFrame = false; skyPending = true; lastModelSkins = NO_MODEL_SKINS;
+      weaponThisFrame = null;
       // Who owns the keyboard for the frame about to be drawn. Sampled here so
       // every draw of the frame costs no more than a number compare.
       frameKeyDest = readKeyDest();
+      // The game does not own the keyboard: a key or button held when a menu
+      // or the console opened must not leave the crosshair spread.
+      if (frameKeyDest !== 0) {
+        aim.firing = false;
+        aim.crouching = false;
+      }
       keyDestSampledAt = performance.now();
       return native.clear(...args);
     };
@@ -1018,19 +1251,27 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
     // Which skin size the engine bound for a model draw. The view weapon's
     // skin has its own size, so the runner can name the draw instead of just
     // counting models.
+    // Reused across every model draw: this runs for each visible monster, item
+    // and the view weapon every frame, and building a fresh array, Set and
+    // spread for it was allocation in the draw path for a fact the first 2D
+    // draw consumes once.
+    const modelSkinSizes = [];
     function noteModelTexture() {
       // Which skins are bound for this model draw, across every texture unit:
       // the engine does not promise the skin is on unit 0.
-      const sizes = [];
+      modelSkinSizes.length = 0;
       for (const texture of bound) {
         if (!texture) continue;
         const size = textureSizes.get(texture);
-        if (size) sizes.push(size);
+        if (size && modelSkinSizes.indexOf(size) === -1) modelSkinSizes.push(size);
       }
-      if (!sizes.length) return;
-      lastModelSkins = [...new Set(sizes)];
-      for (const size of lastModelSkins) {
+      if (!modelSkinSizes.length) return;
+      // The 2D pass reads this and then replaces it with its own empty array,
+      // so the next model draw is free to reuse this one.
+      lastModelSkins = modelSkinSizes;
+      for (const size of modelSkinSizes) {
         report.modelTextureDraws[size] = (report.modelTextureDraws[size] || 0) + 1;
+        if (weaponSkins.has(size)) weaponThisFrame = size;
       }
     }
 
@@ -1062,8 +1303,13 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         // model drawn last: the gun in hand when cl_gun is 1.
         for (const size of lastModelSkins) {
           report.lastModelSkinDraws[size] = (report.lastModelSkinDraws[size] || 0) + 1;
+          // The gun in hand, named by its skin; the crosshair spreads with it.
+          noteViewWeaponSkin(size);
         }
-        lastModelSkins = [];
+        // The gun in hand is drawn once a frame, but not always as the last
+        // model draw: the frame's own weapon-sized draw is what names it.
+        if (weaponThisFrame) noteViewWeaponSkin(weaponThisFrame);
+        lastModelSkins = NO_MODEL_SKINS;
         report.uiDraws++;
         if (current.crosshairLocation) {
           const on = isCrosshairDraw(drawMode, drawCount);
@@ -1073,11 +1319,10 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
             gl.uniform1f(current.crosshairLocation, flag);
             current.lastCrosshair = flag;
           }
-          const key = crosshair.alpha + '|' + crosshair.tint.join(',');
-          if (current.lastCrosshairTint !== key) {
+          if (current.lastCrosshairTint !== crosshairUniformKey) {
             gl.uniform4f(current.crosshairTintLocation, crosshair.tint[0] / 255, crosshair.tint[1] / 255,
               crosshair.tint[2] / 255, crosshair.alpha);
-            current.lastCrosshairTint = key;
+            current.lastCrosshairTint = crosshairUniformKey;
           }
         }
         armHudRead();
@@ -1149,14 +1394,151 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       gl.blendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
       if (!wasBlend) gl.disable(gl.BLEND);
     }
+    // ---- The sized crosshair ----------------------------------------------
+    // The engine draws its 8x8 crosshair picture as a fixed-size quad. The
+    // same picture is drawn here at the size the weapon, the trigger and the
+    // crouch key ask for, centred where the engine centres it. The texture and
+    // the picture (cross/dot/angle) come from the engine's own draw, and
+    // `crosshair 0` still means the engine submits no draw at all; this only
+    // replaces the quad that draw would have made.
+    let crosshairProgram = null, crosshairVao = null, crosshairVbo = null, crosshairSampler = null;
+    function ensureCrosshairProgram() {
+      if (crosshairProgram) return crosshairProgram;
+      try {
+        const vertexSource = '#version 300 es\n' +
+          'layout(location=0) in vec2 aPos;\n' +
+          'layout(location=1) in vec2 aUV;\n' +
+          'uniform vec2 uCentre;\n' +
+          'uniform vec2 uHalf;\n' +
+          'out vec2 vUV;\n' +
+          'void main(){ gl_Position = vec4(uCentre + aPos * uHalf, 0.0, 1.0); vUV = aUV; }\n';
+        const fragmentSource = '#version 300 es\n' +
+          'precision mediump float;\n' +
+          'uniform sampler2D uTex;\n' +
+          'uniform vec4 uTint;\n' +
+          'in vec2 vUV;\n' +
+          'out vec4 outColor;\n' +
+          'void main(){ vec4 texel = texture(uTex, vUV); if (texel.a < 0.5) discard; outColor = vec4(uTint.rgb, uTint.a); }\n';
+        const program = gl.createProgram();
+        for (const [type, source] of [[gl.VERTEX_SHADER, vertexSource], [gl.FRAGMENT_SHADER, fragmentSource]]) {
+          const shader = gl.createShader(type);
+          native.shaderSource(shader, source);
+          native.compileShader(shader);
+          if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader));
+          gl.attachShader(program, shader);
+          gl.deleteShader(shader);
+        }
+        native.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program));
+        crosshairProgram = { program, centre: gl.getUniformLocation(program, 'uCentre'),
+          half: gl.getUniformLocation(program, 'uHalf'), tint: gl.getUniformLocation(program, 'uTint') };
+        const oldVao = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+        const oldBuffer = gl.getParameter(gl.ARRAY_BUFFER_BINDING);
+        crosshairVao = gl.createVertexArray();
+        crosshairVbo = gl.createBuffer();
+        crosshairSampler = gl.createSampler();
+        gl.bindVertexArray(crosshairVao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, crosshairVbo);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+          -1, -1, 0, 1, 1, -1, 1, 1, -1, 1, 0, 0, 1, 1, 1, 0,
+        ]), gl.STATIC_DRAW);
+        gl.enableVertexAttribArray(0);
+        gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+        gl.enableVertexAttribArray(1);
+        gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+        gl.bindVertexArray(oldVao);
+        gl.bindBuffer(gl.ARRAY_BUFFER, oldBuffer);
+        gl.samplerParameteri(crosshairSampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.samplerParameteri(crosshairSampler, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.samplerParameteri(crosshairSampler, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.samplerParameteri(crosshairSampler, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        aim.dynamic = true;
+        aim.reason = null;
+        return crosshairProgram;
+      } catch (error) {
+        aim.reason = 'crosshair program failed: ' + String(error && error.message ? error.message : error);
+        console.warn('Crosshair: the sized picture is unavailable; the engine draw is used:', error);
+        crosshairProgram = null;
+        return null;
+      }
+    }
+    function drawSizedCrosshair(texture) {
+      const program = ensureCrosshairProgram();
+      if (!program || !texture) return false;
+      const width = gl.drawingBufferWidth, height = gl.drawingBufferHeight;
+      if (!width || !height) return false;
+      const sizes = crosshairSizes(performance.now());
+      // The engine draws the 8*scale picture at (floor(width/2) - 4*scale,
+      // floor(height/2) - 4*scale); the centre is the same at any scale.
+      const cx = Math.floor(width / 2), cy = Math.floor(height / 2);
+      const size = sizes.quadPx;
+      const wasBlend = gl.isEnabled(gl.BLEND);
+      const wasDepth = gl.isEnabled(gl.DEPTH_TEST);
+      const wasCull = gl.isEnabled(gl.CULL_FACE);
+      const wasScissor = gl.isEnabled(gl.SCISSOR_TEST);
+      const oldProgram = gl.getParameter(gl.CURRENT_PROGRAM);
+      const oldVao = gl.getParameter(gl.VERTEX_ARRAY_BINDING);
+      const oldActive = gl.getParameter(gl.ACTIVE_TEXTURE);
+      const srcRGB = gl.getParameter(gl.BLEND_SRC_RGB), dstRGB = gl.getParameter(gl.BLEND_DST_RGB);
+      const srcAlpha = gl.getParameter(gl.BLEND_SRC_ALPHA), dstAlpha = gl.getParameter(gl.BLEND_DST_ALPHA);
+      // The texture unit the engine has its crosshair on is not necessarily
+      // unit 0; unit 0's own binding and sampler are what this draw borrows and
+      // must put back, on unit 0 and only on unit 0.
+      native.activeTexture(gl.TEXTURE0);
+      const oldTexture0 = gl.getParameter(gl.TEXTURE_BINDING_2D);
+      const oldSampler0 = gl.getParameter(gl.SAMPLER_BINDING);
+      try {
+        native.useProgram(program.program);
+        native.bindTexture(gl.TEXTURE_2D, texture);
+        gl.bindSampler(0, crosshairSampler);
+        gl.uniform2f(program.centre, (2 * cx) / width - 1, 1 - (2 * cy) / height);
+        gl.uniform2f(program.half, size / width, size / height);
+        gl.uniform4f(program.tint, crosshair.tint[0] / 255, crosshair.tint[1] / 255,
+          crosshair.tint[2] / 255, crosshair.alpha);
+        gl.bindVertexArray(crosshairVao);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.CULL_FACE);
+        gl.disable(gl.SCISSOR_TEST);
+        if (!wasBlend) gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        native.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+        aim.drawn++;
+        // report.crosshairDraws was already incremented in uniforms() when the
+        // engine's own crosshair draw was recognised; this draw replaces it, so
+        // counting it again reported two draws per frame.
+        return true;
+      } catch (error) {
+        aim.reason = 'crosshair draw failed: ' + String(error && error.message ? error.message : error);
+        return false;
+      } finally {
+        gl.blendFuncSeparate(srcRGB, dstRGB, srcAlpha, dstAlpha);
+        if (!wasBlend) gl.disable(gl.BLEND);
+        if (wasScissor) gl.enable(gl.SCISSOR_TEST); else gl.disable(gl.SCISSOR_TEST);
+        if (wasDepth) gl.enable(gl.DEPTH_TEST); else gl.disable(gl.DEPTH_TEST);
+        if (wasCull) gl.enable(gl.CULL_FACE); else gl.disable(gl.CULL_FACE);
+        gl.bindVertexArray(oldVao);
+        native.activeTexture(gl.TEXTURE0);
+        native.bindTexture(gl.TEXTURE_2D, oldTexture0);
+        gl.bindSampler(0, oldSampler0);
+        native.activeTexture(oldActive);
+        native.useProgram(oldProgram);
+      }
+    }
+    function sizedCrosshair(method, args) {
+      pendingCrosshair = false;
+      const texture = bound[crosshairSamplerUnit()];
+      if (texture && drawSizedCrosshair(texture)) return;
+      aim.fallbackDraws++;
+      return drawCrosshair(method, args);
+    }
     gl.drawElements = (...args) => {
       if (uniforms(args[0], args[1])) return;
-      if (pendingCrosshair) return drawCrosshair('drawElements', args);
+      if (pendingCrosshair) return sizedCrosshair('drawElements', args);
       return native.drawElements(...args);
     };
     gl.drawArrays = (...args) => {
       if (uniforms(args[0], args[2])) return;
-      if (pendingCrosshair) return drawCrosshair('drawArrays', args);
+      if (pendingCrosshair) return sizedCrosshair('drawArrays', args);
       return native.drawArrays(...args);
     };
     // Upstream only uses its scene FBO underwater. On land, copy the finished

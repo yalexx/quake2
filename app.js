@@ -144,12 +144,16 @@ var Module;
     // The crosshair's colour and opacity are presentation, not engine state:
     // rtx-renderer.js reads these two values off this start-up line and applies
     // them in the 2D shader that draws the engine's 8x8 crosshair picture. The
-    // defaults are half opacity and the game palette's rusted amber blended
-    // with its bone (#ddb589; palette entries 52 and 251 in pics/colormap.pcx).
-    // A URL can still override either, as it can every default here.
+    // defaults are a little under half opacity (0.45: the cross reads over both
+    // the dark base and the lit floor without covering the target, and it
+    // measured ~0.45 against the palette tint) and the game palette's rusted
+    // amber blended with its bone (#ddb589; palette entries 52 and 251 in
+    // pics/colormap.pcx). A URL can still override either, as it can every
+    // default here. The colour and opacity are unchanged by the crosshair's
+    // weapon/fire/crouch spread: only its size follows the aim.
     let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1",
       "+set", "cl_gun", "1", "+set", "fov", "90", "+set", "crosshair", "1", "+set", "crosshair_scale", "3",
-      "+set", "q2_crosshair_alpha", "0.5", "+set", "q2_crosshair_tint", "ddb589"];
+      "+set", "q2_crosshair_alpha", "0.45", "+set", "q2_crosshair_tint", "ddb589"];
     const extra = queryArguments();
     args = args.concat(extra);
     // Boot straight into the game, as the app is meant to: with no map on the
@@ -551,6 +555,9 @@ var Module;
       // The HUD reader needs the engine's own digit pictures; hand it the
       // archives before MemFS copies are the only ones left.
       if (window.quake2Hud && window.quake2Hud.usePaks) window.quake2Hud.usePaks(pakDict);
+      // The weapon-aware crosshair names the view model by the skin size the
+      // engine binds; the skin headers come from these same archives.
+      if (window.quake2RTX && window.quake2RTX.usePaks) window.quake2RTX.usePaks(pakDict);
       // MemFS holds its own copy now; drop ours so the buffers can be freed.
       pakDict = {};
       if (userStore && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
@@ -706,6 +713,7 @@ var Module;
   const lightingPanel = document.getElementById("lighting-panel");
   const bannerElement = document.getElementById("banner");
   const bannerTextElement = document.getElementById("banner-text");
+  const menuNoteElement = document.getElementById("menu-note");
   const promptElement = document.getElementById("prompt");
   const menuViews = Array.from(document.querySelectorAll(".menu-view"));
 
@@ -716,6 +724,8 @@ var Module;
     bannerTimer: 0,
     prompt: false,
     consoleAt: 0, // when the engine's console last owned the keyboard
+    realEscapeAt: 0, // when the player (not the app) last pressed Escape
+    quitting: false, // QUIT was chosen: the panel must not come back
   };
 
   const ESCAPE_KEY = { key: "Escape", code: "Escape", vk: 27, ch: 27 };
@@ -742,6 +752,21 @@ var Module;
     return state && typeof state.keyDest === "number" ? state.keyDest : null;
   }
 
+  // The one word the interface poll needs, without building a reading. Falls
+  // back to the full snapshot for an engine-state.js that predates keyDest().
+  function engineKeyDestWord() {
+    try {
+      const engine = window.quake2Engine;
+      if (engine && typeof engine.keyDest === "function") {
+        const dest = engine.keyDest();
+        if (typeof dest === "number") return dest;
+      }
+    } catch (error) {
+      // Fall through: the full reading reports the reason.
+    }
+    return engineKeyDest();
+  }
+
   // A synthetic keyboard event the engine's SDL layer reads exactly like a real
   // one: keyCode/which/charCode are defined because KeyboardEvent's constructor
   // leaves them at zero.
@@ -756,6 +781,12 @@ var Module;
     Object.defineProperty(event, "keyCode", { get: function () { return descriptor.vk; } });
     Object.defineProperty(event, "which", { get: function () { return descriptor.vk; } });
     Object.defineProperty(event, "charCode", { get: function () { return type === "keypress" ? descriptor.ch || 0 : 0; } });
+    // The panel's own key handler owns the keyboard while it is up, and an
+    // event dispatched on window reaches it first. These are the app's own
+    // keys for the engine (Resume's Escape, F6/F9), so they are marked and the
+    // panel lets them through -- otherwise every tap the app makes while the
+    // panel is open was swallowed and never reached the engine.
+    Object.defineProperty(event, "__q2synthetic", { value: true });
     window.dispatchEvent(event);
   }
 
@@ -784,7 +815,12 @@ var Module;
   }
 
   function visibleButtons() {
-    return Array.from(visibleView().querySelectorAll("button")).filter(function (button) {
+    // The footer's Resume/Back are outside every .menu-view, so a cycle built
+    // from the view alone could never reach them: they are visible on every
+    // view and are part of the ring.
+    const footer = Array.from(menuPanel.querySelectorAll(".menu-foot button"));
+    const view = Array.from(visibleView().querySelectorAll("button"));
+    return view.concat(footer).filter(function (button) {
       return !button.disabled && (button.offsetParent !== null || button.getClientRects().length > 0);
     });
   }
@@ -792,6 +828,9 @@ var Module;
   function setView(view) {
     ui.view = view;
     for (const section of menuViews) section.hidden = section.dataset.view !== view;
+    // A note answers the row it was clicked on; it does not follow the player
+    // into another view or the next time the panel opens.
+    if (menuNoteElement) menuNoteElement.hidden = true;
     // The main view opens with Resume focused, not GAME. The panel also comes
     // up when the engine's own menu opens by itself (a console command, a lost
     // pointer lock), and a stray Enter must not start a new game from there;
@@ -801,7 +840,16 @@ var Module;
     if (first) first.focus({ preventScroll: true });
   }
 
+  function gameModeActive() {
+    return Boolean(window.quake2GameMode && window.quake2GameMode.isActive && window.quake2GameMode.isActive());
+  }
+
   function showMenu(view) {
+    // Game mode is the game surface alone: the panel must not appear behind it
+    // (an Esc that reaches the engine, a lost pointer lock) and then be
+    // uncovered when the mode ends. After QUIT the panel stays down too: the
+    // engine's menu is still open, and the page says the game has quit.
+    if (gameModeActive() || ui.quitting) return;
     if (ui.open) {
       if (view) setView(view);
       return;
@@ -825,6 +873,12 @@ var Module;
     if (document.activeElement && menuPanel.contains(document.activeElement)) document.activeElement.blur();
   }
 
+  // DOM writes cost layout even when the value does not change; the interface
+  // poll runs every 120 ms, so it writes only when something moved.
+  function setHidden(element, hidden) {
+    if (element && element.hidden !== Boolean(hidden)) element.hidden = Boolean(hidden);
+  }
+
   function showBanner(text, milliseconds) {
     clearTimeout(ui.bannerTimer);
     bannerTextElement.textContent = text;
@@ -832,6 +886,17 @@ var Module;
     if (text && milliseconds) {
       ui.bannerTimer = setTimeout(function () { bannerElement.hidden = true; }, milliseconds);
     }
+  }
+
+  // An answer that belongs to the panel is written inside the panel. The
+  // banner is a notice over the game, and while the panel is up this browser
+  // paints it under the panel's scrim (measured: the banner was hit-testable
+  // above the scrim but no pixel of it reached the frame), so a note row that
+  // answered through it appeared to do nothing.
+  function showPanelNote(text) {
+    if (!menuNoteElement) { showBanner(text, 4200); return; }
+    menuNoteElement.textContent = text || "";
+    menuNoteElement.hidden = !text;
   }
 
   function resumeGame() {
@@ -846,7 +911,12 @@ var Module;
 
   function pauseForKey(key) {
     // The engine only reads its bindings while the game has the keyboard, so a
-    // paused menu is closed first and reopened after the key.
+    // paused menu is closed first and reopened after the key. The panel is
+    // held for the whole flight: without this the interface poll sees the
+    // engine's key_dest go to 0 with the panel still up and hides it, which
+    // showed a running, unpaused game for half a second and then reopened the
+    // panel on the main menu instead of the view the player was on.
+    ui.closing = true;
     const dest = engineKeyDest();
     if (dest === 3) tapKey(ESCAPE_KEY);
     setTimeout(function () {
@@ -854,7 +924,7 @@ var Module;
       // Put the pause back: an unlocked pointer or a saved game would otherwise
       // leave the game running behind the panel.
       setTimeout(function () {
-        if (!ui.open && engineKeyDest() === 0) tapKey(ESCAPE_KEY);
+        if (ui.open && engineKeyDest() === 0) tapKey(ESCAPE_KEY);
         ui.closing = false;
       }, 300);
     }, dest === 3 ? 260 : 0);
@@ -977,7 +1047,7 @@ var Module;
 
   function applySettings() {
     const changed = changedSettings();
-    if (!changed.length) { showBanner("Nothing to apply", 2500); return; }
+    if (!changed.length) { showPanelNote("Nothing to apply"); return; }
     const commands = [];
     for (const [cvar, value] of changed) {
       // The engine's "fullscreen window" mode also switches r_mode to auto
@@ -1024,6 +1094,7 @@ var Module;
     // and stop showing it. The page cannot run the engine's `quit` -- that
     // needs typed console text -- but a paused, dark page is what leaving
     // looks like, and reloading brings the game back.
+    ui.quitting = true;
     if (engineKeyDest() === 0) tapKey(ESCAPE_KEY);
     hideMenu();
     canvasElement.style.display = "none";
@@ -1045,8 +1116,25 @@ var Module;
     else if (action === "reset-video") resetSettings("video");
     else if (action === "reset-options") resetSettings("options");
     else if (action === "quit") quitGame();
-    else if (action === "note") showBanner(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.", 4200);
+    else if (action === "game-mode") {
+      // From the menu the game is paused behind the panel: resume it, then
+      // hand the screen to the game. Both run inside the click's own gesture,
+      // which is what the full-screen request needs.
+      resumeGame();
+      if (window.quake2GameMode) void window.quake2GameMode.enter("menu");
+    }
+    else if (action === "note") showPanelNote(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.");
   }
+
+  // The game-mode shortcut (game-mode.js) runs on Alt+Enter before this file's
+  // key handlers, so the mode must be able to ask this page to resume: without
+  // it, Alt+Enter over the dark panel hides every control while the engine is
+  // still paused at its menu, and there is no interface left to resume it.
+  // Nothing else is exposed.
+  window.quake2App = {
+    isMenuOpen: function () { return ui.open; },
+    resume: function () { resumeGame(); },
+  };
 
   initializeSettings();
   syncSettingsFromUrl();
@@ -1067,10 +1155,27 @@ var Module;
     if (button.dataset.action) doAction(button.dataset.action, button);
   });
 
+  // A real Escape is the player asking for the pause; the app's own synthetic
+  // Escape (tapKey) is not. The interface poll uses this to tell the console's
+  // trailing Escape from a person's key press. Registered before the panel's
+  // handler so it sees every Escape, whether or not the panel then swallows it.
+  window.addEventListener("keydown", function (event) {
+    if ((event.key === "Escape" || event.keyCode === 27) && !event.__q2synthetic) {
+      ui.realEscapeAt = performance.now();
+    }
+  }, true);
+
   // While the panel is up it owns the keyboard: the engine's own menu must not
   // scroll underneath it, and pointer lock must not be requested behind it.
   window.addEventListener("keydown", function (event) {
     if (!ui.open) return;
+    // The app's own engine taps (Resume, F6, F9, the Options chip's Escape):
+    // the panel must not eat them. It still owns every real key.
+    if (event.__q2synthetic) return;
+    // Alt+Enter is the game-mode shortcut, handled by game-mode.js after this
+    // listener; without this it would activate the focused row (which can be
+    // QUIT or a new game) instead of entering the mode.
+    if (event.altKey && (event.key === "Enter" || event.code === "Enter")) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const buttons = visibleButtons();
@@ -1092,9 +1197,11 @@ var Module;
   }, true);
 
   window.addEventListener("keyup", function (event) {
-    if (!ui.open) return;
+    if (!ui.open || event.__q2synthetic) return;
+    // A key held when the panel opened must still reach the engine as a
+    // release, or the player keeps walking (or firing) after the panel closes;
+    // only the page's own default action is stopped.
     event.preventDefault();
-    event.stopImmediatePropagation();
   }, true);
 
   lightingChip.addEventListener("click", function () {
@@ -1121,18 +1228,43 @@ var Module;
   // 1 console, 3 menu. Polling it is how the panel follows the real game state
   // rather than guessing from focused elements.
   function syncInterface() {
-    const state = engineSnapshot();
-    const dest = state && typeof state.keyDest === "number" ? state.keyDest : null;
+    // Game mode owns the screen: no page layer may be shown or toggled while it
+    // is up, and the engine's own menu is dropped by the renderer. The mode's
+    // own fullscreenchange handler is what brings the interface back.
+    if (gameModeActive()) {
+      if (ui.open) hideMenu();
+      return;
+    }
+    // After QUIT the panel must not be reopened: the engine is still at its
+    // menu, and showing the panel under the "Quake 2 has quit." plate would
+    // offer Resume and put a running game back behind an invisible canvas.
+    if (ui.quitting) return;
+    // One word: this poll runs eight times a second and only needs who owns
+    // the keyboard. `read()` builds a whole reading -- position, angles, two
+    // arrays and an ISO timestamp -- for a value the engine exposes directly.
+    const dest = engineKeyDestWord();
+    // The engine's own key_dest is the authority on a resume: once it reports
+    // the game after the panel has been put away, the closing hold is over.
+    // Keeping the fixed 900 ms window shut the app's own Escape handling for
+    // that long, so an Escape pressed just after Resume did nothing. Only a
+    // closed panel releases it: the Options chip sets the same hold while its
+    // panel is up, before the engine's menu has opened, and releasing it there
+    // would hide the panel and reopen it on the main view.
+    if (ui.closing && !ui.open && dest === 0) ui.closing = false;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
     const playing = dest === 0 && !ui.open && visible;
-    optionsChip.hidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
-    lightingChip.hidden = optionsChip.hidden;
-    if (lightingChip.hidden) { lightingPanel.hidden = true; lightingChip.setAttribute("aria-expanded", "false"); }
+    const chipsHidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
+    setHidden(optionsChip, chipsHidden);
+    setHidden(lightingChip, chipsHidden);
+    if (chipsHidden && !lightingPanel.hidden) {
+      lightingPanel.hidden = true;
+      lightingChip.setAttribute("aria-expanded", "false");
+    }
     const showPrompt = playing && visible && !locked && engineRunning;
     if (showPrompt !== ui.prompt) {
       ui.prompt = showPrompt;
-      promptElement.hidden = !showPrompt;
+      setHidden(promptElement, !showPrompt);
     }
     if (dest === 1) ui.consoleAt = performance.now();
     if (dest === 3 && !ui.open && !ui.closing) {
@@ -1140,12 +1272,36 @@ var Module;
       // trailing Escape (the way a harness closes it), not the player asking
       // for the menu: close it again instead of putting the panel up, so a
       // console session cannot leave the menu owning the keyboard behind the
-      // panel.
-      if (performance.now() - ui.consoleAt < 1500) tapKey(ESCAPE_KEY);
+      // panel. A menu the player asked for with a real Escape is not that, and
+      // suppressing it ate the first Escape of "close the console, pause".
+      const fromConsole = performance.now() - ui.consoleAt < 1500;
+      const playerPressed = ui.realEscapeAt > ui.consoleAt;
+      if (fromConsole && !playerPressed) tapKey(ESCAPE_KEY);
       else showMenu("main");
     } else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
   }
-  setInterval(syncInterface, 120);
+  // One poll for the whole page. Game mode has no interface to keep in sync,
+  // so the poll is stopped while it is up (a page that hides every layer still
+  // paid for an engine reading and a set of style decisions eight times a
+  // second) and started again when the mode ends.
+  let interfaceTimer = 0;
+  function startInterfacePoll() {
+    if (!interfaceTimer) interfaceTimer = setInterval(syncInterface, 120);
+  }
+  function stopInterfacePoll() {
+    if (interfaceTimer) {
+      clearInterval(interfaceTimer);
+      interfaceTimer = 0;
+    }
+  }
+  window.addEventListener("quake2gamemode", function (event) {
+    if (event.detail && event.detail.active) stopInterfacePoll();
+    else {
+      syncInterface();
+      startInterfacePoll();
+    }
+  });
+  startInterfacePoll();
 
   // Browsers take Escape for themselves while the pointer is locked: it leaves
   // the lock and the page never sees the key, so the engine's own menu would
@@ -1155,6 +1311,7 @@ var Module;
     if (document.pointerLockElement === canvasElement) return;
     setTimeout(function () {
       if (document.pointerLockElement === canvasElement) return;
+      if (gameModeActive()) return;
       if (!engineRunning || ui.open || ui.closing) return;
       const dest = engineKeyDest();
       if (dest === 3) { showMenu("main"); return; }

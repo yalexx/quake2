@@ -593,6 +593,21 @@ canvas {
   line-height: 1.6;
 }
 
+/* The answer to a note row, inside the panel (see app.js showPanelNote). It
+   sticks to the bottom of the panel's scroll box: the VIDEO view is taller
+   than the screen, so a note laid out after its help text sat below the fold
+   and clicking a row still appeared to do nothing. */
+#menu-note {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 14px 0 0;
+  padding: 8px 12px;
+  color: var(--amber);
+  background: rgba(10, 11, 13, 0.96);
+  border-top: 1px solid var(--line-soft);
+}
+
 .credits {
   margin-top: 8px;
   color: #cfc9bb;
@@ -729,4 +744,75 @@ body.is-fullscreen #fullscreen-button {
 
 #fullscreen-hint button:hover {
   background: #3a3a3a;
+}
+
+/* ---- Game mode (game-mode.js) -------------------------------------------
+   The game surface alone: every page layer removed rather than dimmed, and the
+   page black outside the picture so the letterbox bars belong to the game, not
+   to a web page. The canvas keeps the sizing rules above, so the engine's
+   aspect ratio and its own status bar are untouched. */
+html.is-game-mode,
+body.is-game-mode {
+  background: #000;
+}
+
+body.is-game-mode #ui,
+body.is-game-mode #fullscreen-button,
+body.is-game-mode #fullscreen-hint,
+body.is-game-mode #loading {
+  display: none !important;
+}
+
+/* A page-level control that lives in a menu of engine rows: the engine's own
+   VIDEO list stays exactly its own (the acceptance runner compares it row for
+   row), and game mode sits under it, dressed the same. */
+.menu-page-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 10px 0 0;
+  padding: 8px 0 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.menu-page-list button {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  height: 34px;
+  padding: 0 12px 0 16px;
+  color: #c9c5ba;
+  background: transparent;
+  border: 0;
+  border-radius: 1px;
+  font: inherit;
+  font-size: 11.5px;
+  letter-spacing: 0.12em;
+  text-align: left;
+  cursor: pointer;
+  transition: color 120ms ease, background 120ms ease;
+}
+
+.menu-page-list button .label {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.menu-page-list button .value {
+  color: var(--amber);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+
+.menu-page-list button:hover,
+.menu-page-list button:focus-visible {
+  color: var(--text);
+  background: rgba(198, 168, 102, 0.06);
+  outline: none;
+}
+
+.menu-page-list button[aria-pressed="true"] .value {
+  color: #f0e7d2;
 }

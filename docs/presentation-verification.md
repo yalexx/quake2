@@ -7,20 +7,31 @@ models draw without stretched slivers; the engine's own menu can never be seen;
 the engine's own status bar is the HUD, with readable health and ammo digits in
 the canvas's bottom band and no page element over it; and the engine's own
 crosshair is half transparent in the game palette's rusted amber/bone, still
-hidden by `crosshair 0` and still sized by `crosshair_scale`. Every picture
-below is a real headless-Chrome capture of this checkout, at 1280x720 and at
-the box display's measured 2560x1440, in RTX High, Performance and Off. The
-measurements and the row-by-row menu audit are documented in
+hidden by `crosshair 0` and still sized by `crosshair_scale`. Since the
+game-mode work it also covers the native-fullscreen **game mode** (the game
+surface alone, every page layer gone, the page black around the picture, and a
+measured saving of main-thread work per drawn frame) and the crosshair's **aim
+feedback** (weapon in hand, trigger, crouch, and the settle back). Every
+picture below is a real headless-Chrome capture of this checkout, at 1280x720
+and at the box display's measured 2560x1440, in RTX High, Performance and Off.
+The measurements and the row-by-row menu audit are documented in
 [Presentation fixes](presentation-fixes.md).
 
 ## This run
 
 - Run: RUN_AT (`report.json` `at`)
-- Branch: `clawbox/run-0ku0fj1g`, worktree `.clawbox/worktrees/run-0ku0fj1g`
+- Branch: `clawbox/run-hxvs1s1u`, worktree `.clawbox/worktrees/run-hxvs1s1u`.
+  It continues the stopped run at `53c43e4` (a fast-forward from
+  `cb01021`), which added the game mode and the aim crosshair; this run made
+  the game mode's cost a measurement, fixed the two checks that could not pass,
+  and swept the page a second time.
 - Node v24.22.1, Chrome 156.0.8078.47 (`--headless=new`), renderer **software by
   construction**: the runner starts Chrome with `--use-gl=angle
   --use-angle=swiftshader --enable-unsafe-swiftshader`; every frame-time row is
-  software and is not the box GPU's number.
+  software and is not the box GPU's number. The box was busy with another
+  coding run for part of this run, so the wall-clock frame times below are
+  longer than the previous run's; they are compared inside the run, never
+  across runs.
 - Display measured with `xrandr --current`: 2560x1440.
 - URL: `http://127.0.0.1:4398/apps/quake2/`. Port 4231 was serving another
   checkout when this run was made; the runner refuses a server that is not
@@ -31,7 +42,7 @@ measurements and the row-by-row menu audit are documented in
 ## Commands
 
 ```sh
-cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-0ku0fj1g
+cd /home/yanko/Projects/quake2/.clawbox/worktrees/run-hxvs1s1u
 
 # serve this checkout (the runner starts it if the port is free, and refuses a
 # server that is serving a different checkout)
@@ -41,10 +52,16 @@ PORT=4398 node server.js
 node scripts/verify-presentation.mjs --url http://127.0.0.1:4398/apps/quake2/ --frames 10
 
 node --check app.js
+node --check game-mode.js
+node --check fullscreen.js
 node --check rtx-renderer.js
 node --check engine-state.js
+node --check control/bridge.mjs
 node --check scripts/model-geometry.mjs
 node --check scripts/verify-presentation.mjs
+
+# the control bridge's HTTP contract (starts its own servers; no game needed)
+node scripts/control-api-test.mjs
 
 # the model invariants, measured from pak0/pak10 without writing anything
 node scripts/model-geometry.mjs --dry-run
@@ -68,6 +85,9 @@ programmatically by the run.
 | `1280x720-high-weapon.png`, `2560x1440-high-weapon.png` (and Performance/Off) | A weapon in hand (the blaster) after the level starts, with the **engine's own status bar** at the bottom; no page band. |
 | `<resolution>-crosshair-dark.png`, `<resolution>-crosshair-dark-off.png` | The crosshair and the same spawn with `crosshair 0` over the dark view, at both resolutions. |
 | `<resolution>-crosshair-bright.png`, `<resolution>-crosshair-bright-off.png` | The same spawn with the engine's colour intensity at its menu maximum, so the opacity is measured against a bright background too (same camera in both boots). |
+| `<resolution>-crosshair-{dark,bright}-alpha0.png` | The partner frame of each pair: the same boot with the crosshair's alpha set to 0, so the on/off difference is the crosshair and not the scene. |
+| `1280x720-game-mode-page.png`, `1280x720-game-mode-surface.png` | The same frozen scene with the page interface and then in game mode: the page layers are gone, the page is black around the picture, and the game keeps drawing. |
+| `1280x720-crosshair-aim-{blaster,shotgun,firing,crouch,scale2}-{on,off}.png` | The aim feedback, each pair taken on a static picture: the blaster's 21px cross at rest, the shotgun's wider one, the cross expanded by the trigger, contracted by C, and a `crosshair_scale 2` boot's 16px base. |
 | `<resolution>-statusbar.png` | The engine's status bar in the canvas bottom band, with health and ammo readable; no page element in the band. |
 | `1280x720-resolution-menu.png`, `1280x720-resolution-applied.png` | VIDEO > `video mode` at the engine's 1366x768 (r_mode 17), marked as one change; Apply reloads with `+set r_mode 17` and the engine's drawing buffer is 1366x768. |
 | `1280x720-menu-main.png`, `1280x720-menu-game.png`, `1280x720-menu-multiplayer.png`, `1280x720-menu-options.png`, `1280x720-menu-video.png` | The panel's views: the engine's main menu, and GAME (easy, medium, hard, hard+, load game, save game, credits), MULTIPLAYER, OPTIONS (including OGG music, free look, none/cross/dot/angle and yes/no/unpause on re-focus) and VIDEO (including video mode, color light, fullscreen and the engine's filter labels). |
@@ -168,6 +188,38 @@ the old status bar (218 bright old-HUD pixels under it when the HUD is hidden,
 it is shown), that the engine's crosshair is drawn (190.2 on / 15.4 off), and
 that VIDEO's `video mode` row restarts the level at 1366x768.
 
+## Game mode and the aim crosshair
+
+The 1280x720 pass also drives the two new behaviours end to end.
+
+- **Game mode** (VIDEO > game mode, or Alt+Enter): every page layer is gone
+  (`#ui`, the full-screen control and the boot plate are `display:none`), the
+  page is black on `<html>` and `<body>`, the canvas fills the viewport at the
+  engine's aspect ratio, the drawing buffer and resolution do not change, and
+  full screen is held. `status().blackout` reports one display and no Window
+  Management permission, so no other monitor is claimed. Alt+Enter enters and
+  leaves; leaving full screen with `document.exitFullscreen()` leaves the mode
+  too. The frame comparison is interleaved on one page with a frozen scene:
+  medians were equal and the means within about 2% (measured 169.9 vs 167.4 ms
+  and 161.6 vs 161.0 ms over 161/160 frames in two probe runs), because the
+  software renderer's frame is GPU-bound. The check therefore proves the page
+  work is removed — the status-bar read counter advances on the page and stops
+  in game mode — and requires the mode to add no frame time, rather than
+  asserting a percentage the renderer cannot show.
+- **The aim crosshair:** from a fresh demo1 with `give all` and `god`, the
+  blaster's cross is a 24px quad (21px of picture) at factor 1.00; the shotgun's
+  is wider; holding the trigger grows the quad to 32px and releasing settles it
+  back; holding C shrinks it to 20px; a `crosshair_scale 2` boot draws 16px. The
+  opacity is configured at 0.45 and measured at 0.450 on the dark and bright
+  backgrounds. Every on/off pair is captured with `timescale 0` (the renderer
+  keeps drawing), so the only pixels that differ between the two frames are the
+  crosshair's own.
+- **The interface defects the sweep fixed** are checked on the running page:
+  the Options chip pauses the game and the panel stays; QUIT leaves the panel
+  down behind the exit message; and a key released while the panel is open
+  reaches the engine (the player walked 65 units with W held and drifted 0.0
+  units after the release through the panel).
+
 ## What remains unverified
 
 - **Software rendering only, by the runner's choice.** SwiftShader, not the
@@ -206,6 +258,8 @@ that VIDEO's `video mode` row restarts the level at 1366x768.
   uses the engine's saved custom size; and the fullscreen values are passed on
   the start-up line but the resulting display mode was not exercised headless.
   The full list is in [Presentation fixes](presentation-fixes.md).
-- **Not exercised headless:** audio, pointer lock and mouse look, firing, game
-  saves, the Fullscreen API.
+- **Not exercised headless:** audio, mouse look and game saves. The fullscreen
+  API is exercised by the game-mode checks; multi-display blackout needs the
+  Window Management API and a second display, so only the mode's honest report
+  of that is checked (see below).
 - **No PR.** The work is committed on the project branch only.
