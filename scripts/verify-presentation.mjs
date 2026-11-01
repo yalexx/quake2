@@ -722,7 +722,12 @@ async function captureBuffer(name, buffer, width, height, meta) {
 }
 
 async function capture(name, width, height, meta) {
-  return captureBuffer(name, await screenshotBuffer(), width, height, meta);
+  // The drawing buffer is not preserved: a capture taken between two engine
+  // frames is the cleared buffer, and at 2560x1440 that is a black picture
+  // (measured on the committed evidence: 2560x1440-performance-weapon.png had
+  // a mean luma of 0.1). stableScreenshot retries until the centre is a
+  // picture, so a screenshot is the view it claims to be.
+  return captureBuffer(name, await stableScreenshot(), width, height, meta);
 }
 
 // The engine draws a loading plaque over a black frame for a moment after a
@@ -2085,22 +2090,32 @@ async function interfaceStateCheck(resolution) {
   await click('[data-action="video"]');
   await sleep(400);
   const noteAnswer = await evaluate(`(() => {
+    const panel = document.getElementById("menu");
+    // The user is at the top of the view when they click the row; the note has
+    // to be visible there, not scrolled to below the fold.
+    panel.scrollTop = 0;
     const row = document.querySelector('.menu-view[data-view="video"] .setting[data-action="note"]');
     if (!row) return null;
     row.click();
     const note = document.getElementById("menu-note");
     if (!note) return { missing: true };
     const style = getComputedStyle(note);
+    const noteRect = note.getBoundingClientRect();
+    const panelRect = panel.getBoundingClientRect();
     return { hidden: note.hidden, text: note.textContent.trim(), display: style.display,
       insidePanel: Boolean(note.closest("#menu")), panelOpen: document.getElementById("menu-layer").hidden === false,
-      // A note that is laid out with a height is not a zero-size element.
-      height: Math.round(note.getBoundingClientRect().height) };
+      scrollTop: panel.scrollTop, scrollHeight: panel.scrollHeight, clientHeight: panel.clientHeight,
+      height: Math.round(noteRect.height),
+      // The answer must be inside the panel's visible box, not below it.
+      inView: noteRect.top >= panelRect.top - 1 && noteRect.bottom <= panelRect.bottom + 1 && noteRect.height > 0,
+      rect: { top: Math.round(noteRect.top), bottom: Math.round(noteRect.bottom) },
+      panelRect: { top: Math.round(panelRect.top), bottom: Math.round(panelRect.bottom) } };
   })()`);
-  check(label + ": a note row's answer is shown inside the open panel",
+  check(label + ": a note row's answer is shown inside the open panel, in view",
     Boolean(noteAnswer) && noteAnswer.missing !== true && noteAnswer.hidden === false && noteAnswer.display !== "none" &&
       /renderer/i.test(noteAnswer.text) && noteAnswer.insidePanel === true && noteAnswer.panelOpen === true &&
-      noteAnswer.height > 0,
-    "the note row's text is a visible element inside #menu while the panel stays up",
+      noteAnswer.height > 0 && noteAnswer.inView === true,
+    "the note row's text is a visible element inside #menu, inside the panel's visible box with the view scrolled to the top",
     noteAnswer ? JSON.stringify(noteAnswer) : "the video view has no note row");
   await resume();
 

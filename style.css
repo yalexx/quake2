@@ -593,10 +593,19 @@ canvas {
   line-height: 1.6;
 }
 
-/* The answer to a note row, inside the panel (see app.js showPanelNote). */
+/* The answer to a note row, inside the panel (see app.js showPanelNote). It
+   sticks to the bottom of the panel's scroll box: the VIDEO view is taller
+   than the screen, so a note laid out after its help text sat below the fold
+   and clicking a row still appeared to do nothing. */
 #menu-note {
-  margin: 14px 16px 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: 14px 0 0;
+  padding: 8px 12px;
   color: var(--amber);
+  background: rgba(10, 11, 13, 0.96);
+  border-top: 1px solid var(--line-soft);
 }
 
 .credits {
