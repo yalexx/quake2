@@ -85,8 +85,8 @@ Instead the palette is the game's own, read out of `baseq2/pak0.pak`:
   and the closest thing the archive has to a ground-truth mark. It carries the
   same palette table; the two files agree on 246 of 256 entries. The ten that
   differ are indices 48..55 (browns) and 240/241 (the palette's test red and
-  blue), where the small picture stores white. **None of the eighteen indices
-  this icon uses is one of them**, and `read_palette()` asserts that rather than
+  blue), where the small picture stores white. **None of the sixteen indices
+  this icon draws with is one of them**, and `read_palette()` asserts that rather than
   assuming it.
 * m_main_logo itself is 8-bit dithered, no anti-aliasing, index 255 reserved as
   the transparent colour — the same way of drawing the mark that this icon uses.
@@ -111,11 +111,12 @@ reference; the geometry is the measurement, put through one mapping.
   same height, so it reads as a barbed point instead of a loose pixel.
 * *The prong gap at the top.* In the reference it is 6..12 px — 0.85..1.7
   design units, narrower than a whole pixel on a 64-unit grid, where it
-  quantises to nothing or to two pixels. It is drawn two master-pixels wide
-  (one design unit, 10 reference pixels): within the reference's own range over
-  the lower half of the prongs, where the gap widens to 30 px, and 4 px wider
-  than the picture just under the bar. The alternative was a solid block
-  between the bar and the keel, which reads as one slab instead of a "II".
+  quantises to nothing or to two pixels. The icon cuts it 10 reference pixels
+  wide (1.4 design units), which on the 128 grid removes exactly two pixels.
+  That is inside the reference's own range over the lower half of the prongs,
+  where the gap widens to 30 px, and 4 px wider than the picture just under the
+  bar. The alternative was a solid block between the bar and the keel, which
+  reads as one slab instead of a "II".
 
 **The grid.** The design lives in a **64-unit square**, the emblem 58 units
 tall and centred, and the mapping is the only thing between the measurements
@@ -139,7 +140,9 @@ breaks where it should taper; 128 is the coarsest grid on which the measured
 stroke survives. (The ceiling for any grid: rendering the reference's own mask
 at 84 x 116 and back scores 0.918, so 0.848 is a good way along.)
 
-**The colours.** Eighteen palette indices, all from the game's table:
+**The colours.** The icon draws with sixteen palette indices, all from the
+game's table; ten of them actually appear in the finished picture (the ramps'
+extremes go unused at these shades):
 
 | role | indices | RGB |
 | --- | --- | --- |

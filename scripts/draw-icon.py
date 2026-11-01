@@ -118,6 +118,8 @@ def read_palette(pak_path: Path) -> tuple[np.ndarray, dict]:
     they stopped agreeing there, the icon's colours would no longer be the
     game's, and we want to know.
     """
+    if not pak_path.is_file():
+        raise SystemExit(f"{pak_path}: no such file (the palette comes from baseq2/pak0.pak)")
     pak = pak_path.read_bytes()
     if pak[:4] != b"PACK":
         raise SystemExit(f"{pak_path}: not a Quake 2 PAK (no PACK signature)")
