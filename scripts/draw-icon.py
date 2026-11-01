@@ -240,8 +240,9 @@ SPUR = tuple((RX(x), RY(y)) for x, y in SPUR_REF)
 def emblem_mask(n: int = GRID) -> np.ndarray:
     """The Q2 crescent, as a boolean mask on an n x n grid.
 
-    n=64 is the master.  Larger n is the same geometry at finer resolution and
-    is only used to check the shape against the reference logo.
+    n=GRID (128) is the master.  Any other n is the same geometry at a
+    different resolution -- finer, to check the shape against the reference
+    logo, or coarser, to see what the mark looks like at 64 or 32 pixels.
     """
     Y, X = np.mgrid[0:n, 0:n].astype(np.float64) + 0.5
     u = X * (DESIGN / n)                             # design units
@@ -255,14 +256,14 @@ def emblem_mask(n: int = GRID) -> np.ndarray:
     dist_void = np.sqrt(((u - void_cx) / void_a) ** 2 + ((v - void_cy) / void_b) ** 2)
     angle = np.degrees(np.arctan2(v - bowl_cy, u - bowl_cx)) % 360.0
     # clockwise from the right tip through the bottom to the left tip; the
-    # 43.6-degree gap between the two tip angles is the opening at the top.
+    # 46.3-degree gap between the two tip angles is the opening at the top.
     in_arc = (angle >= TIP_RIGHT) | (angle <= TIP_LEFT)
     bowl = (dist_outer <= bowl_r) & (dist_void >= 1.0) & in_arc
 
     mark = bowl.copy()
     # The barb on the right-hand tip: the arm does not stop at the arc, it
-    # carries on up past it and comes to a point (reference x 379..401, y 97..127).
-    # It is what makes the right tip the taller of the two, exactly as in the logo.
+    # carries on up past it (reference x 391..401, y 97..118).  It is what makes
+    # the right tip the taller of the two, exactly as in the logo.
     mark |= in_polygon(u, v, SPUR)
 
     # the bar across the top of the inner mark
