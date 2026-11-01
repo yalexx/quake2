@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx7">
+<link rel="stylesheet" href="style.css?v=rtx8">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -171,6 +171,12 @@
         </div>
       </div>
 
+      <!-- The answer to a note row (and to an Apply with nothing to apply) is
+           written here, inside the panel: the banner that used to carry it is
+           painted under the panel's scrim in this browser, so nine clickable
+           rows appeared to do nothing. -->
+      <p id="menu-note" class="field-help" role="status" aria-live="polite" hidden></p>
+
       <footer class="menu-foot">
         <span>↑ ↓ select</span><span>Enter open</span><span>Esc back</span>
         <span class="foot-back">
@@ -187,9 +193,9 @@
      the engine's own loader has created the memory. See engine-state.js. -->
 <script src="engine-state.js?v=rtx7"></script>
 <script src="rtx-materials.js?v=rtx6"></script>
-<script src="rtx-renderer.js?v=rtx7"></script>
-<script src="app.js?v=rtx7"></script>
+<script src="rtx-renderer.js?v=rtx8"></script>
+<script src="app.js?v=rtx8"></script>
 <script src="fullscreen.js?v=rtx7"></script>
-<script src="game-mode.js?v=rtx7"></script>
+<script src="game-mode.js?v=rtx8"></script>
 </body>
 </html>

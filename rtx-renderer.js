@@ -57,6 +57,9 @@
   }
   const bootTint = parseTint(bootCvars.q2_crosshair_tint);
   if (bootTint) crosshair.tint = bootTint;
+  // The tint/opacity uniform is re-uploaded only when its values change, so the
+  // comparison key is built when they do and not on every drawn frame.
+  let crosshairUniformKey = crosshair.alpha + '|' + crosshair.tint.join(',');
 
   // The engine sizes its crosshair picture as 8 * crosshair_scale pixels and
   // draws it at the centre of the drawing buffer. `crosshair_scale` is on the
@@ -67,7 +70,11 @@
   const CROSSHAIR_ENGINE_MAX_SCALE = 3;
   const BASE_CROSSHAIR_SCALE = (function () {
     const raw = Number(bootCvars.crosshair_scale);
-    if (!Number.isFinite(raw) || raw < 1) return CROSSHAIR_ENGINE_MAX_SCALE;
+    // Only a missing or unusable value falls back to the engine's maximum (the
+    // app's own default). A value below 1 is a real, smaller cross -- the
+    // engine sizes its picture as 8 * scale -- and treating it as the maximum
+    // drew a 24px cross where the engine would draw 4px.
+    if (bootCvars.crosshair_scale === undefined || !Number.isFinite(raw) || raw <= 0) return CROSSHAIR_ENGINE_MAX_SCALE;
     return Math.min(CROSSHAIR_ENGINE_MAX_SCALE, raw);
   })();
 
@@ -210,7 +217,10 @@
 
   let pendingCrosshair = false;
   let gl, current, textureUnit = 0, dirty = true, sceneDirty = false, composite = null;
-  let worldThisFrame = false, skyPending = true, lastModelSkins = [];
+  // One shared empty list: the per-frame reset used to allocate a new array on
+  // every frame for a value the 2D pass only ever reads.
+  const NO_MODEL_SKINS = [];
+  let worldThisFrame = false, skyPending = true, lastModelSkins = NO_MODEL_SKINS;
   // `cls.key_dest` as this frame found it, sampled once at the frame's clear so
   // a draw call never pays for a memory read. 0 is the game, 1 the console and
   // 3 the engine's own menu: the interface the dark panel replaces. While
@@ -269,6 +279,7 @@
       if (tint && tint.length === 3 && tint.every(function (one) { return Number.isFinite(one); })) {
         crosshair.tint = tint.map(function (one) { return Math.max(0, Math.min(255, Math.round(one))); });
       }
+      crosshairUniformKey = crosshair.alpha + '|' + crosshair.tint.join(',');
       return { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) };
     },
     // The weapon in hand, the spread it implies and the size the next crosshair
@@ -1201,7 +1212,7 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
     gl.deleteProgram = program => { programs.delete(program); native.deleteProgram(program); };
     gl.useProgram = program => { current = programs.get(program); native.useProgram(program); dirty = true; };
     gl.clear = (...args) => {
-      sceneDirty = false; worldThisFrame = false; skyPending = true; lastModelSkins = [];
+      sceneDirty = false; worldThisFrame = false; skyPending = true; lastModelSkins = NO_MODEL_SKINS;
       weaponThisFrame = null;
       // Who owns the keyboard for the frame about to be drawn. Sampled here so
       // every draw of the frame costs no more than a number compare.
@@ -1298,7 +1309,7 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         // The gun in hand is drawn once a frame, but not always as the last
         // model draw: the frame's own weapon-sized draw is what names it.
         if (weaponThisFrame) noteViewWeaponSkin(weaponThisFrame);
-        lastModelSkins = [];
+        lastModelSkins = NO_MODEL_SKINS;
         report.uiDraws++;
         if (current.crosshairLocation) {
           const on = isCrosshairDraw(drawMode, drawCount);
@@ -1308,11 +1319,10 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
             gl.uniform1f(current.crosshairLocation, flag);
             current.lastCrosshair = flag;
           }
-          const key = crosshair.alpha + '|' + crosshair.tint.join(',');
-          if (current.lastCrosshairTint !== key) {
+          if (current.lastCrosshairTint !== crosshairUniformKey) {
             gl.uniform4f(current.crosshairTintLocation, crosshair.tint[0] / 255, crosshair.tint[1] / 255,
               crosshair.tint[2] / 255, crosshair.alpha);
-            current.lastCrosshairTint = key;
+            current.lastCrosshairTint = crosshairUniformKey;
           }
         }
         armHudRead();
@@ -1493,7 +1503,9 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         native.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
         aim.drawn++;
-        report.crosshairDraws++;
+        // report.crosshairDraws was already incremented in uniforms() when the
+        // engine's own crosshair draw was recognised; this draw replaces it, so
+        // counting it again reported two draws per frame.
         return true;
       } catch (error) {
         aim.reason = 'crosshair draw failed: ' + String(error && error.message ? error.message : error);

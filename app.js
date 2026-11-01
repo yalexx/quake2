@@ -713,6 +713,7 @@ var Module;
   const lightingPanel = document.getElementById("lighting-panel");
   const bannerElement = document.getElementById("banner");
   const bannerTextElement = document.getElementById("banner-text");
+  const menuNoteElement = document.getElementById("menu-note");
   const promptElement = document.getElementById("prompt");
   const menuViews = Array.from(document.querySelectorAll(".menu-view"));
 
@@ -723,6 +724,7 @@ var Module;
     bannerTimer: 0,
     prompt: false,
     consoleAt: 0, // when the engine's console last owned the keyboard
+    realEscapeAt: 0, // when the player (not the app) last pressed Escape
     quitting: false, // QUIT was chosen: the panel must not come back
   };
 
@@ -748,6 +750,21 @@ var Module;
   function engineKeyDest() {
     const state = engineSnapshot();
     return state && typeof state.keyDest === "number" ? state.keyDest : null;
+  }
+
+  // The one word the interface poll needs, without building a reading. Falls
+  // back to the full snapshot for an engine-state.js that predates keyDest().
+  function engineKeyDestWord() {
+    try {
+      const engine = window.quake2Engine;
+      if (engine && typeof engine.keyDest === "function") {
+        const dest = engine.keyDest();
+        if (typeof dest === "number") return dest;
+      }
+    } catch (error) {
+      // Fall through: the full reading reports the reason.
+    }
+    return engineKeyDest();
   }
 
   // A synthetic keyboard event the engine's SDL layer reads exactly like a real
@@ -798,7 +815,12 @@ var Module;
   }
 
   function visibleButtons() {
-    return Array.from(visibleView().querySelectorAll("button")).filter(function (button) {
+    // The footer's Resume/Back are outside every .menu-view, so a cycle built
+    // from the view alone could never reach them: they are visible on every
+    // view and are part of the ring.
+    const footer = Array.from(menuPanel.querySelectorAll(".menu-foot button"));
+    const view = Array.from(visibleView().querySelectorAll("button"));
+    return view.concat(footer).filter(function (button) {
       return !button.disabled && (button.offsetParent !== null || button.getClientRects().length > 0);
     });
   }
@@ -806,6 +828,9 @@ var Module;
   function setView(view) {
     ui.view = view;
     for (const section of menuViews) section.hidden = section.dataset.view !== view;
+    // A note answers the row it was clicked on; it does not follow the player
+    // into another view or the next time the panel opens.
+    if (menuNoteElement) menuNoteElement.hidden = true;
     // The main view opens with Resume focused, not GAME. The panel also comes
     // up when the engine's own menu opens by itself (a console command, a lost
     // pointer lock), and a stray Enter must not start a new game from there;
@@ -863,6 +888,17 @@ var Module;
     }
   }
 
+  // An answer that belongs to the panel is written inside the panel. The
+  // banner is a notice over the game, and while the panel is up this browser
+  // paints it under the panel's scrim (measured: the banner was hit-testable
+  // above the scrim but no pixel of it reached the frame), so a note row that
+  // answered through it appeared to do nothing.
+  function showPanelNote(text) {
+    if (!menuNoteElement) { showBanner(text, 4200); return; }
+    menuNoteElement.textContent = text || "";
+    menuNoteElement.hidden = !text;
+  }
+
   function resumeGame() {
     hideMenu();
     ui.closing = true;
@@ -875,7 +911,12 @@ var Module;
 
   function pauseForKey(key) {
     // The engine only reads its bindings while the game has the keyboard, so a
-    // paused menu is closed first and reopened after the key.
+    // paused menu is closed first and reopened after the key. The panel is
+    // held for the whole flight: without this the interface poll sees the
+    // engine's key_dest go to 0 with the panel still up and hides it, which
+    // showed a running, unpaused game for half a second and then reopened the
+    // panel on the main menu instead of the view the player was on.
+    ui.closing = true;
     const dest = engineKeyDest();
     if (dest === 3) tapKey(ESCAPE_KEY);
     setTimeout(function () {
@@ -883,7 +924,7 @@ var Module;
       // Put the pause back: an unlocked pointer or a saved game would otherwise
       // leave the game running behind the panel.
       setTimeout(function () {
-        if (!ui.open && engineKeyDest() === 0) tapKey(ESCAPE_KEY);
+        if (ui.open && engineKeyDest() === 0) tapKey(ESCAPE_KEY);
         ui.closing = false;
       }, 300);
     }, dest === 3 ? 260 : 0);
@@ -1006,7 +1047,7 @@ var Module;
 
   function applySettings() {
     const changed = changedSettings();
-    if (!changed.length) { showBanner("Nothing to apply", 2500); return; }
+    if (!changed.length) { showPanelNote("Nothing to apply"); return; }
     const commands = [];
     for (const [cvar, value] of changed) {
       // The engine's "fullscreen window" mode also switches r_mode to auto
@@ -1082,8 +1123,18 @@ var Module;
       resumeGame();
       if (window.quake2GameMode) void window.quake2GameMode.enter("menu");
     }
-    else if (action === "note") showBanner(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.", 4200);
+    else if (action === "note") showPanelNote(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.");
   }
+
+  // The game-mode shortcut (game-mode.js) runs on Alt+Enter before this file's
+  // key handlers, so the mode must be able to ask this page to resume: without
+  // it, Alt+Enter over the dark panel hides every control while the engine is
+  // still paused at its menu, and there is no interface left to resume it.
+  // Nothing else is exposed.
+  window.quake2App = {
+    isMenuOpen: function () { return ui.open; },
+    resume: function () { resumeGame(); },
+  };
 
   initializeSettings();
   syncSettingsFromUrl();
@@ -1104,6 +1155,16 @@ var Module;
     if (button.dataset.action) doAction(button.dataset.action, button);
   });
 
+  // A real Escape is the player asking for the pause; the app's own synthetic
+  // Escape (tapKey) is not. The interface poll uses this to tell the console's
+  // trailing Escape from a person's key press. Registered before the panel's
+  // handler so it sees every Escape, whether or not the panel then swallows it.
+  window.addEventListener("keydown", function (event) {
+    if ((event.key === "Escape" || event.keyCode === 27) && !event.__q2synthetic) {
+      ui.realEscapeAt = performance.now();
+    }
+  }, true);
+
   // While the panel is up it owns the keyboard: the engine's own menu must not
   // scroll underneath it, and pointer lock must not be requested behind it.
   window.addEventListener("keydown", function (event) {
@@ -1111,6 +1172,10 @@ var Module;
     // The app's own engine taps (Resume, F6, F9, the Options chip's Escape):
     // the panel must not eat them. It still owns every real key.
     if (event.__q2synthetic) return;
+    // Alt+Enter is the game-mode shortcut, handled by game-mode.js after this
+    // listener; without this it would activate the focused row (which can be
+    // QUIT or a new game) instead of entering the mode.
+    if (event.altKey && (event.key === "Enter" || event.code === "Enter")) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     const buttons = visibleButtons();
@@ -1174,8 +1239,18 @@ var Module;
     // menu, and showing the panel under the "Quake 2 has quit." plate would
     // offer Resume and put a running game back behind an invisible canvas.
     if (ui.quitting) return;
-    const state = engineSnapshot();
-    const dest = state && typeof state.keyDest === "number" ? state.keyDest : null;
+    // One word: this poll runs eight times a second and only needs who owns
+    // the keyboard. `read()` builds a whole reading -- position, angles, two
+    // arrays and an ISO timestamp -- for a value the engine exposes directly.
+    const dest = engineKeyDestWord();
+    // The engine's own key_dest is the authority on a resume: once it reports
+    // the game after the panel has been put away, the closing hold is over.
+    // Keeping the fixed 900 ms window shut the app's own Escape handling for
+    // that long, so an Escape pressed just after Resume did nothing. Only a
+    // closed panel releases it: the Options chip sets the same hold while its
+    // panel is up, before the engine's menu has opened, and releasing it there
+    // would hide the panel and reopen it on the main view.
+    if (ui.closing && !ui.open && dest === 0) ui.closing = false;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
     const playing = dest === 0 && !ui.open && visible;
@@ -1197,8 +1272,11 @@ var Module;
       // trailing Escape (the way a harness closes it), not the player asking
       // for the menu: close it again instead of putting the panel up, so a
       // console session cannot leave the menu owning the keyboard behind the
-      // panel.
-      if (performance.now() - ui.consoleAt < 1500) tapKey(ESCAPE_KEY);
+      // panel. A menu the player asked for with a real Escape is not that, and
+      // suppressing it ate the first Escape of "close the console, pause".
+      const fromConsole = performance.now() - ui.consoleAt < 1500;
+      const playerPressed = ui.realEscapeAt > ui.consoleAt;
+      if (fromConsole && !playerPressed) tapKey(ESCAPE_KEY);
       else showMenu("main");
     } else if (dest !== 3 && ui.open && !ui.closing) hideMenu();
   }

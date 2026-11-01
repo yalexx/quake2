@@ -101,17 +101,19 @@ The mode asks for full screen on the display the game is on, which is what
 removes the browser chrome.
 
 - **What it costs.** The mode removes the page's own per-frame work: the
-  status-bar read-back (a framebuffer read every 1.2 s — 22% of the page's
-  main-thread samples in a Chrome profile of the headless run), the interface
-  poll, and every page layer. In the headless software renderer the frame time
-  is GPU-bound, so the wall-clock difference is within run-to-run noise:
-  interleaved on one page and one frozen scene the medians are equal and the
-  means are within about 2%. The acceptance check therefore proves the removed
-  work directly (the read counter stops in game mode, the interface is gone) and
-  requires game mode to add no frame time, rather than asserting a percentage
-  the software renderer cannot show. On the box's GPU the compositor share is
-  not measured here and is not claimed. The engine, the scene, the renderer and
-  the resolution are untouched.
+  status-bar read-back (a synchronous framebuffer read plus digit recognition,
+  measured at about a second per read on a loaded box; the page runs it every
+  1.2 s), the interface poll, and every page layer. On one page, one frozen
+  scene and the same full-screen state, the main thread spends **7-8% less task
+  time per drawn frame** in game mode: three interleaved page/game pairs
+  measured ratios of 0.923, 0.925 and 0.917 of the page's time per frame, and
+  the game presentation drew 8-10% more frames in the same ten seconds. The
+  acceptance check asserts that saving (at least 2% per frame in most adjacent
+  pairs) and keeps the wall-clock requirement that the mode adds no frame time.
+  In the headless software renderer the wall-clock frame is GPU-bound, so its
+  difference is smaller than the main-thread one and is not claimed as a frame
+  rate; the compositor share on the box's GPU is not measured here. The engine,
+  the scene, the renderer and the resolution are untouched.
 - **Other displays, stated honestly.** A web page cannot paint a monitor it has
   no window on. Where the Window Management API exists and the owner allows it,
   game mode opens one opaque black window on every additional display and
@@ -120,7 +122,9 @@ removes the browser chrome.
   claims a monitor went black. No page can hide other applications' windows.
 - **Way back.** Alt+Enter leaves the mode. Esc — the browser's own way out of
   full screen — leaves it too: the mode ends when full screen does, so the page
-  interface is never stranded hidden, whichever control ended it.
+  interface is never stranded hidden, whichever control ended it. Entering with
+  Alt+Enter over the dark panel resumes the paused game first, so the mode never
+  hides every control while the engine still waits at its menu.
 
 ### The crosshair's aim feedback
 

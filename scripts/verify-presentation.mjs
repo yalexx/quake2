@@ -464,8 +464,15 @@ async function connectPage(base) {
   await cdp.send("Page.enable");
   await cdp.send("Runtime.enable");
   await cdp.send("Log.enable");
+  // TaskDuration/ScriptDuration of the main thread: the game-mode cost check
+  // divides their growth by the frames drawn in the same window.
+  await cdp.send("Performance.enable");
   await cdp.send("Page.addScriptToEvaluateOnNewDocument", {
-    source: `window.__q2verify = { contextLost: 0, contextLostAt: null };
+    source: `window.__q2verify = { contextLost: 0, contextLostAt: null, frames: 0 };
+      // One rAF callback per drawn frame, the same in both presentations: the
+      // counters below are per frame, so a page that draws fewer frames in a
+      // window is not credited with cheaper ones.
+      (function () { function step() { window.__q2verify.frames++; requestAnimationFrame(step); } requestAnimationFrame(step); })();
       document.addEventListener("DOMContentLoaded", function () {
         var canvas = document.getElementById("canvas");
         if (!canvas) return;
@@ -1413,13 +1420,18 @@ function compareBand(a, b, band) {
 // bright boot's cvars are written into config.cfg and would otherwise carry
 // the 5/5 brightness into the next resolution's "dark" pair (measured: the
 // 2560 dark pair booted at background luma 139 instead of the spawn's ~49).
-// The bright pair uses the menu maximum colour intensity with overbrights at
-// 2: at the menu's default 1.3 the same spawn only reached a background luma
-// median of 46.7, so the "brighter background" check had no pixels above 100
-// and could not pass. Measured across boots at 2: the spawn lands around 80-90,
-// which is far enough above the dark pair to prove the blend on a lit surface
-// while staying far enough below the bone tint (#ddb589, luma 186) that the
-// per-channel blend still has contrast to solve an alpha from.
+// The simulation is frozen on the start-up line (see crosshairBoot), so both
+// pairs are the map's spawn, whose camera is the same at 1280x720 and
+// 2560x1440. Measured on that frozen spawn in a probe of four boots: the menu
+// defaults give a background luma median of 44.5 with 59 of 1089 centre-window
+// pixels at or above 100, and the menu maximum (intensity 5, overbrights 2)
+// gives 102.3 with 572 of 1089 -- enough lit pixels behind the cross for the
+// "brighter background" check, while staying far enough below the bone tint
+// (#ddb589, luma 186) that the per-channel blend still has contrast to solve
+// an alpha from. An earlier version let the demo play for ten seconds before
+// freezing; the camera then depended on how many frames the software renderer
+// managed, and the bright pair once landed on a wall at luma 48 with no pixel
+// above 100, which is what killed that version of the check.
 const DARK_STARTUP = "&+set&gl3_intensity&2.0&+set&gl3_overbrightbits&1.3";
 const BRIGHT_STARTUP = "&+set&gl3_intensity&5&+set&gl3_overbrightbits&2";
 
@@ -1438,7 +1450,15 @@ async function crosshairBoot(resolution, name, crosshair, bright, options = {}) 
   const label = resolution.label;
   const suffix = crosshair === "0" ? "-off" : "";
   const brightness = bright ? BRIGHT_STARTUP : DARK_STARTUP;
-  await reloadGame(resolutionUrl(resolution, "+set&crosshair&" + crosshair + brightness),
+  // `timescale 0` is on the engine's start-up line, not only sent to its
+  // console later: the demo1 camera is the map's spawn (measured at
+  // 128.06, -319.94, 46.19, yaw 135 in every boot) only until the demo starts
+  // playing, and at 2560x1440 the first seconds of playback are enough for the
+  // two captures to land in different parts of the level. A frozen first frame
+  // makes the dark and bright pairs the same picture at every boot; the
+  // console's own `timescale 0` below stays as a guard for a browser that
+  // dropped the start-up cvar.
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair&" + crosshair + "&+set&timescale&0" + brightness),
     label + " crosshair " + name + " " + crosshair);
   if (!(await ensureGame("crosshair " + name + " " + crosshair + " capture"))) {
     fatal(label + ": the game did not resume for the crosshair-" + name + " " + crosshair + " capture");
@@ -1668,7 +1688,11 @@ async function crosshairPresentationCheck(resolution) {
   // Put the engine back on the app's own VIDEO defaults before the next
   // check: the bright pair's 5/5 values are saved into config.cfg when the
   // page navigates, and would otherwise brighten every later boot.
-  await reloadGame(resolutionUrl(resolution, DARK_STARTUP), label + " brightness defaults restored");
+  // `timescale 1` is on the start-up line too: the crosshair boots froze the
+  // simulation from boot, and a frozen start-up cvar is written into config.cfg
+  // when the page navigates, so the restore must state the running value
+  // rather than rely on the console alone.
+  await reloadGame(resolutionUrl(resolution, DARK_STARTUP + "&+set&timescale&1"), label + " brightness defaults restored");
   if (!(await ensureGame("after restoring the brightness defaults"))) fatal(label + ": the game did not resume after restoring the brightness defaults");
   // The captures above froze the demo. A fresh engine starts at timescale 1,
   // but say so explicitly: a frozen level must not leak into the next check.
@@ -2023,9 +2047,11 @@ async function presentationFixesCheck(resolution) {
 }
 
 // ---- Interface state the bug hunt fixed ---------------------------------
-// Three defects the sweep found, each checked on the running page:
+// Four defects the sweep found, each checked on the running page:
 //   * the panel's key handler swallowed the app's own synthetic Escape, so the
 //     Options chip never paused the game and closed itself a second later;
+//   * every note row's answer went into a banner painted under the panel's
+//     scrim, so nine rows appeared to do nothing;
 //   * QUIT left the engine at its menu, so the next poll reopened the panel
 //     under the exit message and offered Resume to an invisible game;
 //   * a key held when the panel opened never reached the engine as a release,
@@ -2052,7 +2078,33 @@ async function interfaceStateCheck(resolution) {
     "key_dest " + (chip.engine && chip.engine.keyDestName) + ", menuHidden " + chip.menuHidden);
   await resume();
 
-  // 2. QUIT stays quit.
+  // 2. A note row answers where the player can see it: inside the panel, not
+  // through the banner over the game (which this browser paints under the
+  // panel's scrim). Nine rows answer this way, and the panel stays open.
+  if (!(await openMenu())) fatal(label + ": the menu did not open for the note-answer check");
+  await click('[data-action="video"]');
+  await sleep(400);
+  const noteAnswer = await evaluate(`(() => {
+    const row = document.querySelector('.menu-view[data-view="video"] .setting[data-action="note"]');
+    if (!row) return null;
+    row.click();
+    const note = document.getElementById("menu-note");
+    if (!note) return { missing: true };
+    const style = getComputedStyle(note);
+    return { hidden: note.hidden, text: note.textContent.trim(), display: style.display,
+      insidePanel: Boolean(note.closest("#menu")), panelOpen: document.getElementById("menu-layer").hidden === false,
+      // A note that is laid out with a height is not a zero-size element.
+      height: Math.round(note.getBoundingClientRect().height) };
+  })()`);
+  check(label + ": a note row's answer is shown inside the open panel",
+    Boolean(noteAnswer) && noteAnswer.missing !== true && noteAnswer.hidden === false && noteAnswer.display !== "none" &&
+      /renderer/i.test(noteAnswer.text) && noteAnswer.insidePanel === true && noteAnswer.panelOpen === true &&
+      noteAnswer.height > 0,
+    "the note row's text is a visible element inside #menu while the panel stays up",
+    noteAnswer ? JSON.stringify(noteAnswer) : "the video view has no note row");
+  await resume();
+
+  // 3. QUIT stays quit.
   if (!(await openMenu())) fatal(label + ": the menu did not open for the QUIT check");
   await click('[data-action="quit"]');
   await sleep(2600);
@@ -2069,7 +2121,7 @@ async function interfaceStateCheck(resolution) {
   await reloadGame(resolutionUrl(resolution), label + " after the QUIT check");
   if (!(await ensureGame("after the QUIT check"))) fatal(label + ": the game did not resume after the QUIT check");
 
-  // 3. A key released while the panel is open reaches the engine.
+  // 4. A key released while the panel is open reaches the engine.
   const position = async () => (await state()).engine.position;
   const holdThenRelease = async (keyName) => {
     const start = await position();
@@ -2193,6 +2245,72 @@ async function ensurePageFullscreen(label) {
   } catch (error) {
     return false;
   }
+}
+
+// The normal page's own per-frame work, as the main thread pays for it: the
+// status-bar read-back is a synchronous framebuffer read every 1.2 s, the
+// interface poll runs eight times a second, and both stop in game mode. CDP's
+// Performance domain reports the thread's task duration; dividing its growth
+// by the frames drawn in the same window is a cost per drawn frame, which is
+// the comparison the owner asked for. The blocks interleave on one page and
+// one frozen scene, and each switch's settling time is discarded, so a slow
+// patch of the demo cannot be read as one presentation's cost.
+async function measureMainThreadCost(blocks = 6, seconds = 10) {
+  await cdp.send("Performance.enable");
+  const snapshot = async () => {
+    const result = await cdp.send("Performance.getMetrics");
+    const metrics = {};
+    for (const one of result.metrics) metrics[one.name] = one.value;
+    return { task: metrics.TaskDuration || 0, script: metrics.ScriptDuration || 0,
+      frames: await evaluate("(window.__q2verify && window.__q2verify.frames) || 0") };
+  };
+  const samples = [];
+  let mode = "page";
+  for (let index = 0; index < blocks; index++) {
+    if (mode === "game") await evaluate("window.quake2GameMode.enter('cost-sample')");
+    else await evaluate("window.quake2GameMode.exit('cost-sample', { keepFullscreen: true })");
+    await sleep(1200);
+    const before = await snapshot();
+    const startedAt = Date.now();
+    await sleep(seconds * 1000);
+    const after = await snapshot();
+    const frames = after.frames - before.frames;
+    samples.push({ mode, frames, seconds: (Date.now() - startedAt) / 1000,
+      taskPerFrame: frames ? ((after.task - before.task) * 1000) / frames : null,
+      scriptPerFrame: frames ? ((after.script - before.script) * 1000) / frames : null });
+    mode = mode === "page" ? "game" : "page";
+  }
+  const summarize = (name) => {
+    const list = samples.filter((one) => one.mode === name && one.frames > 0);
+    const frames = list.reduce((sum, one) => sum + one.frames, 0);
+    return { blocks: list.length, frames,
+      taskPerFrame: frames ? list.reduce((sum, one) => sum + one.taskPerFrame * one.frames, 0) / frames : null,
+      scriptPerFrame: frames ? list.reduce((sum, one) => sum + one.scriptPerFrame * one.frames, 0) / frames : null };
+  };
+  // Each game block immediately follows a page block, so the ratio inside a
+  // pair is what the mode did to the same load; the box's load drifts over a
+  // run (measured: one page block at 665 ms/frame, the next at 906), and a
+  // median over the whole run would read that drift as the mode's cost.
+  const pairs = [];
+  for (let index = 0; index + 1 < samples.length; index += 2) {
+    const first = samples[index], second = samples[index + 1];
+    if (first.mode === "page" && second.mode === "game" && first.frames && second.frames) {
+      pairs.push({ pageTaskPerFrame: first.taskPerFrame, gameTaskPerFrame: second.taskPerFrame,
+        ratio: second.taskPerFrame / first.taskPerFrame });
+    }
+  }
+  // What the mode removes, timed where it runs: one status-bar read-back is a
+  // synchronous framebuffer read plus digit recognition.
+  await evaluate("window.quake2GameMode.exit('cost-read', { keepFullscreen: true })");
+  await sleep(800);
+  const reads = [];
+  for (let index = 0; index < 5; index++) {
+    try {
+      const cost = await evaluate("(() => { const t = performance.now(); window.quake2Hud.readNow(); return performance.now() - t; })()");
+      if (Number.isFinite(cost)) reads.push(cost);
+    } catch (error) { /* the bar may not be readable on this frame */ }
+  }
+  return { samples, page: summarize("page"), game: summarize("game"), pairs, readBackMs: median(reads) };
 }
 
 async function gameModeCheck(resolution) {
@@ -2473,6 +2591,29 @@ async function gameModeCheck(resolution) {
   await evaluate("window.quake2GameMode.exit('frame-sample', { keepFullscreen: true })");
   await sleep(500);
 
+  // "Measurably cheaper per frame": the wall clock above is the software
+  // renderer's GPU-bound frame and cannot show page work; the main thread's
+  // task time can, because the status-bar read-back and the interface poll run
+  // on it. The samples are per drawn frame (the page counts its own rAF
+  // callbacks), interleaved on the same frozen scene, and every switch's
+  // settling time is discarded.
+  const cost = await measureMainThreadCost();
+  const pairRatios = cost.pairs.map((pair) => pair.ratio);
+  const pairMedian = median(pairRatios);
+  const cheaperPairs = pairRatios.filter((ratio) => ratio < 0.98).length;
+  const costDelta = pairMedian === null ? null : 1 - pairMedian;
+  check(label + ": game mode costs measurably less main-thread work per drawn frame",
+    cost.page.frames >= 12 && cost.game.frames >= 12 && cost.pairs.length >= 2 &&
+      cheaperPairs >= Math.ceil(cost.pairs.length / 2) && pairMedian !== null && pairMedian < 0.98,
+    "main-thread task time per drawn frame at least 2% lower in game mode, in most adjacent page/game pairs on one scene",
+    costDelta === null ? "no main-thread samples" :
+      "paired ratios (game/page) " + pairRatios.map((one) => one.toFixed(3)).join(", ") + " (median " +
+      pairMedian.toFixed(3) + ", " + (costDelta * 100).toFixed(1) + "% less); " + cost.page.frames +
+      " page frames and " + cost.game.frames + " game frames; a status-bar read-back costs " +
+      (cost.readBackMs === null ? "n/a" : cost.readBackMs.toFixed(1) + " ms") + " and game mode performs none");
+  await evaluate("window.quake2GameMode.exit('cost-sample', { keepFullscreen: true })");
+  await sleep(500);
+
   // The shortcut, both ways: Alt+Enter enters, Alt+Enter leaves (and takes the
   // full screen with it).
   await pressAltEnter();
@@ -2548,6 +2689,8 @@ async function gameModeCheck(resolution) {
     api, row, enter: { ...entered, layers }, blackout,
     frames: { page: pageStats, game: gameStats, pageSamples: (measured.page || []).length,
       gameSamples: (measured.game || []).length, meanDelta, medianDelta },
+    cpu: { page: cost.page, game: cost.game, delta: costDelta, pairs: cost.pairs, readBackMs: cost.readBackMs,
+      samples: cost.samples },
     pageWork: { attemptsOnPage: pageWorkEnd - pageWorkStart, attemptsInGame: gameWorkEnd - gameWorkStart,
       readsOnPage: pageWorkReadsEnd - pageWorkReadsStart, seconds: pageWorkSeconds },
     screenshots: [beforeEntry.file, duringEntry.file],
@@ -2612,17 +2755,64 @@ async function freezeDemo(label, frozen) {
   await sleep(frozen ? 900 : 600);
 }
 
+// Two pictures of the same scene: the fraction of sampled pixels that differ
+// outside a square around the crosshair. An on/off pair is only a measurement
+// of the crosshair if this is ~0; a ducking camera or a settling weapon
+// animates for a moment after the input and turns the pair into two pictures
+// (measured: the crouch pair's bbox grew to 22x31 because the view was still
+// dropping when the "off" frame was taken).
+function sceneDifferenceOutsideCentre(left, right, half = 30) {
+  const cx = Math.round(left.width / 2), cy = Math.round(left.height / 2);
+  let different = 0, total = 0;
+  for (let y = 0; y < left.height; y += 2) {
+    for (let x = 0; x < left.width; x += 2) {
+      if (Math.abs(x - cx) <= half && Math.abs(y - cy) <= half) continue;
+      const at = (y * left.width + x) * 4, bt = (y * right.width + x) * 4;
+      total++;
+      if (left.data[at] !== right.data[bt] || left.data[at + 1] !== right.data[bt + 1] ||
+        left.data[at + 2] !== right.data[bt + 2]) different++;
+    }
+  }
+  return total ? different / total : 1;
+}
+
+// A screenshot of a picture that has stopped changing: two captures a few
+// frames apart agree. The simulation is frozen with `timescale`, but the
+// camera's own duck/stand interpolation runs on real time, so a capture taken
+// right after C is pressed is still moving.
+async function steadyScreenshot(label) {
+  let previous = await stableScreenshot();
+  for (let attempt = 0; attempt < 6; attempt++) {
+    await waitFrames(3);
+    const next = await stableScreenshot();
+    if (sceneDifferenceOutsideCentre(decodePng(previous), decodePng(next), 0) < 0.002) return next;
+    previous = next;
+  }
+  note(label + ": the picture was still changing after six captures; using the last one");
+  return previous;
+}
+
 async function crosshairAimPair(name, meta) {
-  const on = await stableScreenshot();
-  const onEntry = await captureBuffer(name + "-on.png", on, 1280, 720, { ...meta, crosshair: "on" });
-  const stateOn = await crosshairStateNow();
-  await crosshairAlpha(0);
-  await waitFrames(2);
-  const off = await stableScreenshot();
-  const offEntry = await captureBuffer(name + "-off.png", off, 1280, 720, { ...meta, crosshair: "off (alpha 0)" });
-  await crosshairAlpha(stateOn ? stateOn.alpha : 0.45);
-  await waitFrames(2);
-  return { on: decodePng(on), off: decodePng(off), onEntry, offEntry, state: stateOn };
+  let on = null, off = null, onEntry = null, offEntry = null, stateOn = null, drift = 1;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    on = await steadyScreenshot(name + " on capture");
+    onEntry = await captureBuffer(name + "-on.png", on, 1280, 720, { ...meta, crosshair: "on" });
+    stateOn = await crosshairStateNow();
+    await crosshairAlpha(0);
+    await waitFrames(2);
+    // The crosshair is the only thing that may change: the scene was steady
+    // before the capture, and hiding the cross changes nothing behind it.
+    off = await stableScreenshot();
+    offEntry = await captureBuffer(name + "-off.png", off, 1280, 720, { ...meta, crosshair: "off (alpha 0)" });
+    await crosshairAlpha(stateOn ? stateOn.alpha : 0.45);
+    await waitFrames(2);
+    drift = sceneDifferenceOutsideCentre(decodePng(on), decodePng(off));
+    if (drift < 0.001) break;
+    note(name + ": the scene moved between the on and off frames (" + (drift * 100).toFixed(2) +
+      "% of pixels outside the cross); retaking the pair");
+    await sleep(1500);
+  }
+  return { on: decodePng(on), off: decodePng(off), onEntry, offEntry, state: stateOn, drift };
 }
 
 async function crosshairAimCheck(resolution) {

@@ -593,6 +593,12 @@ canvas {
   line-height: 1.6;
 }
 
+/* The answer to a note row, inside the panel (see app.js showPanelNote). */
+#menu-note {
+  margin: 14px 16px 0;
+  color: var(--amber);
+}
+
 .credits {
   margin-top: 8px;
   color: #cfc9bb;

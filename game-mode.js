@@ -103,13 +103,21 @@
     }
     return Promise.resolve(result).then(function () {
       state.fullscreen = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
-      if (!state.fullscreen) state.reason = "fullscreen-request-did-not-take";
+      // A request that did not take must not block the next one: the comment
+      // below promises that the next click asks again, and leaving `requested`
+      // set was what stopped it from ever doing so.
+      if (!state.fullscreen) {
+        state.reason = "fullscreen-request-did-not-take";
+        state.requested = false;
+      }
       return state.fullscreen;
     }, function (error) {
       // A missing gesture is fixed by the next click; a permission policy
-      // refusal is not. Either way the page-level mode still applies.
+      // refusal is not. Either way the page-level mode still applies, and the
+      // next click (a gesture) asks again -- see the pointerdown retry below.
       state.reason = String((error && error.message) || error || "fullscreen refused");
       state.fullscreen = false;
+      state.requested = false;
       return false;
     });
   }
@@ -210,8 +218,11 @@
     } catch (error) { /* no CustomEvent: the API still works */ }
     var value = document.getElementById("game-mode-value");
     if (value) value.textContent = state.active ? "on" : "off";
-    for (var i = 0; i < document.querySelectorAll('[data-action="game-mode"]').length; i++) {
-      document.querySelectorAll('[data-action="game-mode"]')[i].setAttribute("aria-pressed", state.active ? "true" : "false");
+    // One query, not one per row: the loop used to run querySelectorAll again
+    // for every iteration, which is a live DOM search per button.
+    var rows = document.querySelectorAll('[data-action="game-mode"]');
+    for (var i = 0; i < rows.length; i++) {
+      rows[i].setAttribute("aria-pressed", state.active ? "true" : "false");
     }
   }
 
@@ -238,6 +249,18 @@
 
   function enter(source) {
     if (state.active) return Promise.resolve(status());
+    // The shortcut can arrive while the dark panel is up, and this page's own
+    // key handler never sees Alt+Enter (the shortcut stops it). Ask the page to
+    // resume first, so the mode never hides every control while the engine is
+    // still paused at its menu. When the mode is entered from its VIDEO row,
+    // the page has already resumed and this is a no-op.
+    try {
+      if (window.quake2App && typeof window.quake2App.isMenuOpen === "function" && window.quake2App.isMenuOpen()) {
+        window.quake2App.resume();
+      }
+    } catch (error) {
+      console.warn("Game mode: could not resume the paused game:", error);
+    }
     state.active = true;
     state.source = source || "api";
     state.since = nowIso();
@@ -314,6 +337,30 @@
   }
   document.addEventListener("fullscreenchange", onFullscreenChange);
   document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+  // A request refused for want of a gesture is asked again on the next click
+  // inside the mode -- the click that grabs the mouse is also a gesture, and
+  // it is the only moment a browser accepts one. requestFullscreen clears
+  // `requested` on a refusal so this is not blocked forever.
+  document.addEventListener("pointerdown", function () {
+    if (!state.active || state.requested) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    void requestFullscreen();
+  }, true);
+
+  // Esc leaves the mode where the browser has no full screen to leave -- a
+  // sandboxed frame refuses the request outright, and then Esc would otherwise
+  // reach the engine and open its (suppressed) menu with no page control left.
+  // With full screen on, the browser consumes Esc itself and the
+  // fullscreenchange handler above is the way out; this does not interfere.
+  document.addEventListener("keydown", function (event) {
+    if (!state.active) return;
+    if (event.key !== "Escape" && event.keyCode !== 27) return;
+    if (document.fullscreenElement || document.webkitFullscreenElement) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    exit("keyboard");
+  }, true);
 
   window.addEventListener("pagehide", function () {
     closeBlackouts();

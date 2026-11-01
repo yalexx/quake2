@@ -673,11 +673,16 @@ function describeKey(name, shiftHeld) {
 // One WebSocket to one CDP target. CDP messages are JSON: requests carry an
 // id, replies echo it, and events come without one.
 class CdpSession {
-  constructor(socket) {
+  constructor(socket, timeoutMs = DEFAULT_TIMEOUT_MS) {
     this.socket = socket;
     this.nextId = 0;
     this.pending = new Map();
     this.listeners = new Set();
+    // The bridge's contract is that every round trip is bounded (see
+    // options.timeoutMs below); a send that is never answered has to be bounded
+    // here too, or a wedged target leaves its promise pending forever and every
+    // later call queues behind it.
+    this.timeoutMs = timeoutMs;
     socket.addEventListener("message", (event) => this.onMessage(event.data));
     socket.addEventListener("close", () => this.fail(new ControlError("the CDP socket closed", "DISCONNECTED")));
     socket.addEventListener("error", () => this.fail(new ControlError("the CDP socket failed", "DISCONNECTED")));
@@ -698,7 +703,7 @@ class CdpSession {
       }, timeoutMs);
       socket.addEventListener("open", () => {
         clearTimeout(timer);
-        resolve(new CdpSession(socket));
+        resolve(new CdpSession(socket, timeoutMs));
       }, { once: true });
       socket.addEventListener("error", () => {
         clearTimeout(timer);
@@ -721,6 +726,7 @@ class CdpSession {
     const entry = this.pending.get(message.id);
     if (!entry) return;
     this.pending.delete(message.id);
+    clearTimeout(entry.timer);
     if (message.error) entry.reject(new ControlError("CDP " + entry.method + " failed: " + message.error.message, "CDP_ERROR"));
     else entry.resolve(message.result);
   }
@@ -735,7 +741,10 @@ class CdpSession {
     this.closed = true;
     const pending = [...this.pending.values()];
     this.pending.clear();
-    for (const entry of pending) entry.reject(error);
+    for (const entry of pending) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
   }
 
   send(method, params = {}) {
@@ -745,11 +754,20 @@ class CdpSession {
         reject(new ControlError("the CDP socket is closed", "DISCONNECTED"));
         return;
       }
-      this.pending.set(id, { resolve, reject, method });
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.pending.delete(id);
+        reject(new ControlError("the CDP call " + method + " did not answer within " + this.timeoutMs + " ms", "TIMEOUT"));
+        // A target that cannot answer is wedged; drop the socket so the next
+        // call re-resolves it instead of queueing behind this one.
+        this.fail(new ControlError("the CDP socket was dropped after a timeout", "DISCONNECTED"));
+      }, this.timeoutMs);
+      this.pending.set(id, { resolve, reject, method, timer });
       try {
         this.socket.send(JSON.stringify({ id, method, params }));
       } catch (error) {
         this.pending.delete(id);
+        clearTimeout(timer);
         reject(new ControlError("the CDP socket failed: " + error.message, "DISCONNECTED"));
       }
     });

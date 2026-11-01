@@ -1,5 +1,142 @@
 # Changelog
 
+## The game mode, measured; the aiming crosshair, finished
+
+This run picked up the stopped branch at `53c43e4` and finished its three
+outcomes: it made the game mode's saving a measurement rather than a claim,
+fixed the two acceptance checks that the extended suite could not pass, and
+swept the page once more for state and per-frame defects.
+
+### The game mode is measurably cheaper per frame
+
+The earlier pass could show only that game mode adds no wall-clock frame time:
+in the headless software renderer the frame is GPU-bound, so the page work the
+mode removes hides under the render. This run measured the main thread instead.
+On one page, one frozen scene and one full-screen state, six ten-second blocks
+alternated page and game mode; CDP's Performance domain gave the thread's task
+duration and the page counted its own rAF frames, so each adjacent page/game
+pair compares main-thread work per drawn frame under the same load. Three pairs
+measured **0.923, 0.925 and 0.917** of the page's task time per frame (7.7-8.3%
+less), and the game presentation drew **46 frames to the page's 41** over the
+same sampling. A forced status-bar read-back — the synchronous framebuffer read
+plus digit recognition the page schedules every 1.2 s — cost 0.3-1.4 s per read
+on this loaded box (median 1.05 s), and game mode performs none. The acceptance
+runner now asserts the saving (at least 2% less main-thread work per frame in
+most adjacent pairs, interleaved on the frozen scene) and keeps the wall-clock
+requirement that the mode adds no frame time. The previous section's "no
+percentage is claimed" is superseded by this measurement; the wall-clock
+percentage is still not claimed.
+
+### Two acceptance checks could not pass on the scene they were given
+
+Both were written by the previous pass and never run to completion there. Each
+expected value is unchanged; what changed is how the measured scene is
+produced, and the measurement that made the old production wrong is recorded
+here.
+
+- **The bright pair was not bright.** The crosshair boots let the demo play for
+  ten seconds before freezing, so the camera was wherever the software renderer
+  had got to. Measured in the first full run: the "bright" background came out
+  at luma 48.4 with **0 of 72** cross pixels above 100, against a requirement of
+  at least 4. The fix is `timescale 0` on the engine's start-up line, so every
+  capture is the map's spawn: four probe boots all landed at
+  (128.06, -319.94, 46.19), yaw 135. On that frozen spawn the menu defaults give
+  a background luma median of 44.5 (59 of 1089 centre-window pixels at or above
+  100) and the menu maximum (colour intensity 5, overbrights 2) gives **102.3
+  with 572 of 1089 at or above 100** — the bright background the check was
+  written for.
+- **The crouch pair was two pictures.** Pressing C lowers the view, and that
+  interpolation runs on real time after the trigger, so the "on" and "off"
+  frames were taken at two camera heights. Measured: the crouch cross's box grew
+  to **22x31** against the resting 21x21 (and 40 pixels wide of the 20 px quad
+  the state reported). The on/off pairs now wait for a picture that has stopped
+  changing before each capture and reject a pair whose scene moved outside the
+  cross, retaking it once; the scene is the same in both frames, so the diff is
+  the crosshair again.
+
+### Fixed (the second sweep)
+
+The findings below were produced by a four-way read of the page and the control
+bridge and then each checked against the source by an independent verifier;
+fourteen stood up, and the ones that are page behaviour are fixed here.
+
+- **Every note row's answer was lost.** Nine clickable rows (the four
+  multiplayer notes, renderer, ui scale, sound backend, customize controls, go
+  to console) answer through `showBanner`, but while the panel is up this
+  browser paints the banner under the panel's scrim. Measured in headless
+  Chrome: the banner was the topmost element in the browser's own hit test at
+  its centre (`banner-text, banner, menu-scrim`) yet no pixel of it reached the
+  frame (max red channel 6 inside its rectangle, 0 amber pixels), and that held
+  with its animation disabled, with it moved after the menu layer, and with the
+  menu layer hidden. Clicking a note row appeared to do nothing, and so did
+  Apply's "Nothing to apply". Those answers are now written into a `#menu-note`
+  line inside the panel; the acceptance runner checks that line is visible,
+  inside `#menu`, carries the row's text, and that the panel stays up.
+- **Save game / load game from the panel unpaused the game.** `pauseForKey`
+  closed the engine's menu and sent F6/F9 260 ms later, but the interface poll
+  saw `key_dest` 0 with the panel still up and hid it; the game ran, unlocked,
+  for about half a second, the re-pause then reopened the engine menu, and the
+  panel came back on the main view instead of the one the player was on. The
+  panel is held for the whole key flight and the re-pause is now explicit.
+- **Alt+Enter over the panel was eaten and activated the focused row.** The
+  panel's key handler (registered before game-mode.js) treated Enter as
+  "activate", so the game-mode shortcut could click QUIT or start a new game.
+  Alt+Enter now passes through to the shortcut, which resumes the paused game
+  before it hides the interface.
+- **Escape did nothing for up to 900 ms after Resume.** The closing hold gated
+  both the pointer-lock pause path and the engine-menu poll. It is now released
+  as soon as the engine reports `key_dest` 0, and its timer stays as a bound.
+- **The first Escape after using the console was swallowed.** Any menu within
+  1.5 s of a console sample was assumed to be the console's trailing Escape and
+  closed, so "close the console, press Escape to pause" ate the key. The app now
+  records real Escape presses (its own taps are marked synthetic) and only
+  suppresses a menu that no person asked for.
+- **The footer's Resume and Back were outside the keyboard ring.** `visibleButtons`
+  collected the current view's rows only; the footer buttons are outside every
+  view, so Tab/arrows could never reach them. They are part of the ring now.
+- **Game mode had no way out where full screen is refused.** In a sandboxed
+  frame (where fullscreen.js documents that full screen is disallowed) the mode
+  hid every control and Esc could only reach the engine's suppressed menu.
+  Escape now leaves the mode whenever the document is not full screen.
+- **A refused full-screen request was never tried again.** `requestFullscreen()`
+  left `state.requested` set after a refusal while its own comment promised the
+  next click would ask again. The flag is cleared on both refusal paths and a
+  pointerdown inside the mode (a gesture) re-asks.
+- **The interface poll took a whole engine reading for one word.** `read()`
+  builds position, angles, two arrays and an ISO timestamp; the poll only needs
+  `cls.key_dest`, and now calls the one-word `quake2Engine.keyDest()` with the
+  full reading as a fallback.
+- **The crosshair's frame was counted twice.** The engine's crosshair draw was
+  counted when it was recognised and the replacement draw was counted again, so
+  `status().crosshairDraws` reported two per frame (the runner saw 4 over two
+  frames). One draw, one count.
+- **A `crosshair_scale` below 1 drew the engine's maximum cross.** The start-up
+  read treated any value under 1 as "missing" and fell back to scale 3, drawing
+  24 px where the engine's 8 x scale would be 4 px. Any positive value is now
+  honoured up to the engine's cap of 3.
+- **Two allocations per drawn frame in the renderer:** the crosshair's tint and
+  opacity comparison key was rebuilt (a string and an array join) every frame,
+  and an empty model-skin list was allocated every frame. Both are now built
+  only when the values change / kept as one shared empty list.
+- **The game-mode row searched the DOM once per row** to update `aria-pressed`;
+  the list is queried once.
+- **The control bridge's CDP calls had no timeout.** `CdpSession.send` settled
+  only on a reply or a socket close, so a wedged target left the promise pending
+  and every later call queued behind it; the project's own contract says every
+  round trip is bounded. Each send now has the session's timeout, and a timeout
+  drops the socket so the next call re-resolves the target.
+
+Two control-bridge findings are recorded but not fixed here: a missing `condump`
+flips the bridge's console model the wrong way (the retry can type into the
+game), and the one-shot reconnect retry re-sends a partially delivered key
+string. Both need the bridge to read the engine's real `key_dest` before typing;
+that is a larger change than this run could verify, and the bridge is the
+harness rather than what the owner plays.
+
+### Verification
+
+VERIFICATION_PLACEHOLDER
+
 ## Game mode, an aiming crosshair, and the interface defects behind them
 
 ### Added
