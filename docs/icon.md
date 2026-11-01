@@ -193,6 +193,13 @@ Measured, not judged (the checker is beside the evidence, `icon-check.py`):
 | tail present | two prongs below the bowl (112..121 and 134..143 at row 223) with the gap empty between them |
 | served favicon byte-identical to the file | `GET /apps/quake2/favicon.png` from a server started in this checkout: HTTP 200, 2105 bytes, sha256 identical |
 
+The app's own presentation suite is unchanged by any of this — it does not
+look at the icon files — and was run against the live app after the icon was
+installed: `node scripts/verify-presentation.mjs --url
+http://127.0.0.1:4231/apps/quake2/` → **PASS, 148/148 checks, 0 failures, 0
+console errors, 0 page exceptions, 27 screenshots** (report in the run's
+evidence folder).
+
 The one check that cannot pass from here: **port 4231 serves a different
 checkout.** The desktop's Quake 2 app runs `node server.js` in
 `~/Projects/quake2` (the main checkout, at the live build), not in this
