@@ -31,7 +31,8 @@ below it. The wordmark, the picture's bottom-left watermark and one bright
 patch of wall at x 537..559 are excluded by region and by dropping components
 under 40 pixels. Enclosed specks inside the stone smaller than 40 pixels are
 filled; the gap between the two prongs is far larger than that and is kept, as
-it must be — it is 10% of the emblem's area.
+it must be — filling it in would add about a tenth of the emblem's area back
+as ink, and the "II" would stop reading as two prongs.
 
 | measurement | value |
 | --- | --- |
@@ -186,11 +187,19 @@ Measured, not judged (the checker is beside the evidence, `icon-check.py`):
 | every asset opens in PIL at its exact size and mode | 256 RGB, 180 RGB, 64 RGB, ico 16/32/48/64 |
 | the ICO holds all four sizes | 16, 32, 48, 64 — each a PNG entry |
 | silhouette IoU, 256 icon vs the thresholded reference | **0.848** (180: 0.834; 64: 0.746) |
-| ink vs plate luminance | 137.6 vs 9.1 → **delta 129** (needs 60) |
-| bowl present | ring pixels at 9, 12 and 3 o'clock, left and right of centre |
-| tail present | two prongs below the bowl, separated, reaching the bottom |
-| inner mark present | bar above the prongs, prongs between the bowl's arms |
-| served favicon byte-identical to the file | `GET /apps/quake2/favicon.png?v=icon1` |
+| ink vs plate luminance | 137.6 vs 8.8 → **delta 129** (needs 60) |
+| bowl present | at the reference's widest row: ink on both edges of the mark's box, nothing in the middle |
+| inner mark present | 82 px of ink across the middle where the bar is (the bar is 86 px wide in the reference) |
+| tail present | two prongs below the bowl (112..121 and 134..143 at row 223) with the gap empty between them |
+| served favicon byte-identical to the file | `GET /apps/quake2/favicon.png` from a server started in this checkout: HTTP 200, 2105 bytes, sha256 identical |
+
+The one check that cannot pass from here: **port 4231 serves a different
+checkout.** The desktop's Quake 2 app runs `node server.js` in
+`~/Projects/quake2` (the main checkout, at the live build), not in this
+worktree, so `GET /apps/quake2/favicon.png` there still returns the old
+picture until this branch is the one that is deployed. Everything above about
+the served file was measured against a server started from this checkout on
+its own port, with the same `server.js`.
 
 ## 5. Reproducing
 
