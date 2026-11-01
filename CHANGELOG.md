@@ -1,5 +1,84 @@
 # Changelog
 
+## Game mode, an aiming crosshair, and the interface defects behind them
+
+### Added
+
+- **Game mode: the game surface alone.** `game-mode.js` adds a `game mode` row
+  to VIDEO and the Alt+Enter shortcut. Entering removes every page layer, paints
+  the page black around the picture, lays the canvas out to fill the display at
+  the engine's own aspect ratio and asks for full screen on the game's display.
+  `window.quake2GameMode` exposes `enter`, `exit`, `toggle` and an honest
+  `status()`. Where the Window Management API exists and the owner allows it,
+  one opaque black window is opened on every additional display; with one
+  display, or without the permission, `status().blackout` says so and nothing is
+  claimed — a page cannot paint a monitor it has no window on, nor hide another
+  application's windows, and the README says both. Esc, the browser's own way
+  out of full screen, leaves the mode too, so the interface is never stranded
+  hidden; fullscreen.js's full-screen-on-open and the `?v=` tags are unchanged.
+- **What the frame measurement showed.** The mode removes the page's own
+  per-frame work: the status-bar read-back (a framebuffer read every 1.2 s —
+  22% of the page's main-thread samples in a Chrome profile), the interface poll
+  and every page layer. In the headless software renderer the frame is GPU-bound
+  (the main thread is ~30% busy), so the wall-clock difference is within noise:
+  on one page, one frozen scene and one full-screen state, 161/160 interleaved
+  frames gave medians of 166.7 vs 166.7 ms and means of 169.9 vs 167.4 ms, and a
+  second run gave 161.6 vs 161.0 ms. The acceptance check therefore proves the
+  removed work (the read counter stops in game mode and advances on the page)
+  and requires the mode to add no frame time, rather than asserting a percentage
+  the software renderer cannot show. No percentage is claimed.
+- **The crosshair follows the aim.** The engine's 8x8 picture is drawn by the
+  renderer at a size that follows the weapon in hand (the blaster is 1.00;
+  heavier weapons spread 1.08–1.35, named from pak0's own skin sizes), widens
+  while the trigger is held (+0.35, fast out, unhurried back) and narrows while
+  C is held (−18%). `crosshair 0` still submits no draw and `crosshair_scale`
+  still sets the base size (a scale-2 boot measures a 16px quad); the colour is
+  unchanged. The default opacity is 0.45 rather than 0.500, and the runner
+  measures 0.450 on both backgrounds.
+- **The acceptance runner grew from 148 to 178 checks**: the game-mode
+  presentation and its work removal, the crosshair's weapon/trigger/crouch
+  behaviour with measured pixels, and the three interface defects below.
+
+### Fixed (the sweep)
+
+- **The panel swallowed the app's own keys.** Its window-level key handler runs
+  before the engine's and called `stopImmediatePropagation`, so the synthetic
+  Escape the Options chip sends never reached the engine: the chip showed the
+  panel and closed it a second later without pausing anything, and Save game /
+  Load game could not send F6/F9. Taps now carry `__q2synthetic` and the panel
+  lets them through.
+- **QUIT did not stick.** The engine stays at its menu after QUIT, so the next
+  interface poll reopened the panel under the exit message and offered Resume to
+  an invisible game. A `quitting` flag keeps it down.
+- **A key released while the panel was open never reached the engine.** The
+  keyup handler stopped propagation, so a movement key held when the panel
+  opened stayed down and the player kept walking after Resume. Releases now
+  reach the engine (measured: 65 units walked with W held, 0.0 drift after the
+  release through the panel).
+- **"Open in its own window" reloaded the page it meant to keep.** `window.open`
+  with `"noopener"` returns null by specification even when the window opened,
+  so the fallback reloaded the running game. The opener is severed on the
+  returned window instead and the reload happens only when nothing opened.
+- **A whole engine reading for one word, every rendered frame.** The renderer
+  sampled `cls.key_dest` with `quake2Engine.read()`, which builds views, arrays
+  and an ISO timestamp per frame. `quake2Engine.keyDest()` returns the word.
+- **The status-bar reader rescanned the whole bar on every retry.** Discovery
+  was keyed to successful reads, so a bar that did not read kept running the
+  full-width correlation on every attempt. It is keyed to attempts now.
+- **A fresh array, Set and spread on every model draw.** Skin-size bookkeeping
+  is reused across draws.
+- **The interface poll rewrote unchanged DOM eight times a second.** Hidden
+  flags are written only when they change, and the poll stops entirely in game
+  mode.
+
+### Verification
+
+`node scripts/verify-presentation.mjs` drives the real page at 1280x720 and
+2560x1440 (headless Chrome, SwiftShader) and passes every check; the frame
+numbers above come from interleaved in-page samples, and the crosshair's sizes
+and opacity from on/off screenshot pairs taken with the simulation frozen.
+
+
 What changed and why, newest first. The state of the art pipeline -- what is in
 the archive, where the art lives, the commands and the measurements behind them
 -- is in [Texture art](README.md#texture-art); the per-namespace records are in

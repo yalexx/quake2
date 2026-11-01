@@ -6,7 +6,7 @@
 <meta name="color-scheme" content="dark">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx6">
+<link rel="stylesheet" href="style.css?v=rtx7">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -121,7 +121,14 @@
           <button type="button" data-action="reset-video"><span class="label">reset to default</span></button>
           <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint">no changes</span></button>
         </nav>
+        <!-- A page control, not an engine row: the engine's VIDEO list above is
+             exactly its own (the acceptance runner compares it row for row), so
+             game mode sits under it in its own list. -->
+        <div class="menu-page-list" role="group" aria-label="Page presentation">
+          <button type="button" class="setting" data-action="game-mode" aria-pressed="false"><span class="label">game mode</span><span class="value" id="game-mode-value">off</span></button>
+        </div>
         <p class="field-help">video mode is the engine's own r_mode list (its 33 modes, then auto and custom); applying restarts the level at that mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). The engine's <i>custom</i> ui scale and the 91–120° field-of-view range are not offered; see docs/presentation-fixes.md.</p>
+        <p class="field-help"><b>game mode</b> (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop it allows the Window Management API it also blacks out each additional display. Esc leaves full screen and the mode. It is not the engine's own <i>fullscreen</i> row above, which the engine applies on its next start.</p>
       </div>
 
       <!-- OPTIONS: the engine's options menu, row for row. The engine applies
@@ -178,10 +185,11 @@
 <!-- Live engine state, read out of the WASM memory. Loaded first and inert at
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
-<script src="engine-state.js?v=rtx6"></script>
+<script src="engine-state.js?v=rtx7"></script>
 <script src="rtx-materials.js?v=rtx6"></script>
-<script src="rtx-renderer.js?v=rtx6"></script>
-<script src="app.js?v=rtx6"></script>
-<script src="fullscreen.js?v=rtx6"></script>
+<script src="rtx-renderer.js?v=rtx7"></script>
+<script src="app.js?v=rtx7"></script>
+<script src="fullscreen.js?v=rtx7"></script>
+<script src="game-mode.js?v=rtx7"></script>
 </body>
 </html>

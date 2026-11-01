@@ -134,8 +134,18 @@
   function openOwnWindow() {
     // A top-level document is what full screen needs; on the box's screen the
     // desktop opens it as a kiosk tab that already fills the display.
-    var opened = window.open(window.location.href, "_blank", "noopener");
-    if (!opened) window.location.href = window.location.href;
+    //
+    // "noopener" in the feature string makes window.open return null even when
+    // the window *did* open (the spec says so), so the old fallback reloaded
+    // this page and threw away the running game after successfully opening the
+    // new window. Sever the opener from the new window instead, and reload only
+    // when nothing was opened at all.
+    var opened = window.open(window.location.href, "_blank");
+    if (opened) {
+      try { opened.opener = null; } catch (error) { /* already cross-origin or closed */ }
+    } else {
+      window.location.href = window.location.href;
+    }
   }
 
   button.addEventListener("click", function (event) {

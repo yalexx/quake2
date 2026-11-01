@@ -168,6 +168,38 @@ the old status bar (218 bright old-HUD pixels under it when the HUD is hidden,
 it is shown), that the engine's crosshair is drawn (190.2 on / 15.4 off), and
 that VIDEO's `video mode` row restarts the level at 1366x768.
 
+## Game mode and the aim crosshair
+
+The 1280x720 pass also drives the two new behaviours end to end.
+
+- **Game mode** (VIDEO > game mode, or Alt+Enter): every page layer is gone
+  (`#ui`, the full-screen control and the boot plate are `display:none`), the
+  page is black on `<html>` and `<body>`, the canvas fills the viewport at the
+  engine's aspect ratio, the drawing buffer and resolution do not change, and
+  full screen is held. `status().blackout` reports one display and no Window
+  Management permission, so no other monitor is claimed. Alt+Enter enters and
+  leaves; leaving full screen with `document.exitFullscreen()` leaves the mode
+  too. The frame comparison is interleaved on one page with a frozen scene:
+  medians were equal and the means within about 2% (measured 169.9 vs 167.4 ms
+  and 161.6 vs 161.0 ms over 161/160 frames in two probe runs), because the
+  software renderer's frame is GPU-bound. The check therefore proves the page
+  work is removed — the status-bar read counter advances on the page and stops
+  in game mode — and requires the mode to add no frame time, rather than
+  asserting a percentage the renderer cannot show.
+- **The aim crosshair:** from a fresh demo1 with `give all` and `god`, the
+  blaster's cross is a 24px quad (21px of picture) at factor 1.00; the shotgun's
+  is wider; holding the trigger grows the quad to 32px and releasing settles it
+  back; holding C shrinks it to 20px; a `crosshair_scale 2` boot draws 16px. The
+  opacity is configured at 0.45 and measured at 0.450 on the dark and bright
+  backgrounds. Every on/off pair is captured with `timescale 0` (the renderer
+  keeps drawing), so the only pixels that differ between the two frames are the
+  crosshair's own.
+- **The interface defects the sweep fixed** are checked on the running page:
+  the Options chip pauses the game and the panel stays; QUIT leaves the panel
+  down behind the exit message; and a key released while the panel is open
+  reaches the engine (the player walked 65 units with W held and drifted 0.0
+  units after the release through the panel).
+
 ## What remains unverified
 
 - **Software rendering only, by the runner's choice.** SwiftShader, not the
@@ -206,6 +238,8 @@ that VIDEO's `video mode` row restarts the level at 1366x768.
   uses the engine's saved custom size; and the fullscreen values are passed on
   the start-up line but the resulting display mode was not exercised headless.
   The full list is in [Presentation fixes](presentation-fixes.md).
-- **Not exercised headless:** audio, pointer lock and mouse look, firing, game
-  saves, the Fullscreen API.
+- **Not exercised headless:** audio, mouse look and game saves. The fullscreen
+  API is exercised by the game-mode checks; multi-display blackout needs the
+  Window Management API and a second display, so only the mode's honest report
+  of that is checked (see below).
 - **No PR.** The work is committed on the project branch only.

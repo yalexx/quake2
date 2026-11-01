@@ -84,9 +84,57 @@ one dark layer in `index.html` / `style.css` / `app.js`:
   prompt and a restrained banner for map changes. The canvas, the engine HUD,
   its pickup messages and its console are untouched.
 
-Keyboard and mouse both work: the panel swallows keystrokes only while it is
-open (so the engine's menu cannot scroll underneath it), and after Resume the
-game handles them exactly as before.
+Keyboard and mouse both work: the panel swallows key presses only while it is
+open (so the engine's menu cannot scroll underneath it), lets the engine see
+release events (a key held when the panel opened must not stay down) and lets
+the app's own engine taps through, and after Resume the game handles them
+exactly as before.
+
+### Game mode (native full screen)
+
+The VIDEO menu has a `game mode` row, and Alt+Enter toggles the same mode while
+the game has the keyboard. It is this page's native-game presentation: every page layer — the
+chips, the panel, the full-screen control, the boot plate — is removed, the page
+is black around the picture, and the game surface fills the display at the
+engine's own aspect ratio (the bars are the black page, not browser background).
+The mode asks for full screen on the display the game is on, which is what
+removes the browser chrome.
+
+- **What it costs.** The mode removes the page's own per-frame work: the
+  status-bar read-back (a framebuffer read every 1.2 s — 22% of the page's
+  main-thread samples in a Chrome profile of the headless run), the interface
+  poll, and every page layer. In the headless software renderer the frame time
+  is GPU-bound, so the wall-clock difference is within run-to-run noise:
+  interleaved on one page and one frozen scene the medians are equal and the
+  means are within about 2%. The acceptance check therefore proves the removed
+  work directly (the read counter stops in game mode, the interface is gone) and
+  requires game mode to add no frame time, rather than asserting a percentage
+  the software renderer cannot show. On the box's GPU the compositor share is
+  not measured here and is not claimed. The engine, the scene, the renderer and
+  the resolution are untouched.
+- **Other displays, stated honestly.** A web page cannot paint a monitor it has
+  no window on. Where the Window Management API exists and the owner allows it,
+  game mode opens one opaque black window on every additional display and
+  reports what it actually did in `window.quake2GameMode.status().blackout`;
+  with one display, or without the permission, it reports that instead and never
+  claims a monitor went black. No page can hide other applications' windows.
+- **Way back.** Alt+Enter leaves the mode. Esc — the browser's own way out of
+  full screen — leaves it too: the mode ends when full screen does, so the page
+  interface is never stranded hidden, whichever control ended it.
+
+### The crosshair's aim feedback
+
+The crosshair is still the engine's own 8x8 picture (`crosshair 0` submits no
+draw; `crosshair_scale` sets the base size). `rtx-renderer.js` now draws that
+picture itself at a size that follows the weapon in hand, widens while the
+trigger is held and narrows while crouching (C): the blaster is the reference
+(1.00), heavier weapons spread to 1.08–1.35, the trigger adds up to +0.35 of the
+size and the crouch removes 18%, with a fast expansion and a slower settle back.
+The colour is unchanged; the default opacity is 0.45 (was 0.500) — a little more
+transparent, and measured below 0.5. The weapon in hand is named from the skin
+size the engine binds for the view model it draws last (pak0's own skin headers
+supply the sizes), and the trigger and crouch keys are read from the page's own
+trusted input events, cleared whenever the game does not own the keyboard.
 
 ## Models
 

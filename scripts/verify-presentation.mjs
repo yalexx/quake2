@@ -265,7 +265,7 @@ async function ensureServer() {
   // The 4231 port can outlive a run and still serve another checkout. Prove
   // that what the browser will load is this working tree, file by file.
   const compared = [];
-  for (const file of ["index.html", "style.css", "rtx-renderer.js", "app.js", "fullscreen.js",
+  for (const file of ["index.html", "style.css", "rtx-renderer.js", "app.js", "fullscreen.js", "game-mode.js",
     "engine-state.js", "rtx-materials.js", "baseq2/pak10.pak"]) {
     const served = await fetchManual(new URL(file, options.url));
     const servedBytes = served ? Buffer.from(await served.arrayBuffer()) : Buffer.alloc(0);
@@ -1014,8 +1014,14 @@ async function navigateResolution(resolution) {
   const mode = R_MODES[resolution.label];
   if (!mode) fatal("no r_mode for the measured display " + resolution.label + "; add it to R_MODES");
   console.log("\n  resolution " + resolution.label + " (r_mode " + mode + ")");
+  // The screen is pinned to the same size as the viewport: headless Chrome
+  // otherwise reports an 800x600 screen, and a full-screen request would then
+  // resize the page out from under a game-mode frame measurement (measured: a
+  // fullscreen game dropped the viewport to 800x544 and shrank the composited
+  // area, which is a measurement artifact, not a cheaper frame).
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: resolution.width, height: resolution.height, deviceScaleFactor: 1, mobile: false,
+    screenWidth: resolution.width, screenHeight: resolution.height,
   });
   // The engine applies r_mode from the page's query string at start-up; this
   // is a real boot at the requested resolution, not a resize after the fact.
@@ -1232,7 +1238,11 @@ async function statusBarCheck(resolution) {
     try {
       // 2560x1440 on SwiftShader runs at ~1.4 fps, so a 400 ms wait can fall
       // between two frames and the strip would be reported as "no frame".
-      strip = await canvasStrip(consoleBridge.control, { band: 40, waitMs: label === "2560x1440" ? 2500 : 1200 });
+      // Longer than the slowest frame this software renderer produces: at
+      // 2560x1440 the median is ~1.4 s and the p95 over 3 s, and a read that
+      // lands with no frame in its window returns nothing (measured: one run's
+      // 2500 ms window missed a frame on a 2560-px boot).
+      strip = await canvasStrip(consoleBridge.control, { band: 40, waitMs: label === "2560x1440" ? 12000 : 6000 });
       if (strip) {
         reading = readHealth(strip.png, strip.readOptions);
         const health = reading.healthReading;
@@ -1424,7 +1434,7 @@ async function stableScreenshot() {
   return buffer;
 }
 
-async function crosshairBoot(resolution, name, crosshair, bright) {
+async function crosshairBoot(resolution, name, crosshair, bright, options = {}) {
   const label = resolution.label;
   const suffix = crosshair === "0" ? "-off" : "";
   const brightness = bright ? BRIGHT_STARTUP : DARK_STARTUP;
@@ -1438,6 +1448,18 @@ async function crosshairBoot(resolution, name, crosshair, bright) {
   // The engine's loading plaque fades out a moment after the first picture;
   // let it finish so the capture is the player's view, not the plaque.
   await sleep(10000);
+  // Freeze the simulation, not the renderer: at 2560x1440 two frames span
+  // seconds and the moving scene was measured as 1504 differing pixels around
+  // the cross. A frozen scene makes the on and off pictures the same picture
+  // apart from the crosshair itself. The next boot reloads, which restores
+  // timescale; the check's own final reload does the same for the suite.
+  if (options.freeze !== false) {
+    await consoleBridge.runUntilEcho("timescale 0");
+    if (!(await ensureGame("freezing the demo for the crosshair capture"))) {
+      fatal(label + ": the game did not resume with the demo frozen for " + name + " / crosshair " + crosshair);
+    }
+    await sleep(900);
+  }
   const view = bright
     ? "the demo1 spawn with colour intensity 5 (a brighter scene, same camera)"
     : "engine default at the demo1 spawn";
@@ -1455,10 +1477,29 @@ async function crosshairBoot(resolution, name, crosshair, bright) {
 
 async function crosshairPair(resolution, name, bright) {
   const on = await crosshairBoot(resolution, name, "1", bright);
-  const off = await crosshairBoot(resolution, name, "0", bright);
-  return { on: on.image, off: off.image, onEntry: on.entry, offEntry: off.entry,
-    centreLumaOn: on.centreLuma, centreLumaOff: off.centreLuma,
-    onDraws: on.draws, offDraws: off.draws };
+  // The off frame the opacity is solved from is taken in the *same* boot, by
+  // hiding the cross through the renderer's own alpha. Two boots start the
+  // demo at different world states, and at 2560x1440 the moving scene between
+  // them was once solved as an 0.85 opacity; the a/b pair below is one scene.
+  const shown = await state();
+  const alpha = shown && shown.crosshair ? shown.crosshair.alpha : 0.45;
+  await evaluate("window.quake2RTX.crosshair({ alpha: 0 })");
+  await waitFrames(2);
+  const offBuffer = await stableScreenshot();
+  const offEntry = await captureBuffer(resolution.label + "-crosshair-" + name + "-alpha0.png", offBuffer,
+    resolution.width, resolution.height,
+    { view: "the same view with the crosshair hidden by its own alpha (one scene, one camera)",
+      resolution: resolution.label, crosshair: "hidden (alpha 0)", crosshairScale: "3",
+      centreLuma: Math.round(centreLuma(offBuffer)) });
+  await evaluate("window.quake2RTX.crosshair({ alpha: " + alpha + " })");
+  await waitFrames(2);
+  // The crosshair-0 boot is kept for the engine's own draw counter: it is what
+  // proves `crosshair 0` submits no draw at all.
+  const engineOff = await crosshairBoot(resolution, name, "0", bright);
+  return { on: on.image, off: decodePng(offBuffer), onEntry: on.entry, offEntry,
+    engineOff: engineOff.image, engineOffEntry: engineOff.entry,
+    centreLumaOn: on.centreLuma, centreLumaOff: Math.round(centreLuma(offBuffer)),
+    onDraws: on.draws, offDraws: engineOff.draws };
 }
 
 async function crosshairPresentationCheck(resolution) {
@@ -1497,9 +1538,9 @@ async function crosshairPresentationCheck(resolution) {
     const tintHex = tint.map((one) => one.toString(16).padStart(2, "0")).join("");
     check("crosshair tint is the game palette's rusted amber blended with bone (#" + tintHex + ")",
       Boolean(reported) && JSON.stringify(reported.tint) === JSON.stringify(tint) &&
-        alphaStart === "0.5" && tintStart === tintHex,
+        alphaStart === "0.45" && tintStart === tintHex,
       "tint " + JSON.stringify(tint) + " from pics/colormap.pcx entries 52 (" + JSON.stringify(palette.amber) +
-        ") and 251 (" + JSON.stringify(palette.bone) + "), started as q2_crosshair_alpha 0.5 / q2_crosshair_tint " + tintHex,
+        ") and 251 (" + JSON.stringify(palette.bone) + "), started as q2_crosshair_alpha 0.45 / q2_crosshair_tint " + tintHex,
       (reported ? JSON.stringify(reported.tint) + " (" + reported.tintHex + ")" : "window.quake2RTX.status().crosshair is missing") +
         "; start-up q2_crosshair_alpha " + alphaStart + ", q2_crosshair_tint " + tintStart);
     report.presentation.palette = { ...palette, reported, alphaStart, tintStart };
@@ -1629,6 +1670,10 @@ async function crosshairPresentationCheck(resolution) {
   // page navigates, and would otherwise brighten every later boot.
   await reloadGame(resolutionUrl(resolution, DARK_STARTUP), label + " brightness defaults restored");
   if (!(await ensureGame("after restoring the brightness defaults"))) fatal(label + ": the game did not resume after restoring the brightness defaults");
+  // The captures above froze the demo. A fresh engine starts at timescale 1,
+  // but say so explicitly: a frozen level must not leak into the next check.
+  await consoleBridge.runUntilEcho("timescale 1");
+  if (!(await ensureGame("after restoring the demo timescale"))) fatal(label + ": the game did not resume after restoring the timescale");
 }
 
 // ---- The presentation fixes this run adds (owner reports B1-B4) ----------
@@ -1977,6 +2022,807 @@ async function presentationFixesCheck(resolution) {
   return views;
 }
 
+// ---- Interface state the bug hunt fixed ---------------------------------
+// Three defects the sweep found, each checked on the running page:
+//   * the panel's key handler swallowed the app's own synthetic Escape, so the
+//     Options chip never paused the game and closed itself a second later;
+//   * QUIT left the engine at its menu, so the next poll reopened the panel
+//     under the exit message and offered Resume to an invisible game;
+//   * a key held when the panel opened never reached the engine as a release,
+//     so the player kept walking after Resume.
+async function interfaceStateCheck(resolution) {
+  const label = resolution.label;
+  console.log("\n  " + label + " interface state");
+  if (!(await ensureGame("the interface-state check"))) fatal(label + ": the game is not in game for the interface-state check");
+  if ((await state()).engine.dead) {
+    note(label + ": the player was dead before the interface-state check; restarting demo1");
+    await restartDemo1(label);
+  }
+  const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
+
+  // 1. The Options chip asks the engine for its menu (the pause) with a
+  // synthetic Escape; the panel must already be up when that Escape arrives
+  // and must stay up while the engine is at its menu.
+  await click("#options-chip");
+  await sleep(1800);
+  const chip = await state();
+  check(label + ": the Options chip pauses the game and the panel stays",
+    Boolean(chip.engine) && chip.engine.keyDestName === "menu" && chip.menuHidden === false,
+    "key_dest menu and the panel visible after the chip",
+    "key_dest " + (chip.engine && chip.engine.keyDestName) + ", menuHidden " + chip.menuHidden);
+  await resume();
+
+  // 2. QUIT stays quit.
+  if (!(await openMenu())) fatal(label + ": the menu did not open for the QUIT check");
+  await click('[data-action="quit"]');
+  await sleep(2600);
+  const quit = await evaluate(`(() => ({
+    canvasDisplay: document.getElementById("canvas").style.display,
+    menuHidden: document.getElementById("menu-layer").hidden,
+    status: document.getElementById("status").textContent,
+    loadingHidden: document.getElementById("loading").hidden,
+  }))()`);
+  check(label + ": QUIT stays quit (no panel reopens behind the exit message)",
+    quit.canvasDisplay === "none" && quit.menuHidden === true && /quit/i.test(quit.status) && quit.loadingHidden === false,
+    "canvas hidden, panel hidden, the exit message shown",
+    JSON.stringify(quit));
+  await reloadGame(resolutionUrl(resolution), label + " after the QUIT check");
+  if (!(await ensureGame("after the QUIT check"))) fatal(label + ": the game did not resume after the QUIT check");
+
+  // 3. A key released while the panel is open reaches the engine.
+  const position = async () => (await state()).engine.position;
+  const holdThenRelease = async (keyName) => {
+    const start = await position();
+    await consoleBridge.control.key(keyName, true);
+    await sleep(1200);
+    const walking = await position();
+    if (!(await openMenu())) fatal(label + ": the menu did not open for the held-key check");
+    await consoleBridge.control.key(keyName, false);
+    await sleep(400);
+    await resume();
+    await sleep(1400);
+    const a = await position();
+    await sleep(1400);
+    const b = await position();
+    return { key: keyName, walked: distance(start, walking), drift: distance(a, b) };
+  };
+  // At the spawn one direction can be a wall; a held key that moved the player
+  // at all is the precondition, so try the other directions if one was blocked.
+  let heldKey = await holdThenRelease("w");
+  for (const keyName of ["s", "a", "d"]) {
+    if (heldKey.walked > 20) break;
+    heldKey = await holdThenRelease(keyName);
+  }
+  check(label + ": a key released while the panel is open does not stay down in the engine",
+    heldKey.walked > 20 && heldKey.drift < 6,
+    "the player walks while the key is held (>20 units), then stands still after the release through the panel",
+    "walked " + heldKey.walked.toFixed(1) + " units with " + heldKey.key.toUpperCase() +
+      " held; drift after Resume " + heldKey.drift.toFixed(1) + " units over 1.4 s");
+  if (!report.interfaceState) report.interfaceState = {};
+  report.interfaceState[label] = { chip, quit, heldKey };
+}
+
+// ---- Game mode: the native-fullscreen presentation ----------------------
+// The owner asked for a mode that renders the game surface alone, with every
+// other page layer gone and the page black around the picture, reachable from
+// the interface and with a clear way back, and measurably cheaper per frame
+// than the normal page. These checks drive the real control path (the VIDEO
+// menu row, clicked with a trusted CDP input so the full-screen request has
+// its user gesture) and the real shortcut (a trusted Alt+Enter), and measure
+// rAF frame time in and out of the mode on the same scene.
+//
+// What a page cannot do is checked as honestly as what it can: the run has one
+// display and no Window Management permission, so `blackout` must say that
+// rather than claim other monitors were darkened.
+function gameModeStatus() {
+  return evaluate(`window.quake2GameMode && typeof window.quake2GameMode.status === "function"
+    ? window.quake2GameMode.status() : null`);
+}
+
+function pageLayers() {
+  return evaluate(`(() => {
+    const read = (id) => {
+      const element = document.getElementById(id);
+      if (!element) return null;
+      const style = getComputedStyle(element);
+      return { hidden: element.hidden, display: style.display, visibility: style.visibility };
+    };
+    const canvas = document.getElementById("canvas");
+    const rect = canvas ? canvas.getBoundingClientRect() : null;
+    let gl = null;
+    try { gl = canvas ? canvas.getContext("webgl2") : null; } catch (error) { gl = null; }
+    return {
+      ui: read("ui"),
+      fullscreenButton: read("fullscreen-button"),
+      loading: read("loading"),
+      hint: read("fullscreen-hint"),
+      chips: read("options-chip") && read("options-chip").display !== "none" ? "visible" : "hidden",
+      prompt: read("prompt") && read("prompt").display !== "none" && !read("prompt").hidden ? "visible" : "hidden",
+      bodyClass: document.body.className,
+      bodyBackground: getComputedStyle(document.body).backgroundColor,
+      htmlBackground: getComputedStyle(document.documentElement).backgroundColor,
+      canvas: rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null,
+      drawingBuffer: gl ? [gl.drawingBufferWidth, gl.drawingBufferHeight] : null,
+      viewport: [innerWidth, innerHeight],
+      fullscreenElement: Boolean(document.fullscreenElement),
+      modeValue: document.getElementById("game-mode-value") ? document.getElementById("game-mode-value").textContent.trim() : null,
+    };
+  })()`);
+}
+
+async function elementCentre(selector) {
+  return evaluate(`(() => {
+    const element = document.querySelector(${JSON.stringify(selector)});
+    if (!element) return null;
+    const rect = element.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2, width: rect.width, height: rect.height };
+  })()`);
+}
+
+// A real input event: this is what gives the full-screen request its user
+// gesture (element.click() from script does not).
+async function trustedClickAt(x, y) {
+  const point = { x: Math.round(x), y: Math.round(y), button: "left", clickCount: 1 };
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y, button: "none", buttons: 0 });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", ...point, buttons: 1 });
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", ...point, buttons: 0 });
+}
+
+async function pressAltEnter() {
+  const key = { key: "Enter", code: "Enter", windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, modifiers: 1 };
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", ...key });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...key });
+}
+
+// Both frame samples must be taken in the same display state: full screen is
+// not part of game mode's saving (the claim is the page work it removes), and
+// in this headless browser a full-screen page and a windowed one composite
+// differently enough to swamp the difference. The page asks for full screen on
+// its own first gesture; this drives its own control only when it has not.
+async function ensurePageFullscreen(label) {
+  const now = await pageLayers();
+  if (now.fullscreenElement) return true;
+  await evaluate("document.exitPointerLock ? document.exitPointerLock() : null");
+  await sleep(300);
+  const rect = await elementCentre("#fullscreen-button");
+  if (!rect) return false;
+  await trustedClickAt(rect.x, rect.y);
+  try {
+    await waitFor(async () => (await pageLayers()).fullscreenElement === true, 10000, 300, "the page to enter full screen");
+    return true;
+  } catch (error) {
+    return false;
+  }
+}
+
+async function gameModeCheck(resolution) {
+  const label = resolution.label;
+  console.log("\n  " + label + " game mode");
+  if (!(await ensureGame("the game-mode check"))) fatal(label + ": the game is not in game for the game-mode check");
+  await setLighting("performance");
+
+  const api = await evaluate(`Boolean(window.quake2GameMode && window.quake2GameMode.enter && window.quake2GameMode.exit && window.quake2GameMode.status)`);
+  const row = await evaluate(`(() => {
+    const button = document.querySelector('[data-action="game-mode"]');
+    if (!button) return null;
+    return {
+      label: button.querySelector(".label") ? button.querySelector(".label").textContent.trim() : null,
+      value: document.getElementById("game-mode-value") ? document.getElementById("game-mode-value").textContent.trim() : null,
+      help: Array.from(document.querySelectorAll('.menu-view[data-view="video"] .field-help')).map((one) => one.textContent).join(" "),
+    };
+  })()`);
+  check(label + ": the game-mode control is present", api === true && Boolean(row) && row.label === "game mode",
+    "window.quake2GameMode with enter/exit/status, and a 'game mode' row in VIDEO",
+    api ? "API present; row " + (row ? JSON.stringify(row.label) + " value " + JSON.stringify(row.value) : "missing") : "window.quake2GameMode is missing");
+  if (api !== true || !row) fatal(label + ": the game-mode control is missing");
+  check(label + ": the game-mode row documents the way back", /Alt\+Enter/.test(row.help) && /Esc/.test(row.help),
+    "Alt+Enter to toggle and Esc to leave full screen", /Alt\+Enter/.test(row.help) ? "both named in VIDEO's help" : "neither named");
+
+  // Same scene before and after: no reload, and the drawing buffer and
+  // renderer mode are checked again while the mode is up.
+  const before = await status();
+  const beforeState = await state();
+  const beforeShot = await stableScreenshot();
+  const beforeEntry = await captureBuffer(label + "-game-mode-page.png", beforeShot, resolution.width, resolution.height,
+    { view: "the page with its interface, before game mode", resolution: label, mode: "page" });
+  const beforeLuma = centreLuma(beforeShot);
+  const fullscreenBefore = await ensurePageFullscreen(label);
+  check(label + ": the page is in full screen before the frame comparison", fullscreenBefore === true,
+    "document.fullscreenElement before either frame sample",
+    fullscreenBefore ? "full screen" : "not full screen — the two samples would not be comparable");
+  if (fullscreenBefore !== true) fatal(label + ": the frame comparison needs the page in full screen; this browser refused it");
+  // Freeze the simulation but not the renderer: every sample below is the same
+  // picture, so a scene change cannot be read as a mode difference.
+  await consoleBridge.runUntilEcho("timescale 0");
+  if (!(await ensureGame("after freezing the demo for the game-mode checks"))) fatal(label + ": the game did not resume with the demo frozen");
+  await sleep(1200);
+
+  // The normal-page sample state: the game playing, full screen, and the
+  // pointer free, which is when the page shows its own interface (the Options
+  // chip and the capture prompt, exactly as at boot).
+  const unlockPointer = async () => {
+    if (!(await evaluate("document.pointerLockElement !== null"))) return;
+    // Release the pointer inside game mode, where the app does not answer a
+    // lost lock by opening its menu, and hold the mode long enough for that
+    // handler (it waits 220 ms) to run and return before the mode ends.
+    await evaluate("window.quake2GameMode.enter('page-sample')");
+    await sleep(400);
+    await evaluate("document.exitPointerLock ? document.exitPointerLock() : null");
+    await sleep(1100);
+    await evaluate("window.quake2GameMode.exit('page-sample', { keepFullscreen: true })");
+    await sleep(700);
+  };
+  const preparePageSample = async (what) => {
+    if (!(await ensureGame(what))) fatal(label + ": the game did not resume for " + what);
+    if ((await pageLayers()).fullscreenElement !== true && !(await ensurePageFullscreen(label))) {
+      fatal(label + ": full screen was lost before " + what);
+    }
+    const playing = async () => {
+      const now = await state();
+      return Boolean(now.engine) && now.engine.keyDestName === "game" && now.menuHidden === true;
+    };
+    await unlockPointer();
+    for (let attempt = 0; attempt < 4 && !(await playing()); attempt++) {
+      await ensureGame("settling the page sample (" + attempt + ")");
+      await sleep(700);
+      await unlockPointer();
+    }
+    if (!(await playing())) fatal(label + ": the page would not settle into play for " + what);
+    await sleep(600);
+  };
+  await preparePageSample("the page sample");
+  const pageLayersBefore = await pageLayers();
+  check(label + ": the page's own interface is on screen for the comparison",
+    pageLayersBefore.ui && pageLayersBefore.ui.display !== "none" &&
+      pageLayersBefore.chips === "visible" && pageLayersBefore.prompt === "visible",
+    "#ui, the Options chip and the capture prompt visible on the normal page",
+    JSON.stringify({ ui: pageLayersBefore.ui, chips: pageLayersBefore.chips, prompt: pageLayersBefore.prompt }));
+
+  // What the normal page does per second: the status-bar read-back (a
+  // framebuffer read every 1.2 s). Game mode suspends it. The counter is of
+  // attempts, not successful reads: a frozen frame can fail to recognise a
+  // digit while the readPixels cost is still paid.
+  const pageWorkStart = (await status()).hudAttempts;
+  const pageWorkReadsStart = (await status()).hudReads;
+  const pageWorkFrom = Date.now();
+  await sleep(6000);
+  const pageWorkEnd = (await status()).hudAttempts;
+  const pageWorkReadsEnd = (await status()).hudReads;
+  const pageWorkSeconds = (Date.now() - pageWorkFrom) / 1000;
+
+  // Enter from the VIDEO row with a trusted click: the menu open is the
+  // interface path the owner has, and the click is the user gesture full
+  // screen needs.
+  if (!(await openMenu())) fatal(label + ": the menu did not open before the game-mode entry");
+  // The interface is used with the pointer free (the app hides its chips while
+  // the mouse is locked, and a locked pointer delivers every click to the
+  // canvas), so release it before the coordinate click on the row.
+  await evaluate("document.exitPointerLock ? document.exitPointerLock() : null");
+  await sleep(400);
+  await click('[data-action="video"]');
+  await sleep(400);
+  // The VIDEO panel scrolls (its engine list is longer than the viewport at
+  // 720p), and this row sits below the list with the apply control. Scroll it
+  // into view the way a player would before taking its coordinates.
+  await evaluate(`(() => {
+    const row = document.querySelector('[data-action="game-mode"]');
+    if (row && row.scrollIntoView) row.scrollIntoView({ block: "center" });
+    return true;
+  })()`);
+  await sleep(400);
+  const rowRect = await elementCentre('[data-action="game-mode"]');
+  if (!rowRect) fatal(label + ": the game-mode row is not in the VIDEO view");
+  const rowHit = await evaluate(`(() => {
+    const row = document.querySelector('[data-action="game-mode"]');
+    if (!row) return null;
+    const rect = row.getBoundingClientRect();
+    const element = document.elementFromPoint(Math.round(rect.x + rect.width / 2), Math.round(rect.y + rect.height / 2));
+    return element ? element.closest('[data-action="game-mode"]') === row : false;
+  })()`);
+  check(label + ": the game-mode row is on screen where it is clicked", rowHit === true,
+    "the row under the click point after scrolling it into view", String(rowHit));
+  if (rowHit !== true) fatal(label + ": the game-mode row is not under its own click point");
+  await trustedClickAt(rowRect.x, rowRect.y);
+  try {
+    await waitFor(async () => {
+      const status = await gameModeStatus();
+      return status && status.active === true;
+    }, 15000, 300, "game mode to engage");
+  } catch (error) {
+    fatal(label + ": game mode did not engage from its row: " + error.message);
+  }
+  await sleep(1500);
+  const entered = await gameModeStatus();
+  const layers = await pageLayers();
+  const resumed = await ensureGame("after entering game mode");
+
+  check(label + ": game mode is active and the game is running", entered.active === true && resumed === true,
+    "active, key_dest game", "active " + entered.active + ", key_dest " + (await state()).engine.keyDestName);
+  const uiGone = layers.ui && layers.ui.display === "none" && layers.fullscreenButton && layers.fullscreenButton.display === "none" &&
+    (!layers.loading || layers.loading.display === "none");
+  check(label + ": game mode hides every page layer", Boolean(uiGone),
+    "#ui, #fullscreen-button and #loading are display:none",
+    JSON.stringify({ ui: layers.ui, button: layers.fullscreenButton, loading: layers.loading }));
+  check(label + ": game mode makes the page black around the picture",
+    layers.bodyBackground === "rgb(0, 0, 0)" && layers.htmlBackground === "rgb(0, 0, 0)",
+    "rgb(0, 0, 0) on <html> and <body>", layers.htmlBackground + " / " + layers.bodyBackground);
+  // A native game letterboxes at its own aspect ratio, so the canvas must fill
+  // the display in at least one dimension and sit centred in the other; the
+  // bars around it are the black page, checked above.
+  const covers = layers.canvas && layers.viewport &&
+    (Math.abs(layers.canvas.width - layers.viewport[0]) <= 2 ||
+      Math.abs(layers.canvas.height - layers.viewport[1]) <= 2) &&
+    Math.abs((layers.canvas.x + layers.canvas.width / 2) - layers.viewport[0] / 2) <= 2 &&
+    Math.abs((layers.canvas.y + layers.canvas.height / 2) - layers.viewport[1] / 2) <= 2;
+  check(label + ": the game surface fills the display", Boolean(covers),
+    "the canvas fills the viewport in one dimension and is centred (" + layers.viewport.join("x") + ")",
+    layers.canvas ? Math.round(layers.canvas.width) + "x" + Math.round(layers.canvas.height) + " at " +
+      Math.round(layers.canvas.x) + "," + Math.round(layers.canvas.y) : "no canvas");
+  check(label + ": game mode asked for full screen", entered.fullscreen === true || Boolean(entered.reason),
+    "fullscreenElement when the browser allows it, otherwise the reason",
+    "fullscreen " + entered.fullscreen + (entered.reason ? " (" + entered.reason + ")" : ""));
+  check(label + ": game mode leaves the engine's drawing buffer and resolution alone",
+    layers.drawingBuffer && beforeState.drawingBuffer &&
+      layers.drawingBuffer[0] === beforeState.drawingBuffer[0] && layers.drawingBuffer[1] === beforeState.drawingBuffer[1],
+    "drawing buffer " + (beforeState.drawingBuffer || []).join("x"),
+    (layers.drawingBuffer || []).join("x"));
+
+  // The multi-display claim, stated honestly: one display here, and no Window
+  // Management permission, so no black window is claimed.
+  const blackout = entered.blackout || {};
+  const blackoutHonest = (blackout.windows || 0) === 0 ? true :
+    (blackout.screens > 1 && blackout.windows === blackout.screens - 1);
+  check(label + ": game mode reports its multi-display blackout honestly",
+    Boolean(blackout) && blackoutHonest && (blackout.screens === 1 ? blackout.windows === 0 : true),
+    "no black window claimed without a second display and the Window Management API",
+    JSON.stringify(blackout) + " displays " + JSON.stringify(entered.displays));
+
+  // The frame cost: the same scene, the same full-screen state, the same
+  // drawing buffer. The samples are interleaved (page, game, page, game) so a
+  // slow warm-up or a heavier patch of the demo cannot be mistaken for the
+  // mode's own cost.
+  const duringShot = await stableScreenshot();
+  const duringEntry = await captureBuffer(label + "-game-mode-surface.png", duringShot, resolution.width, resolution.height,
+    { view: "game mode: the game surface alone, no page interface", resolution: label, mode: "game" });
+  const duringLuma = centreLuma(duringShot);
+  const stillDrawing = await status();
+  check(label + ": the scene is the same picture in game mode",
+    duringLuma > 5 && Math.abs(duringLuma - beforeLuma) <= 40 && stillDrawing.worldDraws > before.worldDraws,
+    "the game keeps drawing the same view (world draws increase, no black frame)",
+    "centre luma " + Math.round(beforeLuma) + " page / " + Math.round(duringLuma) + " game; world draws +" +
+      (stillDrawing.worldDraws - before.worldDraws));
+
+  // The page's read-back is the per-frame work the mode removes; it is
+  // deterministic, so it is checked directly rather than inferred from a
+  // wall-clock difference the software renderer cannot show.
+  const gameWorkStart = (await status()).hudAttempts;
+  await sleep(6000);
+  const gameWorkEnd = (await status()).hudAttempts;
+  check(label + ": game mode suspends the page's status-bar read-back",
+    pageWorkEnd - pageWorkStart > 0 && gameWorkEnd === gameWorkStart,
+    "the normal page reads the status bar back; game mode performs no read at all",
+    (pageWorkEnd - pageWorkStart) + " read attempts in " + pageWorkSeconds.toFixed(1) + " s on the page (" +
+      (pageWorkReadsEnd - pageWorkReadsStart) + " recognised), " + (gameWorkEnd - gameWorkStart) + " in game mode");
+
+  // Leave the page presentation but keep the full screen: the second page
+  // sample is then the same display state as the game-mode samples, and the
+  // only difference left is the page work the mode removes.
+  await evaluate(`window.quake2GameMode.exit("frame-sample", { keepFullscreen: true })`);
+  await waitFor(async () => {
+    const status = await gameModeStatus();
+    return status && status.active === false;
+  }, 10000, 300, "game mode to leave for the second page sample");
+  if (!(await ensureGame("before the normal-page frame sample"))) fatal(label + ": the game did not resume for the normal-page frame sample");
+  await waitFor(async () => {
+    const now = await state();
+    return now.engine && now.engine.keyDestName === "game" && now.menuHidden === true;
+  }, 10000, 300, "the panel to be down before the normal-page frame sample");
+  await sleep(600);
+  const keptLayers = await pageLayers();
+  check(label + ": the interface returns while full screen stays on",
+    keptLayers.ui && keptLayers.ui.display !== "none" && keptLayers.fullscreenElement === true &&
+      keptLayers.bodyClass.indexOf("is-game-mode") === -1,
+    "the page interface back in the same full-screen display state",
+    JSON.stringify({ ui: keptLayers.ui, fullscreen: keptLayers.fullscreenElement, bodyClass: keptLayers.bodyClass }));
+  // The mode and the page alternate inside this one page, ten frames each,
+  // discarding the two frames after every switch: both states then share
+  // whatever drift the box's software renderer is going through.
+  const measured = await evaluate(`new Promise((resolve) => {
+    const page = [], game = [];
+    let last = 0, skip = 0, state = "page", frames = 0;
+    function step(now) {
+      if (last && skip <= 0) (state === "page" ? page : game).push(now - last);
+      last = now;
+      if (skip > 0) skip--;
+      frames++;
+      if (frames % 10 === 0) {
+        state = state === "page" ? "game" : "page";
+        if (state === "game") window.quake2GameMode.enter("frame-sample");
+        else window.quake2GameMode.exit("frame-sample", { keepFullscreen: true });
+        skip = 2;
+      }
+      if (frames >= 200) { resolve({ page, game }); return; }
+      requestAnimationFrame(step);
+    }
+    requestAnimationFrame(step);
+    setTimeout(() => resolve({ page, game }), 240000);
+  })`, { awaitPromise: true, timeoutMs: 300000 });
+  const pageStats = (measured.page || []).length ? stats(measured.page) : null;
+  const gameStats = (measured.game || []).length ? stats(measured.game) : null;
+  const pageMean = pageStats ? pageStats.meanMs : null;
+  const gameMean = gameStats ? gameStats.meanMs : null;
+  const pageMedian = pageStats ? pageStats.medianMs : null;
+  const gameMedian = gameStats ? gameStats.medianMs : null;
+  const meanDelta = pageMean ? (pageMean - gameMean) / pageMean : null;
+  const medianDelta = pageMedian ? (pageMedian - gameMedian) / pageMedian : null;
+  if (pageStats && gameStats) {
+    console.log("  " + label + " interleaved frames: page median " + pageMedian.toFixed(1) + " ms (mean " +
+      pageMean.toFixed(1) + "), game median " + gameMedian.toFixed(1) + " ms (mean " + gameMean.toFixed(1) + ")");
+  }
+  // The frame is GPU-bound in this software renderer: the page's read-back is
+  // 22% of main-thread samples but is hidden under the render, so the
+  // wall-clock requirement is a no-regression bound; the work the mode removes
+  // is checked directly above, where it is deterministic.
+  check(label + ": game mode does not cost more per frame than the normal page",
+    Boolean(pageStats) && Boolean(gameStats) && pageStats.count >= 60 && gameStats.count >= 60 &&
+      gameMedian <= pageMedian * 1.02 && gameMean <= pageMean * 1.02,
+    "median and mean frame time no worse than the normal page's, interleaved on one page and scene",
+    pageStats && gameStats ? "page median " + pageMedian.toFixed(1) + " ms, mean " + pageMean.toFixed(1) +
+      "; game median " + gameMedian.toFixed(1) + " ms, mean " + gameMean.toFixed(1) + " (" +
+      (medianDelta * 100).toFixed(1) + "% median, " + (meanDelta * 100).toFixed(1) + "% mean)" : "no frame samples");
+  await evaluate("window.quake2GameMode.exit('frame-sample', { keepFullscreen: true })");
+  await sleep(500);
+
+  // The shortcut, both ways: Alt+Enter enters, Alt+Enter leaves (and takes the
+  // full screen with it).
+  await pressAltEnter();
+  await waitFor(async () => {
+    const status = await gameModeStatus();
+    return status && status.active === true;
+  }, 10000, 300, "game mode to engage on Alt+Enter");
+  const shortcutEntered = await gameModeStatus();
+  await pressAltEnter();
+  let left = null;
+  try {
+    await waitFor(async () => {
+      const status = await gameModeStatus();
+      return status && status.active === false;
+    }, 10000, 300, "game mode to leave on Alt+Enter");
+    left = await gameModeStatus();
+  } catch (error) {
+    fatal(label + ": Alt+Enter did not leave game mode: " + error.message);
+  }
+  await sleep(800);
+  const after = await pageLayers();
+  check(label + ": Alt+Enter enters and leaves game mode",
+    shortcutEntered.active === true && left.active === false && after.ui && after.ui.display !== "none" &&
+      after.ui.hidden === false && after.bodyClass.indexOf("is-game-mode") === -1 && after.modeValue === "off" &&
+      after.fullscreenElement === false,
+    "Alt+Enter enters; Alt+Enter leaves with the interface back, the row reading off and full screen released",
+    JSON.stringify({ entered: shortcutEntered.active, left: left.active, ui: after.ui, bodyClass: after.bodyClass,
+      value: after.modeValue, fullscreen: after.fullscreenElement }));
+
+  // The mode also leaves when full screen is left by anyone else: the browser's
+  // own Esc path, the fullscreen.js control, a system gesture.
+  if (!(await ensureGame("before the full-screen-exit check"))) fatal(label + ": the game did not resume for the full-screen-exit check");
+  await pressAltEnter();
+  await waitFor(async () => {
+    const status = await gameModeStatus();
+    return status && status.active === true;
+  }, 10000, 300, "game mode to re-engage on Alt+Enter");
+  const reentered = await gameModeStatus();
+  let exitedByFullscreen = null;
+  try {
+    if (reentered.fullscreen === true) {
+      // The browser's own escape from full screen (Esc, the fullscreen.js
+      // control, a system gesture) must leave the mode, never strand the page
+      // interface hidden.
+      await evaluate("document.exitFullscreen ? document.exitFullscreen().catch(() => {}) : null");
+      await waitFor(async () => {
+        const status = await gameModeStatus();
+        return status && status.active === false;
+      }, 10000, 300, "game mode to leave when full screen ends");
+      exitedByFullscreen = await gameModeStatus();
+    } else {
+      note(label + ": full screen was refused in this headless run (" + reentered.reason + "); the mode's own exit is checked for the restoration path");
+      await evaluate("window.quake2GameMode.exit('check')");
+      await waitFor(async () => {
+        const status = await gameModeStatus();
+        return status && status.active === false;
+      }, 10000, 300, "game mode to leave by its own exit");
+      exitedByFullscreen = await gameModeStatus();
+    }
+  } catch (error) {
+    fatal(label + ": game mode did not leave cleanly: " + error.message);
+  }
+  const restored = await pageLayers();
+  check(label + ": leaving full screen leaves game mode",
+    reentered.active === true && exitedByFullscreen.active === false && restored.ui && restored.ui.display !== "none",
+    "Alt+Enter re-engages; leaving full screen disengages and restores the page",
+    "re-entered " + reentered.active + " (fullscreen " + reentered.fullscreen + "), after exit active " +
+      exitedByFullscreen.active + ", #ui " + (restored.ui && restored.ui.display));
+
+  if (!(await ensureGame("after the game-mode check"))) fatal(label + ": the game did not resume after the game-mode check");
+  if (!report.gameMode) report.gameMode = {};
+  report.gameMode[label] = {
+    api, row, enter: { ...entered, layers }, blackout,
+    frames: { page: pageStats, game: gameStats, pageSamples: (measured.page || []).length,
+      gameSamples: (measured.game || []).length, meanDelta, medianDelta },
+    pageWork: { attemptsOnPage: pageWorkEnd - pageWorkStart, attemptsInGame: gameWorkEnd - gameWorkStart,
+      readsOnPage: pageWorkReadsEnd - pageWorkReadsStart, seconds: pageWorkSeconds },
+    screenshots: [beforeEntry.file, duringEntry.file],
+    centreLuma: { page: Math.round(beforeLuma), game: Math.round(duringLuma) },
+    exit: { byShortcut: left, byFullscreen: exitedByFullscreen },
+  };
+}
+
+// ---- The crosshair's aim feedback (weapon, trigger, crouch) --------------
+
+function crosshairBlendPixels(onImage, offImage, tint, radius = 22) {
+  const cx = Math.round(onImage.width / 2), cy = Math.round(onImage.height / 2);
+  let count = 0, minX = Infinity, minY = Infinity, maxX = -1, maxY = -1;
+  const fractions = [];
+  for (let y = cy - radius; y <= cy + radius; y++) {
+    for (let x = cx - radius; x <= cx + radius; x++) {
+      const at = (y * onImage.width + x) * 4;
+      const on = [onImage.data[at], onImage.data[at + 1], onImage.data[at + 2]];
+      const off = [offImage.data[at], offImage.data[at + 1], offImage.data[at + 2]];
+      const perChannel = [];
+      let isCross = true;
+      for (let c = 0; c < 3; c++) {
+        const denominator = tint[c] - off[c];
+        if (Math.abs(denominator) < 25) continue;
+        const fraction = (on[c] - off[c]) / denominator;
+        if (fraction < 0.12 || fraction > 0.9) { isCross = false; break; }
+        perChannel.push(fraction);
+      }
+      if (!isCross || !perChannel.length) continue;
+      count++;
+      fractions.push(median(perChannel));
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  return { count, minX, minY, maxX, maxY, cx, cy,
+    width: maxX >= minX ? maxX - minX + 1 : 0, height: maxY >= minY ? maxY - minY + 1 : 0,
+    alpha: median(fractions), fractions };
+}
+
+async function crosshairStateNow() {
+  return evaluate("window.quake2RTX && window.quake2RTX.crosshairState ? window.quake2RTX.crosshairState() : null");
+}
+
+async function crosshairAlpha(alpha) {
+  await evaluate("window.quake2RTX.crosshair({ alpha: " + Number(alpha) + " })");
+}
+
+// An on/off pair with the same scene, same weapon, same trigger and crouch
+// state: the off frame is the renderer's own alpha set to zero. The diff is
+// then the crosshair itself, which is what the size and opacity checks read.
+// Freeze the simulation but keep the renderer running (`timescale`), so an
+// on/off pair is one static picture. A weapon switch needs the server to run,
+// so it happens between captures, never inside one.
+async function freezeDemo(label, frozen) {
+  await consoleBridge.runUntilEcho("timescale " + (frozen ? 0 : 1));
+  if (!(await ensureGame((frozen ? "freezing" : "thawing") + " the demo for " + label))) {
+    fatal(label + ": the game did not resume after timescale " + (frozen ? 0 : 1));
+  }
+  await sleep(frozen ? 900 : 600);
+}
+
+async function crosshairAimPair(name, meta) {
+  const on = await stableScreenshot();
+  const onEntry = await captureBuffer(name + "-on.png", on, 1280, 720, { ...meta, crosshair: "on" });
+  const stateOn = await crosshairStateNow();
+  await crosshairAlpha(0);
+  await waitFrames(2);
+  const off = await stableScreenshot();
+  const offEntry = await captureBuffer(name + "-off.png", off, 1280, 720, { ...meta, crosshair: "off (alpha 0)" });
+  await crosshairAlpha(stateOn ? stateOn.alpha : 0.45);
+  await waitFrames(2);
+  return { on: decodePng(on), off: decodePng(off), onEntry, offEntry, state: stateOn };
+}
+
+async function crosshairAimCheck(resolution) {
+  const label = resolution.label;
+  console.log("\n  " + label + " crosshair aim feedback");
+  if (!(await ensureGame("the crosshair aim check"))) fatal(label + ": the game is not in game for the crosshair aim check");
+  await setLighting("performance");
+  const palette = paletteTintFromPak();
+  if (!palette) fatal(label + ": the crosshair tint cannot be read from the game palette");
+  const tint = palette.tint;
+  const runtime = await evaluate("window.quake2RTX && typeof window.quake2RTX.crosshairState === 'function'");
+  check(label + ": the renderer reports the crosshair's aim state", runtime === true,
+    "window.quake2RTX.crosshairState()", runtime ? "present" : "missing");
+  if (runtime !== true) fatal(label + ": the crosshair aim state is not exposed");
+
+  // Ammunition for the weapon test (the blaster is always in hand) and a player
+  // the level cannot kill mid-measurement: a dead player draws no view weapon,
+  // so the weapon in hand would stop being readable.
+  const before = await state();
+  if (before.engine && before.engine.dead) {
+    note(label + ": the player was dead before the crosshair aim check; restarting demo1");
+    await restartDemo1(label);
+  }
+  await consoleBridge.runUntilEcho("give all");
+  if (!(await ensureGame("after give all for the crosshair aim check"))) fatal(label + ": the game did not resume after give all");
+  await consoleBridge.runUntilEcho("god");
+  if (!(await ensureGame("after god for the crosshair aim check"))) fatal(label + ": the game did not resume after god");
+  await sleep(1500);
+  // The bridge's selectWeapon needs the page's binding map, which this app does
+  // not expose (binds() comes back empty); the shipped config binds 1 to the
+  // blaster and 2 to the shotgun, and the switch is proven by the state below.
+  await consoleBridge.control.tap("1");
+  await sleep(1200);
+  let rest = await crosshairStateNow();
+  check(label + ": the blaster is the crosshair's reference size", rest && rest.weapon === "v_blast" && Math.abs(rest.factor - 1) < 0.001 &&
+    rest.quadPx === 24 && rest.opaquePx === 21,
+    "v_blast, factor 1.00, 24px quad (21px opaque) at crosshair_scale 3",
+    rest ? rest.weapon + ", factor " + rest.factor.toFixed(3) + ", quad " + rest.quadPx + "px, opaque " + rest.opaquePx + "px" : "no state");
+  if (!rest) fatal(label + ": the crosshair state is unreadable");
+
+  await freezeDemo(label, true);
+  const restPair = await crosshairAimPair(label + "-crosshair-aim-blaster", { view: "the crosshair at rest with the blaster", resolution: label });
+  await freezeDemo(label, false);
+  const restPixels = crosshairBlendPixels(restPair.on, restPair.off, tint);
+  check(label + ": the crosshair at rest is the engine's 21px scale-3 cross",
+    restPixels.width >= 15 && restPixels.width <= 27 && restPixels.height >= 15 && restPixels.height <= 27 && restPixels.count >= 40,
+    "a 15-27px tinted cross at the centre", restPixels.width + "x" + restPixels.height + " from " + restPixels.count + " tinted pixels");
+  check(label + ": the crosshair's opacity is a little under half",
+    rest.alpha === 0.45 && restPixels.alpha !== null && restPixels.alpha >= 0.33 && restPixels.alpha < 0.49,
+    "0.45 configured (below the previous 0.500) and measured under 0.49",
+    "configured " + rest.alpha + ", measured " + (restPixels.alpha === null ? "n/a" : restPixels.alpha.toFixed(3)) +
+      " from " + restPixels.count + " tinted pixels");
+
+  // The weapon in hand changes the size: the shotgun's skin is a different
+  // size, and the spread table widens the cross for it.
+  await consoleBridge.control.tap("2");
+  let shotgun = null;
+  try {
+    await waitFor(async () => {
+      const now = await crosshairStateNow();
+      return now && now.weapon === "v_shotg";
+    }, 15000, 500, "the shotgun to be in hand");
+    shotgun = await crosshairStateNow();
+  } catch (error) {
+    fatal(label + ": the shotgun never came into hand: " + error.message);
+  }
+  await sleep(800);
+  shotgun = await crosshairStateNow();
+  await freezeDemo(label, true);
+  const shotgunPair = await crosshairAimPair(label + "-crosshair-aim-shotgun", { view: "the crosshair at rest with the shotgun", resolution: label });
+  await freezeDemo(label, false);
+  const shotgunPixels = crosshairBlendPixels(shotgunPair.on, shotgunPair.off, tint);
+  check(label + ": a heavier weapon widens the crosshair",
+    shotgun.weapon === "v_shotg" && shotgun.factor > rest.factor + 0.05 && shotgun.quadPx > rest.quadPx &&
+      shotgunPixels.width > restPixels.width,
+    "the shotgun's cross is wider than the blaster's (factor > 1.05, more pixels)",
+    shotgun.weapon + ", factor " + shotgun.factor.toFixed(3) + ", quad " + shotgun.quadPx + "px; measured " +
+      shotgunPixels.width + "x" + shotgunPixels.height + " vs blaster " + restPixels.width + "x" + restPixels.height);
+
+  // Firing grows it; releasing settles it back.
+  // The same default-key switch as above.
+  await consoleBridge.control.tap("1");
+  await waitFor(async () => {
+    const now = await crosshairStateNow();
+    return now && now.weapon === "v_blast";
+  }, 15000, 500, "the blaster back in hand");
+  await sleep(800);
+  const restAgain = await crosshairStateNow();
+  await freezeDemo(label, true);
+  const press = await consoleBridge.control.attackHold(true);
+  let firing = null;
+  try {
+    await waitFor(async () => {
+      const now = await crosshairStateNow();
+      firing = now;
+      return now && now.firing === true && now.fireLevel > 0.85;
+    }, 8000, 300, "the trigger to spread the crosshair");
+  } catch (error) {
+    note(label + ": the trigger did not register on the page: " + error.message);
+  }
+  const firingPair = await crosshairAimPair(label + "-crosshair-aim-firing", { view: "the crosshair while firing", resolution: label });
+  const firingPixels = crosshairBlendPixels(firingPair.on, firingPair.off, tint);
+  const release = await consoleBridge.control.attackHold(false);
+  check(label + ": holding the trigger grows the crosshair",
+    Boolean(press.held) && firing && firing.firing === true && firing.fireLevel > 0.8 && firing.quadPx >= restAgain.quadPx + 3 &&
+      firingPixels.width >= restPixels.width + 3,
+    "fireLevel near 1 and a quad at least 3px larger while the trigger is held",
+    "press " + JSON.stringify(press.held) + ", fireLevel " + (firing ? firing.fireLevel.toFixed(2) : "n/a") + ", quad " +
+      (firing ? firing.quadPx + "px vs " + restAgain.quadPx + "px" : "n/a") + "; measured " + firingPixels.width + "x" +
+      firingPixels.height + " vs " + restPixels.width + "x" + restPixels.height);
+  let settled = null;
+  try {
+    await waitFor(async () => {
+      const now = await crosshairStateNow();
+      settled = now;
+      return now && now.firing === false && now.fireLevel < 0.05;
+    }, 8000, 300, "the crosshair to settle after firing");
+  } catch (error) {
+    note(label + ": the crosshair did not settle: " + error.message);
+  }
+  check(label + ": releasing the trigger settles the crosshair back",
+    release.held === false && settled && settled.firing === false && settled.quadPx === restAgain.quadPx,
+    "firing false and the rest size back",
+    settled ? "firing " + settled.firing + ", fireLevel " + settled.fireLevel.toFixed(3) + ", quad " + settled.quadPx + "px (rest " + restAgain.quadPx + "px)" : "no state");
+  await freezeDemo(label, false);
+
+  // Crouching (C) shrinks it, and letting go restores it.
+  await freezeDemo(label, true);
+  await consoleBridge.control.key("c", true);
+  let crouching = null;
+  try {
+    await waitFor(async () => {
+      const now = await crosshairStateNow();
+      crouching = now;
+      return now && now.crouching === true && now.crouchLevel > 0.85;
+    }, 8000, 300, "the crouch key to contract the crosshair");
+  } catch (error) {
+    note(label + ": the crouch key did not register on the page: " + error.message);
+  }
+  const crouchPair = await crosshairAimPair(label + "-crosshair-aim-crouch", { view: "the crosshair while crouching", resolution: label });
+  const crouchPixels = crosshairBlendPixels(crouchPair.on, crouchPair.off, tint);
+  await consoleBridge.control.key("c", false);
+  check(label + ": crouching shrinks the crosshair",
+    crouching && crouching.crouching === true && crouching.crouchLevel > 0.8 && crouching.quadPx <= restAgain.quadPx - 2 &&
+      crouchPixels.width <= restPixels.width - 1,
+    "crouchLevel near 1 and a quad at least 2px smaller while C is held",
+    crouching ? "crouchLevel " + crouching.crouchLevel.toFixed(2) + ", quad " + crouching.quadPx + "px vs " + restAgain.quadPx +
+      "px; measured " + crouchPixels.width + "x" + crouchPixels.height + " vs " + restPixels.width + "x" + restPixels.height : "no state");
+  let stood = null;
+  try {
+    await waitFor(async () => {
+      const now = await crosshairStateNow();
+      stood = now;
+      return now && now.crouching === false && now.crouchLevel < 0.05;
+    }, 8000, 300, "standing back up");
+  } catch (error) {
+    note(label + ": the crouch state did not clear: " + error.message);
+  }
+  check(label + ": standing up restores the crosshair size",
+    stood && stood.crouching === false && stood.quadPx === restAgain.quadPx,
+    "crouching false and the rest size back",
+    stood ? "crouching " + stood.crouching + ", quad " + stood.quadPx + "px" : "no state");
+  await freezeDemo(label, false);
+
+  if (!report.crosshairAim) report.crosshairAim = {};
+  report.crosshairAim[label] = {
+    tint, rest, shotgun, firing, settled, crouching, stood,
+    pixels: { rest: { ...restPixels, fractions: undefined }, shotgun: { ...shotgunPixels, fractions: undefined },
+      firing: { ...firingPixels, fractions: undefined }, crouch: { ...crouchPixels, fractions: undefined } },
+    screenshots: [restPair.onEntry.file, restPair.offEntry.file, shotgunPair.onEntry.file, firingPair.onEntry.file, crouchPair.onEntry.file],
+  };
+
+  // crosshair_scale still sets the base size: the same record at scale 2 is
+  // 16px, with a measured cross a couple of pixels narrower.
+  await consoleBridge.runUntilEcho("timescale 1");
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair_scale&2"), label + " crosshair scale 2");
+  if (!(await ensureGame("the crosshair scale-2 check"))) fatal(label + ": the game did not resume at crosshair_scale 2");
+  // The same default-key switch as above.
+  await consoleBridge.control.tap("1");
+  await sleep(1500);
+  const scaleTwo = await crosshairStateNow();
+  await freezeDemo(label, true);
+  const scalePair = await crosshairAimPair(label + "-crosshair-aim-scale2", { view: "the crosshair at crosshair_scale 2", resolution: label });
+  await freezeDemo(label, false);
+  const scalePixels = crosshairBlendPixels(scalePair.on, scalePair.off, tint);
+  check(label + ": crosshair_scale still sets the base size",
+    scaleTwo && scaleTwo.baseScale === 2 && scaleTwo.quadPx === 16 && scaleTwo.quadPx < rest.quadPx &&
+      scalePixels.width < restPixels.width && scalePixels.width >= 9,
+    "crosshair_scale 2 gives a 16px quad and a narrower measured cross than scale 3",
+    scaleTwo ? "baseScale " + scaleTwo.baseScale + ", quad " + scaleTwo.quadPx + "px; measured " + scalePixels.width + "x" +
+      scalePixels.height + " vs scale-3 " + restPixels.width + "x" + restPixels.height : "no state");
+  report.crosshairAim[label].scaleTwo = { state: scaleTwo, pixels: { ...scalePixels, fractions: undefined } };
+
+  // Back to the suite's own start-up line for the rest of the run (the page
+  // keeps its query across reloads, and a scale-2 URL would reach the next
+  // resolution's boots).
+  await reloadGame(resolutionUrl(resolution, "+set&crosshair_scale&3"), label + " crosshair scale restored");
+  if (!(await ensureGame("after the crosshair aim check"))) fatal(label + ": the game did not resume after the crosshair aim check");
+}
+
 // The happy path the menu promises: GAME > easy starts a new game. The app
 // hands the map to the engine on its start-up line (it cannot type into the
 // console), so the page reloads; this waits for the new page and the new game.
@@ -2101,6 +2947,9 @@ async function run() {
     if (resolution.label === "1280x720") {
       await presentationFixesCheck(resolution);
       await newGameCheck(resolution.label);
+      await interfaceStateCheck(resolution);
+      await gameModeCheck(resolution);
+      await crosshairAimCheck(resolution);
     }
     const pageState = await state();
     report.webglPages.push({
@@ -2140,8 +2989,9 @@ async function run() {
   report.limitations = [
     "The runner forces headless Chrome onto ANGLE/SwiftShader (--use-angle=swiftshader --enable-unsafe-swiftshader); the box's Intel GPU is not exercised, so every frame time is software and is not the owner's frame rate.",
     "The engine renders at the r_mode the runner sets (14 = 1280x720, 25 = 2560x1440); screenshots are the viewport at the same size.",
-    "Only demo1 (Outer Base) is driven and only the starting Blaster is in hand. Enemy coverage is level placement in demo1, not per-frame visibility.",
-    "Audio, pointer lock, mouse look, saves and the fullscreen API are not exercised by this headless run.",
+    "Only demo1 (Outer Base) is driven; the crosshair's weapon test switches to the shotgun and back with the engine's own weapon binds. Enemy coverage is level placement in demo1, not per-frame visibility.",
+    "Game mode's multi-display blackout needs the Window Management API and a second display. This headless run has one display and no such permission, so it checks the mode's honest report of that (`blackout`), not a real second monitor going black; the single-display presentation, the frame cost and the page restoration are exercised.",
+    "Audio, pointer lock, mouse look and saved games are not exercised by this headless run.",
     "20 rAF samples give a nearest-rank p95; it is a small sample and not a percentile-tail measurement.",
   ];
 }
