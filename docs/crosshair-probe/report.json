@@ -1,0 +1,420 @@
+{
+  "at": "2026-11-01T22:29:35.445Z",
+  "url": "http://127.0.0.1:4231/apps/quake2/",
+  "checkout": "/home/yanko/Projects/quake2",
+  "node": "v24.22.1",
+  "platform": "linux 7.0.0-38-generic",
+  "display": null,
+  "http": {
+    "url": "http://127.0.0.1:4231/apps/quake2/",
+    "status": 200,
+    "redirected": false,
+    "finalUrl": "http://127.0.0.1:4231/apps/quake2/",
+    "type": "text/html; charset=utf-8",
+    "bytes": 18662,
+    "filesMatchCheckout": [
+      {
+        "file": "index.html",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 18662,
+        "localBytes": 18662
+      },
+      {
+        "file": "style.css",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 17928,
+        "localBytes": 17928
+      },
+      {
+        "file": "rtx-renderer.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 84432,
+        "localBytes": 84432
+      },
+      {
+        "file": "app.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 62599,
+        "localBytes": 62599
+      },
+      {
+        "file": "fullscreen.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 7282,
+        "localBytes": 7282
+      },
+      {
+        "file": "game-mode.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 15883,
+        "localBytes": 15883
+      },
+      {
+        "file": "engine-state.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 20226,
+        "localBytes": 20226
+      },
+      {
+        "file": "rtx-materials.js",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 34706,
+        "localBytes": 34706
+      },
+      {
+        "file": "baseq2/pak10.pak",
+        "same": true,
+        "servedStatus": 200,
+        "servedBytes": 12118560,
+        "localBytes": 12118560
+      }
+    ]
+  },
+  "server": {
+    "started": false,
+    "port": 4231,
+    "note": "a server was already listening; its files are checked below"
+  },
+  "chrome": {
+    "path": "/usr/bin/google-chrome",
+    "debuggingPort": 43855,
+    "headless": true,
+    "profile": "/tmp/q2verify-chrome-Gupaop"
+  },
+  "renderer": {
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "vendor": "Google Inc. (Google)",
+    "version": "WebGL 2.0 (OpenGL ES 3.0 Chromium)",
+    "shading": "WebGL GLSL ES 3.00 (OpenGL ES GLSL ES 3.0 Chromium)",
+    "webgl2": true
+  },
+  "boot": {
+    "label": "1280x720",
+    "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
+    "seconds": 2.5,
+    "drawingBuffer": [
+      1280,
+      720
+    ],
+    "rtx": {
+      "version": "raster-3",
+      "supported": true,
+      "failures": [],
+      "worldShaders": 2,
+      "postShaders": 2,
+      "modelShaders": 8,
+      "modelReliefShaders": 7,
+      "skyShaders": 1,
+      "programs": [
+        "ui",
+        "sky",
+        "post",
+        "post",
+        "world",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "world",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "modelRelief",
+        "model",
+        "original",
+        "original"
+      ]
+    },
+    "engineRunning": true,
+    "keyDest": "game"
+  },
+  "boots": [
+    {
+      "label": "1280x720",
+      "url": "http://127.0.0.1:4231/apps/quake2/?+set&r_mode&14&+map&demo1",
+      "seconds": 2.5,
+      "drawingBuffer": [
+        1280,
+        720
+      ],
+      "rtx": {
+        "version": "raster-3",
+        "supported": true,
+        "failures": [],
+        "worldShaders": 2,
+        "postShaders": 2,
+        "modelShaders": 8,
+        "modelReliefShaders": 7,
+        "skyShaders": 1,
+        "programs": [
+          "ui",
+          "sky",
+          "post",
+          "post",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "world",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "modelRelief",
+          "model",
+          "original",
+          "original"
+        ]
+      },
+      "engineRunning": true,
+      "keyDest": "game"
+    }
+  ],
+  "checks": [
+    {
+      "name": "HTTP 200 at http://127.0.0.1:4231/apps/quake2/",
+      "ok": true,
+      "expected": 200,
+      "actual": "200"
+    },
+    {
+      "name": "0 redirects",
+      "ok": true,
+      "expected": "200 with no redirect",
+      "actual": "status 200, redirected false"
+    },
+    {
+      "name": "served as text/html",
+      "ok": true,
+      "expected": "text/html",
+      "actual": "text/html; charset=utf-8"
+    },
+    {
+      "name": "served page has the game canvas",
+      "ok": true,
+      "expected": "a canvas element",
+      "actual": "present"
+    },
+    {
+      "name": "server is serving this checkout",
+      "ok": true,
+      "expected": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js identical",
+      "actual": "index.html, style.css, rtx-renderer.js, app.js, fullscreen.js, game-mode.js, engine-state.js, rtx-materials.js, baseq2/pak10.pak identical"
+    },
+    {
+      "name": "1280x720: game booted into a running engine",
+      "ok": true,
+      "expected": "engine memory readable",
+      "actual": "game"
+    },
+    {
+      "name": "1280x720: dark UI loaded (menu layer present)",
+      "ok": true,
+      "expected": "a menu layer",
+      "actual": "present"
+    },
+    {
+      "name": "1280x720: WebGL2 renderer installed",
+      "ok": true,
+      "expected": "WebGL2",
+      "actual": "true"
+    },
+    {
+      "name": "1280x720: RTX shader programs compiled",
+      "ok": true,
+      "expected": "world + post shaders, no failures",
+      "actual": "world 2, post 2, model 8 (albedo 7), failures []"
+    },
+    {
+      "name": "1280x720: pak10 model shader path active",
+      "ok": true,
+      "expected": "at least one albedo-relief model program",
+      "actual": "7"
+    },
+    {
+      "name": "1280x720: no WebGL context lost during boot",
+      "ok": true,
+      "expected": "0",
+      "actual": "0"
+    },
+    {
+      "name": "browser reports a WebGL renderer",
+      "ok": true,
+      "expected": "a renderer string",
+      "actual": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)"
+    },
+    {
+      "name": "render resolution 1280x720 at boot",
+      "ok": true,
+      "expected": "drawing buffer 1280x720 with no renderer failure",
+      "actual": "drawing buffer 1280x720, failures []"
+    },
+    {
+      "name": "lighting high applied",
+      "ok": true,
+      "expected": "mode 2 (high)",
+      "actual": "mode 2, quality high, enabled true"
+    },
+    {
+      "name": "screenshot 1280x720-crosshair-no-console.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "screenshot after-console.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    }
+  ],
+  "notes": [],
+  "consoleWarnings": [
+    {
+      "type": "log-warning",
+      "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
+      "source": "javascript",
+      "at": "2026-11-01T22:29:36.358Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
+      "source": "deprecation",
+      "at": "2026-11-01T22:29:38.484Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:38.564Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:38.565Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:38.566Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:38.566Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
+      "source": "javascript",
+      "at": "2026-11-01T22:29:47.408Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
+      "source": "deprecation",
+      "at": "2026-11-01T22:29:48.898Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:48.972Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:48.973Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:48.973Z"
+    },
+    {
+      "type": "log-warning",
+      "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
+      "source": "rendering",
+      "at": "2026-11-01T22:29:48.973Z"
+    }
+  ],
+  "consoleErrors": [],
+  "networkErrors": [
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
+      "at": "2026-11-01T22:29:37.483Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
+      "at": "2026-11-01T22:29:37.486Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak1.pak",
+      "at": "2026-11-01T22:29:47.827Z"
+    },
+    {
+      "type": "log-error",
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "source": "network",
+      "url": "http://127.0.0.1:4231/apps/quake2/baseq2/pak2.pak",
+      "at": "2026-11-01T22:29:47.834Z"
+    }
+  ],
+  "pageErrors": [],
+  "webgl": {
+    "contextLost": 0,
+    "glError": null
+  },
+  "webglPages": [],
+  "webglWarnings": [],
+  "clGun": null,
+  "menu": null,
+  "statusBar": null,
+  "weaponDraw": null,
+  "weaponDraws": [],
+  "modes": [],
+  "screenshots": [
+    {
+      "file": "docs/crosshair-probe/shots/1280x720-crosshair-no-console.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1650146,
+      "view": "the crosshair at the centre of the in-game view over a no-console background",
+      "resolution": "1280x720",
+      "crosshair": "1",
+      "crosshairScale": "3",
+      "centreLuma": 89,
+      "background": "the demo1 spawn with colour intensity 5 (a brighter scene, same camera)"
+    },
+    {
+      "file": "docs/crosshair-probe/shots/after-console.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1568899
+    }
+  ],
+  "coverage": null,
+  "limitations": [],
+  "fatal": null,
+  "ok": true
+}

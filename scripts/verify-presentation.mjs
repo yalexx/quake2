@@ -208,6 +208,53 @@ async function waitFor(fn, timeoutMs, intervalMs, what) {
   throw new Error(what + " did not happen within " + timeoutMs + " ms" + (last ? " (last: " + JSON.stringify(last) + ")" : ""));
 }
 
+// ---- Engine state isolation ----------------------------------------------
+
+// A `userdata/baseq2/config.cfg` left behind by an earlier session is executed
+// by the engine *after* its start-up line, so it silently overrides the `+set`
+// cvars every boot below is built on. Measured on 2026-11-01: a stale config
+// pinned `gl3_intensity 1.4` / `gl3_overbrightbits 2.5` / `crosshair_scale 1`,
+// and the "bright" crosshair boot (intensity 5 on the start-up line) captured
+// at background luma 21.2 with 0 of 72 centre pixels at or above 100, where
+// this suite's thresholds come from a boot that measured 105.5. Moving the
+// same file aside and rebooting the same tree gave 105.5 again, so the file,
+// not the build, was the difference. It is moved aside for the run and put
+// back by teardown(), so a run never edits the owner's own settings.
+const ENGINE_CONFIG = path.join(ROOT, "userdata", "baseq2", "config.cfg");
+const ENGINE_CONFIG_QUARANTINE = ENGINE_CONFIG + ".verify-quarantine";
+let quarantinedConfig = false;
+
+function quarantineEngineConfig() {
+  if (fs.existsSync(ENGINE_CONFIG_QUARANTINE)) {
+    fatal("a previous verification config backup needs recovery: " + ENGINE_CONFIG_QUARANTINE);
+  }
+  if (!fs.existsSync(ENGINE_CONFIG)) return;
+  try {
+    fs.renameSync(ENGINE_CONFIG, ENGINE_CONFIG_QUARANTINE);
+    quarantinedConfig = true;
+    console.log("  moved a persisted userdata/baseq2/config.cfg aside for this run");
+  } catch (error) {
+    fatal("could not isolate userdata/baseq2/config.cfg: " + error.message);
+  }
+}
+
+function restoreEngineConfig() {
+  if (!quarantinedConfig) return;
+  try {
+    // Keep any settings written while the gate ran instead of deleting them.
+    if (fs.existsSync(ENGINE_CONFIG)) {
+      fs.renameSync(ENGINE_CONFIG, ENGINE_CONFIG + ".during-verification-" + Date.now());
+    }
+    fs.renameSync(ENGINE_CONFIG_QUARANTINE, ENGINE_CONFIG);
+  } catch (error) {
+    report.fatal = "could not restore userdata/baseq2/config.cfg; original remains at " +
+      ENGINE_CONFIG_QUARANTINE + ": " + error.message;
+    console.error(report.fatal);
+    return;
+  }
+  quarantinedConfig = false;
+}
+
 // ---- HTTP target ---------------------------------------------------------
 
 async function fetchManual(url) {
@@ -1479,11 +1526,18 @@ async function crosshairBoot(resolution, name, crosshair, bright, options = {}) 
   // apart from the crosshair itself. The next boot reloads, which restores
   // timescale; the check's own final reload does the same for the suite.
   if (options.freeze !== false) {
+    const beforeFreeze = (await state()).engine;
     await consoleBridge.runUntilEcho("timescale 0");
     if (!(await ensureGame("freezing the demo for the crosshair capture"))) {
       fatal(label + ": the game did not resume with the demo frozen for " + name + " / crosshair " + crosshair);
     }
     await sleep(900);
+    const afterFreeze = (await state()).engine;
+    check(label + ": freezing " + name + " / crosshair " + crosshair + " preserves the camera",
+      Boolean(beforeFreeze && afterFreeze && beforeFreeze.angles && afterFreeze.angles) &&
+        ["pitch", "yaw", "roll"].every((axis) => Math.abs(beforeFreeze.angles[axis] - afterFreeze.angles[axis]) < 0.1),
+      "keyboard-only console commands do not rotate the frozen spawn",
+      JSON.stringify({ before: beforeFreeze && beforeFreeze.angles, after: afterFreeze && afterFreeze.angles }));
   }
   const view = bright
     ? "the demo1 spawn with colour intensity 5 (a brighter scene, same camera)"
@@ -1552,6 +1606,12 @@ async function crosshairPresentationCheck(resolution) {
 
   // The game palette's rusted amber and bone, and the tint the running page
   // reports. Checked once: the tint must be a game colour, not a new asset.
+  // Both pairs are captured with the renderer on its high preset. The engine's
+  // own colour intensity and overbrights are what the two backgrounds differ
+  // by; make the renderer preset explicit instead of inheriting the last
+  // lighting check. The camera-preservation check above separately guards the
+  // console-focus regression that turned the bright spawn towards a dim wall.
+  await setLighting("high");
   const palette = paletteTintFromPak();
   if (!palette) fatal(label + ": could not read pics/colormap.pcx from baseq2/pak0.pak; the crosshair tint cannot be tied to the game palette");
   const tint = palette.tint;
@@ -3129,6 +3189,7 @@ async function run() {
   ].filter((one, index, all) => all.findIndex((other) => other.label === one.label) === index);
 
   await ensureServer();
+  quarantineEngineConfig();
   const chrome = await startChrome();
   cdp = await connectPage(chrome.base);
   consoleBridge = new EngineConsole(chrome.base);
@@ -3223,9 +3284,11 @@ async function teardown() {
     ]);
     try { serverChild.kill("SIGKILL"); } catch { /* already gone */ }
   }
+  restoreEngineConfig();
 }
 
 function finish(exitCode) {
+  if (report.fatal) exitCode = 1;
   report.ok = exitCode === 0 && !report.fatal && report.checks.every((one) => one.ok);
   try {
     fs.mkdirSync(OUT, { recursive: true });

@@ -1794,7 +1794,14 @@ export class QuakeControl {
   // state() reads; it is deleted again because the save store is synced from
   // this file system.
   async #askEngine(game, commands, attempts = 2) {
-    await this.focusCanvas(game);
+    // Console input needs keyboard focus, not pointer lock. Acquiring lock
+    // with a click can rotate the view (and fire) before the console opens.
+    // Keep keyboard-only queries observational with respect to the camera.
+    await game.evaluate(`(() => {
+      const canvas = document.getElementById("canvas");
+      if (!canvas) throw new Error("the game page has no canvas element");
+      canvas.focus();
+    })()`);
     const page = JSON.parse(await game.evaluate(stateExpression));
     if (!page.gameDir) return { text: null, gameDir: null, attempts: 0 };
     this.console.roundTrips++;
