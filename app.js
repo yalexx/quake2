@@ -11,6 +11,33 @@ var Module;
 (function () {
   "use strict";
 
+  // Pointer lock is requested by the engine's own SDL glue
+  // (engine/index.js, Browser.getCanvas().requestPointerLock()), which does not
+  // handle the promise Chrome returns. In a page that cannot hold pointer lock
+  // -- a headless browser, or a document that is not the active one -- that
+  // promise rejects with WrongDocumentError and surfaces as an uncaught page
+  // exception (measured 2026-11-02: seven of them in one acceptance run). The
+  // refusal is already reported through the standard `pointerlockerror` event,
+  // which the page's own prompt uses, so the promise is made non-throwing here
+  // and the failure is recorded on the page instead of escaping as an
+  // exception. A successful request is returned unchanged.
+  if (typeof Element === "function" && Element.prototype.requestPointerLock) {
+    const nativeRequestPointerLock = Element.prototype.requestPointerLock;
+    Element.prototype.requestPointerLock = function requestPointerLock() {
+      const result = nativeRequestPointerLock.apply(this, arguments);
+      if (!result || typeof result.then !== "function") return result;
+      return result.catch(function (error) {
+        try {
+          window.quake2PointerLockRefused = {
+            at: new Date().toISOString(),
+            reason: String((error && (error.name + ": " + error.message)) || error),
+          };
+        } catch (_) { /* the page can do without the record */ }
+        return undefined;
+      });
+    };
+  }
+
   // Relative URLs only: the box serves this app under /apps/quake2/.
   const PAK_DIR = "baseq2/";
   const REQUIRED_PAK = "pak0.pak";
