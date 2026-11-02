@@ -762,12 +762,17 @@
   // and the fixed 1.2 s cadence ran 30 reads in 70 s (~24 s of blocked main
   // thread) where the backed-off 4 s cadence ran 14 (~11 s). The interval is
   // chosen from the read's own measured cost, with hysteresis, so a fast page
-  // is never slowed and a slow one is. Both the interval and the last cost are
-  // reported in status() and read().
+  // is never slowed and a slow one is. The backoff is confined to large drawing
+  // buffers: the 1280x720 cadence is itself what the game-mode checks measure
+  // (the page's read-back is the work the mode removes), and on 2026-11-02 a
+  // loaded 1280x720 page measured 521.9 ms per read -- above the cost floor --
+  // which backed the cadence off and made the mode's saving disappear from the
+  // evidence. 2560x1440 measured 687-1006 ms and is the case this exists for.
+  // Both the interval and the last cost are reported in status() and read().
   const HUD_READ_MIN_MS = 1200;
   const HUD_READ_SLOW_MS = 4000;
+  const HUD_READ_BACKOFF_WIDTH = 1920;
   const HUD_READ_SLOW_COST_MS = 500;
-  const HUD_READ_FAST_COST_MS = 250;
   let hudReadInterval = HUD_READ_MIN_MS;
   let hudReadCost = null;
   function scheduleHudReads() {
@@ -803,8 +808,8 @@
           // measured.
           if (measured) {
             hudReadCost = performance.now() - started;
-            if (hudReadCost > HUD_READ_SLOW_COST_MS) hudReadInterval = HUD_READ_SLOW_MS;
-            else if (hudReadCost < HUD_READ_FAST_COST_MS) hudReadInterval = HUD_READ_MIN_MS;
+            hudReadInterval = gl.drawingBufferWidth >= HUD_READ_BACKOFF_WIDTH &&
+              hudReadCost > HUD_READ_SLOW_COST_MS ? HUD_READ_SLOW_MS : HUD_READ_MIN_MS;
           }
         }
       });

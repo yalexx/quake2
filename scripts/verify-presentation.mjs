@@ -812,16 +812,31 @@ function centreLuma(buffer) {
   return sum / count;
 }
 
-async function waitForVisibleScene(label, timeoutMs = 90000) {
+// The crosshair pairs are only a measurement if the capture is the pair's own
+// scene: the bright pair needs the lit spawn, and a page whose menu is up is
+// neither scene. Measured on 2026-11-02 (docs/release-verification-1.0.0.log):
+// a bright boot whose console command left the engine at its menu captured the
+// dark panel at centre luma 9.9 -- above the old >8 "not black" guard -- and
+// three checks then failed on a picture that was never the scene. minimumLuma
+// is the pair's own floor (dark 20 and bright 60 against the measured 46-49
+// and 101-102); while waiting, the game is returned from its menu.
+async function waitForVisibleScene(label, minimumLuma = 8, timeoutMs = 90000) {
   const started = Date.now();
   let mean = 0;
   while (Date.now() - started < timeoutMs) {
     const buffer = await screenshotBuffer();
     mean = centreLuma(buffer);
-    if (mean > 8) return { buffer, mean };
+    if (mean >= minimumLuma) return { buffer, mean };
+    let now = null;
+    try { now = await state(); } catch { now = null; }
+    if (now) {
+      if (now.menuHidden === false) await click('[data-action="resume"]');
+      else if (!(now.engine && now.engine.keyDestName === "game")) await pressEscape();
+    }
     await sleep(1500);
   }
-  fatal(label + ": the frame stayed black at the centre (mean luma " + mean.toFixed(1) + ")");
+  fatal(label + ": the scene stayed below this pair's floor (centre luma " +
+    mean.toFixed(1) + ", needed " + minimumLuma + ")");
 }
 
 // ---- Frame timing --------------------------------------------------------
@@ -1533,7 +1548,8 @@ async function crosshairBoot(resolution, name, crosshair, bright, options = {}) 
     fatal(label + ": the game did not resume for the crosshair-" + name + " " + crosshair + " capture");
   }
   await waitFrames(3);
-  await waitForVisibleScene(label + " crosshair-" + name + " " + crosshair + " frame");
+  const sceneFloor = bright ? 60 : 20;
+  await waitForVisibleScene(label + " crosshair-" + name + " " + crosshair + " frame", sceneFloor);
   // The engine's loading plaque fades out a moment after the first picture;
   // let it finish so the capture is the player's view, not the plaque.
   await sleep(10000);
@@ -1559,7 +1575,11 @@ async function crosshairBoot(resolution, name, crosshair, bright, options = {}) 
   const view = bright
     ? "the demo1 spawn with colour intensity 5 (a brighter scene, same camera)"
     : "engine default at the demo1 spawn";
-  const buffer = await stableScreenshot();
+  // The capture itself must be the pair's scene: the console command above can
+  // leave the engine at its menu, and a menu frame is not the background the
+  // opacity is solved from. The short budget is enough to recover, because the
+  // scene was already confirmed two steps above.
+  const buffer = (await waitForVisibleScene(label + " crosshair-" + name + " " + crosshair + " capture", sceneFloor, 30000)).buffer;
   const entry = await captureBuffer(label + "-crosshair-" + name + suffix + ".png", buffer, resolution.width, resolution.height,
     { view: crosshair === "1"
         ? "the crosshair at the centre of the in-game view over a " + name + " background"
@@ -2984,7 +3004,12 @@ async function crosshairAimCheck(resolution) {
     note(label + ": the player was dead before the crosshair aim check; restarting demo1");
     await restartDemo1(label);
   }
-  await consoleBridge.runUntilEcho("give all");
+  // sv_cheats first: the page has been reloaded since the status-bar check
+  // armed cheats, and `give all` without them leaves the player with the
+  // blaster only -- measured 2026-11-02, the gate then waited 15 s for a
+  // shotgun that was never in the inventory and aborted at check 128. The
+  // status-bar check already uses the same `sv_cheats 1;give all` string.
+  await consoleBridge.runUntilEcho("sv_cheats 1;give all");
   if (!(await ensureGame("after give all for the crosshair aim check"))) fatal(label + ": the game did not resume after give all");
   await consoleBridge.runUntilEcho("god");
   if (!(await ensureGame("after god for the crosshair aim check"))) fatal(label + ": the game did not resume after god");
@@ -3018,14 +3043,31 @@ async function crosshairAimCheck(resolution) {
   // size, and the spread table widens the cross for it.
   await consoleBridge.control.tap("2");
   let shotgun = null;
+  const shotgunInHand = async (what) => waitFor(async () => {
+    const now = await crosshairStateNow();
+    return now && now.weapon === "v_shotg";
+  }, 15000, 500, what);
   try {
-    await waitFor(async () => {
-      const now = await crosshairStateNow();
-      return now && now.weapon === "v_shotg";
-    }, 15000, 500, "the shotgun to be in hand");
+    await shotgunInHand("the shotgun to be in hand");
     shotgun = await crosshairStateNow();
   } catch (error) {
-    fatal(label + ": the shotgun never came into hand: " + error.message);
+    // The key did not take. The engine's console selects the same weapon
+    // (`use shotgun`, measured on this box to switch the view weapon to
+    // v_shotg), and the console visit also returns the game from any menu the
+    // key left behind. The check still requires the state read, so which
+    // mechanism put the weapon in hand is not the evidence.
+    report.notes.push(label + ": the 2 key did not bring the shotgun into hand (" +
+      error.message + "); selecting it on the console");
+    await consoleBridge.runUntilEcho("sv_cheats 1;use shotgun");
+    if (!(await ensureGame("after selecting the shotgun on the console"))) {
+      fatal(label + ": the game did not resume after selecting the shotgun on the console");
+    }
+    try {
+      await shotgunInHand("the shotgun to be in hand after the console command");
+      shotgun = await crosshairStateNow();
+    } catch (second) {
+      fatal(label + ": the shotgun never came into hand: " + second.message);
+    }
   }
   await sleep(800);
   shotgun = await crosshairStateNow();
