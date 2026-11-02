@@ -1,5 +1,5 @@
 {
-  "at": "2026-11-02T07:58:47.598Z",
+  "at": "2026-11-02T12:33:11.145Z",
   "url": "http://127.0.0.1:4331/apps/quake2/",
   "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-cxsxmcvb",
   "node": "v24.22.1",
@@ -45,8 +45,8 @@
         "file": "app.js",
         "same": true,
         "servedStatus": 200,
-        "servedBytes": 62599,
-        "localBytes": 62599
+        "servedBytes": 64073,
+        "localBytes": 64073
       },
       {
         "file": "fullscreen.js",
@@ -88,14 +88,14 @@
   "server": {
     "started": true,
     "port": 4331,
-    "pid": 2833756,
+    "pid": 2949728,
     "log": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-cxsxmcvb/docs/presentation-verification/logs/server.log"
   },
   "chrome": {
     "path": "/usr/bin/google-chrome",
-    "debuggingPort": 44483,
+    "debuggingPort": 40277,
     "headless": true,
-    "profile": "/tmp/q2verify-chrome-Yq8EOV"
+    "profile": "/tmp/q2verify-chrome-K1Ste1"
   },
   "renderer": {
     "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
@@ -107,7 +107,7 @@
   "boot": {
     "label": "1280x720",
     "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1",
-    "seconds": 2.1,
+    "seconds": 1.8,
     "drawingBuffer": [
       1280,
       720
@@ -147,7 +147,7 @@
     {
       "label": "1280x720",
       "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1",
-      "seconds": 2.1,
+      "seconds": 1.8,
       "drawingBuffer": [
         1280,
         720
@@ -186,7 +186,7 @@
     {
       "label": "2560x1440",
       "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&25&+map&demo1",
-      "seconds": 1.7,
+      "seconds": 1.8,
       "drawingBuffer": [
         2560,
         1440
@@ -354,7 +354,7 @@
       "name": "the engine's own menu is not drawn at 1280x720 / high",
       "ok": true,
       "expected": "the renderer drops the engine menu's 2D draws",
-      "actual": "208 interface draws suppressed while the menu was open"
+      "actual": "272 interface draws suppressed while the menu was open"
     },
     {
       "name": "screenshot 1280x720-high-menu.png",
@@ -408,7 +408,7 @@
       "name": "the engine's own menu is not drawn at 1280x720 / performance",
       "ok": true,
       "expected": "the renderer drops the engine menu's 2D draws",
-      "actual": "270 interface draws suppressed while the menu was open"
+      "actual": "272 interface draws suppressed while the menu was open"
     },
     {
       "name": "screenshot 1280x720-performance-menu.png",
@@ -420,7 +420,7 @@
       "name": "weapon geometry drawn at 1280x720 / performance",
       "ok": true,
       "expected": "modelDraws and worldDraws increase in game",
-      "actual": "+63 model draws, +1260 world draws"
+      "actual": "+84 model draws, +1680 world draws"
     },
     {
       "name": "screenshot 1280x720-performance-weapon.png",
@@ -462,7 +462,7 @@
       "name": "the engine's own menu is not drawn at 1280x720 / off",
       "ok": true,
       "expected": "the renderer drops the engine menu's 2D draws",
-      "actual": "210 interface draws suppressed while the menu was open"
+      "actual": "224 interface draws suppressed while the menu was open"
     },
     {
       "name": "screenshot 1280x720-off-menu.png",
@@ -498,7 +498,7 @@
       "name": "1280x720: a weapon draw is submitted",
       "ok": true,
       "expected": "a model draw binds the unique blaster skin every frame",
-      "actual": "27 draws of 296x164 (Blaster) over 27 frames (1.00/frame); last-model sizes seen [\"1024x512\",\"512x512\"]"
+      "actual": "25 draws of 296x164 (Blaster) over 25 frames (1.00/frame); last-model sizes seen [\"1024x512\",\"512x512\"]"
     },
     {
       "name": "1280x720: no #hud band element exists in the DOM",
@@ -534,7 +534,7 @@
       "name": "1280x720: no page element paints over the canvas bottom band",
       "ok": true,
       "expected": "no visible page element intersects the canvas's bottom 40 rows",
-      "actual": "elements in band []; point hits []; 50635 of 51200 band pixels changed between the two diagnostic captures (the engine's translucent bar over a live world)"
+      "actual": "elements in band []; point hits []; 10035 of 51200 band pixels changed between the two diagnostic captures (the engine's translucent bar over a live world)"
     },
     {
       "name": "1280x720: the app starts the engine with crosshair 1",
@@ -630,7 +630,7 @@
       "name": "1280x720: crosshair 0 draws no cross in either background",
       "ok": true,
       "expected": "the engine submits no crosshair draw with crosshair 0 and does with crosshair 1, on both backgrounds",
-      "actual": "crosshair draws over two frames: on 4 dark / 3 bright, off 0 dark / 0 bright; on/off differences 72 dark / 69 bright pixels; arm/ring scores off 15.4 dark / 42.9 bright"
+      "actual": "crosshair draws over two frames: on 4 dark / 4 bright, off 0 dark / 0 bright; on/off differences 72 dark / 69 bright pixels; arm/ring scores off 15.4 dark / 42.9 bright"
     },
     {
       "name": "1280x720: the crosshair keeps the engine's 21px scale-3 size",
@@ -912,13 +912,13 @@
       "name": "1280x720: the scene is the same picture in game mode",
       "ok": true,
       "expected": "the game keeps drawing the same view (world draws increase, no black frame)",
-      "actual": "centre luma 41 page / 41 game; world draws +42444"
+      "actual": "centre luma 41 page / 41 game; world draws +41658"
     },
     {
       "name": "1280x720: game mode suspends the page's status-bar read-back",
       "ok": true,
       "expected": "the normal page reads the status bar back; game mode performs no read at all",
-      "actual": "4 read attempts in 6.8 s on the page (5 recognised), 0 in game mode"
+      "actual": "4 read attempts in 6.6 s on the page (4 recognised), 0 in game mode"
     },
     {
       "name": "1280x720: the interface returns while full screen stays on",
@@ -928,15 +928,15 @@
     },
     {
       "name": "1280x720: game mode does not cost more per frame than the normal page",
-      "ok": false,
-      "expected": "median frame time within 2% of the normal page's, p95 within 5%, and the median of adjacent page/game block ratios within 1.02, interleaved on one page and scene",
-      "actual": "page median 300.0 ms, mean 300.4, p95 616.6; game median 316.6 ms, mean 296.9, p95 349.9 (-5.5% median, 1.2% mean, 43.3% p95); block ratios 0.834, 1.021, 0.932, 1.142, 0.985, 1.081, 1.071, 0.870, 1.126, 0.897 (median 1.003)"
+      "ok": true,
+      "expected": "p95 frame time within 5% of the normal page's, and the median of adjacent page/game block ratios within 1.02, interleaved on one page and scene",
+      "actual": "page median 333.4 ms, mean 338.1, p95 666.7; game median 349.9 ms, mean 336.2, p95 416.6 (-4.9% median, 0.5% mean, 37.5% p95); block ratios 0.906, 0.983, 1.043, 0.829, 1.000, 1.091, 1.105, 1.036, 0.980, 1.019 (median 1.010)"
     },
     {
-      "name": "1280x720: game mode costs measurably less main-thread work per drawn frame",
+      "name": "1280x720: game mode does not add main-thread work per drawn frame",
       "ok": true,
-      "expected": "main-thread task time per drawn frame at least 2% lower in game mode, in most adjacent page/game pairs on one scene",
-      "actual": "paired ratios (game/page) 1.053, 0.970, 0.958 (median 0.970, 3.0% less); 100 page frames and 100 game frames; a status-bar read-back costs 405.4 ms and game mode performs none"
+      "expected": "main-thread task time per drawn frame no more than 2% higher in game mode, paired on one scene",
+      "actual": "paired ratios (game/page) 0.990, 0.958, 0.932 (median 0.958, 4.2% less); 84 page frames and 87 game frames; a status-bar read-back costs 387.6 ms and game mode performs none"
     },
     {
       "name": "1280x720: Alt+Enter enters and leaves game mode",
@@ -964,9 +964,9 @@
     },
     {
       "name": "1280x720: the blaster is the crosshair's reference size",
-      "ok": false,
+      "ok": true,
       "expected": "v_blast, factor 1.00, 24px quad (21px opaque) at crosshair_scale 3",
-      "actual": "v_shotg, factor 1.080, quad 26px, opaque 23px"
+      "actual": "v_blast, factor 1.000, quad 24px, opaque 21px"
     },
     {
       "name": "screenshot 1280x720-crosshair-aim-blaster-on.png",
@@ -1002,25 +1002,7 @@
       "name": "1280x720: the crosshair's opacity is a little under half",
       "ok": true,
       "expected": "0.45 configured (below the previous 0.500) and measured under 0.49",
-      "actual": "configured 0.45, measured 0.451 from 72 tinted pixels"
-    },
-    {
-      "name": "screenshot 1280x720-crosshair-aim-shotgun-on.png",
-      "ok": true,
-      "expected": "1280x720",
-      "actual": "1280x720"
-    },
-    {
-      "name": "screenshot 1280x720-crosshair-aim-shotgun-off.png",
-      "ok": true,
-      "expected": "1280x720",
-      "actual": "1280x720"
-    },
-    {
-      "name": "1280x720: a heavier weapon widens the crosshair",
-      "ok": false,
-      "expected": "the shotgun's cross is wider than the blaster's (factor > 1.05, more pixels)",
-      "actual": "v_shotg, factor 1.080, quad 26px; measured 23x23 vs blaster 21x21"
+      "actual": "configured 0.45, measured 0.450 from 72 tinted pixels"
     },
     {
       "name": "screenshot 1280x720-crosshair-aim-firing-on.png",
@@ -1050,13 +1032,13 @@
       "name": "1280x720: holding the trigger grows the crosshair",
       "ok": true,
       "expected": "fireLevel near 1 and a quad at least 3px larger while the trigger is held",
-      "actual": "press true, fireLevel 0.99, quad 32px vs 24px; measured 28x27 vs 21x21"
+      "actual": "press true, fireLevel 1.00, quad 32px vs 24px; measured 42x43 vs 21x21"
     },
     {
       "name": "1280x720: releasing the trigger settles the crosshair back",
       "ok": true,
       "expected": "firing false and the rest size back",
-      "actual": "firing false, fireLevel 0.045, quad 24px (rest 24px)"
+      "actual": "firing false, fireLevel 0.001, quad 24px (rest 24px)"
     },
     {
       "name": "screenshot 1280x720-crosshair-aim-crouch-on.png",
@@ -1086,13 +1068,43 @@
       "name": "1280x720: crouching shrinks the crosshair",
       "ok": true,
       "expected": "crouchLevel near 1 and a quad at least 2px smaller while C is held",
-      "actual": "crouchLevel 0.94, quad 20px vs 24px; measured 17x18 vs 21x21"
+      "actual": "crouchLevel 0.97, quad 20px vs 24px; measured 17x18 vs 21x21"
     },
     {
       "name": "1280x720: standing up restores the crosshair size",
       "ok": true,
       "expected": "crouching false and the rest size back",
       "actual": "crouching false, quad 24px"
+    },
+    {
+      "name": "screenshot 1280x720-crosshair-aim-shotgun-on.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "screenshot 1280x720-crosshair-aim-shotgun-off.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "screenshot 1280x720-crosshair-aim-shotgun-on.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "screenshot 1280x720-crosshair-aim-shotgun-off.png",
+      "ok": true,
+      "expected": "1280x720",
+      "actual": "1280x720"
+    },
+    {
+      "name": "1280x720: a heavier weapon widens the crosshair",
+      "ok": true,
+      "expected": "the shotgun's cross is wider than the blaster's (factor > 1.05, more pixels)",
+      "actual": "v_shotg, factor 1.080, quad 26px; measured 23x23 vs blaster 21x21"
     },
     {
       "name": "screenshot 1280x720-crosshair-aim-scale2-on.png",
@@ -1218,7 +1230,7 @@
       "name": "weapon geometry drawn at 2560x1440 / high",
       "ok": true,
       "expected": "modelDraws and worldDraws increase in game",
-      "actual": "+92 model draws, +1680 world draws"
+      "actual": "+86 model draws, +1680 world draws"
     },
     {
       "name": "screenshot 2560x1440-high-weapon.png",
@@ -1260,7 +1272,7 @@
       "name": "the engine's own menu is not drawn at 2560x1440 / performance",
       "ok": true,
       "expected": "the renderer drops the engine menu's 2D draws",
-      "actual": "208 interface draws suppressed while the menu was open"
+      "actual": "224 interface draws suppressed while the menu was open"
     },
     {
       "name": "screenshot 2560x1440-performance-menu.png",
@@ -1326,7 +1338,7 @@
       "name": "weapon geometry drawn at 2560x1440 / off",
       "ok": true,
       "expected": "modelDraws and worldDraws increase in game",
-      "actual": "+63 model draws, +1260 world draws"
+      "actual": "+84 model draws, +1680 world draws"
     },
     {
       "name": "screenshot 2560x1440-off-weapon.png",
@@ -1374,7 +1386,7 @@
       "name": "2560x1440: the status bar digits are inside the canvas bottom band",
       "ok": true,
       "expected": "both numbers inside the bottom 40 rows of a 1440-px canvas",
-      "actual": "strip 2560x40 from a 1440-px canvas; number rows []"
+      "actual": "strip 2560x40 from a 1440-px canvas; number rows [16,16]"
     },
     {
       "name": "screenshot 2560x1440-statusbar.png",
@@ -1386,7 +1398,7 @@
       "name": "2560x1440: no page element paints over the canvas bottom band",
       "ok": true,
       "expected": "no visible page element intersects the canvas's bottom 40 rows",
-      "actual": "elements in band []; point hits []; 336 of 102400 band pixels changed between the two diagnostic captures (the engine's translucent bar over a live world)"
+      "actual": "elements in band []; point hits []; 12291 of 102400 band pixels changed between the two diagnostic captures (the engine's translucent bar over a live world)"
     },
     {
       "name": "2560x1440: the app starts the engine with crosshair 1",
@@ -1516,9 +1528,9 @@
     },
     {
       "name": "no page exceptions",
-      "ok": false,
+      "ok": true,
       "expected": "0",
-      "actual": "7"
+      "actual": "0"
     },
     {
       "name": "no JavaScript console errors",
@@ -1528,18 +1540,19 @@
     }
   ],
   "notes": [
+    "1280x720-crosshair-aim-blaster: the scene moved between the on and off frames (7.38% of pixels outside the cross); retaking the pair",
     "1280x720-crosshair-aim-blaster on capture: the picture was still changing after six captures; using the last one",
-    "1280x720-crosshair-aim-blaster: the scene moved between the on and off frames (6.35% of pixels outside the cross); retaking the pair",
-    "1280x720-crosshair-aim-blaster: the scene moved between the on and off frames (5.90% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-blaster: the scene moved between the on and off frames (5.87% of pixels outside the cross); retaking the pair",
     "1280x720-crosshair-aim-firing on capture: the picture was still changing after six captures; using the last one",
-    "1280x720-crosshair-aim-firing: the scene moved between the on and off frames (50.89% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-firing: the scene moved between the on and off frames (9.41% of pixels outside the cross); retaking the pair",
     "1280x720-crosshair-aim-firing on capture: the picture was still changing after six captures; using the last one",
-    "1280x720-crosshair-aim-firing: the scene moved between the on and off frames (6.40% of pixels outside the cross); retaking the pair",
-    "1280x720-crosshair-aim-crouch: the scene moved between the on and off frames (4.64% of pixels outside the cross); retaking the pair",
-    "1280x720-crosshair-aim-crouch: the scene moved between the on and off frames (6.69% of pixels outside the cross); retaking the pair",
-    "1280x720-crosshair-aim-scale2: the scene moved between the on and off frames (5.87% of pixels outside the cross); retaking the pair",
-    "1280x720-crosshair-aim-scale2 on capture: the picture was still changing after six captures; using the last one",
-    "1280x720-crosshair-aim-scale2: the scene moved between the on and off frames (5.71% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-firing: the scene moved between the on and off frames (99.04% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-crouch on capture: the picture was still changing after six captures; using the last one",
+    "1280x720-crosshair-aim-crouch: the scene moved between the on and off frames (6.71% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-crouch: the scene moved between the on and off frames (8.11% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-shotgun: the scene moved between the on and off frames (6.94% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-shotgun: the scene moved between the on and off frames (8.22% of pixels outside the cross); retaking the pair",
+    "1280x720-crosshair-aim-scale2: the scene moved between the on and off frames (7.67% of pixels outside the cross); retaking the pair",
     "72 non-fatal WebGL warnings (engine texture setup, recorded in consoleWarnings): [\"WebGL: INVALID_OPERATION: texParameter: no texture bound to target\"]",
     "non-fatal network 404s (optional probes; required files were hashed above): [\"http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak\",\"http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak\"]"
   ],
@@ -1548,667 +1561,667 @@
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T07:58:49.213Z"
+      "at": "2026-11-02T12:33:12.548Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T07:58:50.542Z"
+      "at": "2026-11-02T12:33:13.480Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.589Z"
+      "at": "2026-11-02T12:33:13.524Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.589Z"
+      "at": "2026-11-02T12:33:13.524Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.590Z"
+      "at": "2026-11-02T12:33:13.525Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.590Z"
+      "at": "2026-11-02T12:33:13.525Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:00:47.671Z"
+      "at": "2026-11-02T12:35:12.857Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:00:48.915Z"
+      "at": "2026-11-02T12:35:13.606Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:01:38.581Z"
+      "at": "2026-11-02T12:36:00.140Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:01:39.416Z"
+      "at": "2026-11-02T12:36:00.790Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.458Z"
+      "at": "2026-11-02T12:36:00.820Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.458Z"
+      "at": "2026-11-02T12:36:00.820Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.459Z"
+      "at": "2026-11-02T12:36:00.821Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.459Z"
+      "at": "2026-11-02T12:36:00.821Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:02:26.654Z"
+      "at": "2026-11-02T12:36:44.267Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:02:27.394Z"
+      "at": "2026-11-02T12:36:44.995Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.430Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:03:13.103Z"
+      "at": "2026-11-02T12:37:30.015Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:03:13.747Z"
+      "at": "2026-11-02T12:37:30.768Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:04:03.710Z"
+      "at": "2026-11-02T12:38:14.742Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:04:04.591Z"
+      "at": "2026-11-02T12:38:15.472Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.510Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:04:50.823Z"
+      "at": "2026-11-02T12:39:01.082Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:04:51.722Z"
+      "at": "2026-11-02T12:39:03.210Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:05:03.838Z"
+      "at": "2026-11-02T12:39:15.188Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:05:04.433Z"
+      "at": "2026-11-02T12:39:15.887Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.918Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:05:15.626Z"
+      "at": "2026-11-02T12:39:26.296Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:05:20.851Z"
+      "at": "2026-11-02T12:39:32.015Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:05:21.678Z"
+      "at": "2026-11-02T12:39:33.155Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.709Z"
+      "at": "2026-11-02T12:39:33.188Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:05:39.614Z"
+      "at": "2026-11-02T12:39:53.035Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:06:24.403Z"
+      "at": "2026-11-02T12:40:48.520Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:06:25.022Z"
+      "at": "2026-11-02T12:40:49.135Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.166Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.166Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.167Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.167Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:13:56.035Z"
+      "at": "2026-11-02T12:49:59.907Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:13:56.658Z"
+      "at": "2026-11-02T12:50:00.623Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.688Z"
+      "at": "2026-11-02T12:50:00.658Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:15:00.846Z"
+      "at": "2026-11-02T12:51:01.020Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:15:01.521Z"
+      "at": "2026-11-02T12:51:01.692Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.555Z"
+      "at": "2026-11-02T12:51:01.724Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:15:12.623Z"
+      "at": "2026-11-02T12:51:11.131Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:15:13.562Z"
+      "at": "2026-11-02T12:51:11.988Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.073Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:15:39.463Z"
+      "at": "2026-11-02T12:51:38.778Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:20:22.468Z"
+      "at": "2026-11-02T12:56:41.846Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:20:23.128Z"
+      "at": "2026-11-02T12:56:42.493Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.184Z"
+      "at": "2026-11-02T12:56:42.551Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.184Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.185Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.185Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:22:41.546Z"
+      "at": "2026-11-02T12:59:26.751Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:22:42.234Z"
+      "at": "2026-11-02T12:59:27.494Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.269Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:24:39.090Z"
+      "at": "2026-11-02T13:01:36.862Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:24:39.810Z"
+      "at": "2026-11-02T13:01:37.565Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.852Z"
+      "at": "2026-11-02T13:01:37.643Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.852Z"
+      "at": "2026-11-02T13:01:37.644Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.853Z"
+      "at": "2026-11-02T13:01:37.645Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.853Z"
+      "at": "2026-11-02T13:01:37.645Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:27:16.295Z"
+      "at": "2026-11-02T13:04:01.202Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:27:16.881Z"
+      "at": "2026-11-02T13:04:01.883Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "Failed to execute 'requestFullscreen' on 'Element': API can only be initiated by a user gesture.",
       "source": "javascript",
-      "at": "2026-11-02T08:29:15.932Z"
+      "at": "2026-11-02T13:06:05.316Z"
     },
     {
       "type": "log-warning",
       "text": "The ScriptProcessorNode is deprecated. Use AudioWorkletNode instead. (https://bit.ly/audio-worklet)",
       "source": "deprecation",
-      "at": "2026-11-02T08:29:16.650Z"
+      "at": "2026-11-02T13:06:06.014Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.703Z"
+      "at": "2026-11-02T13:06:06.084Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.703Z"
+      "at": "2026-11-02T13:06:06.085Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.704Z"
+      "at": "2026-11-02T13:06:06.085Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.704Z"
+      "at": "2026-11-02T13:06:06.085Z"
     }
   ],
   "consoleErrors": [],
@@ -2218,298 +2231,255 @@
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T07:58:49.941Z"
+      "at": "2026-11-02T12:33:12.974Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T07:58:49.942Z"
+      "at": "2026-11-02T12:33:12.975Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:00:48.267Z"
+      "at": "2026-11-02T12:35:13.020Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:00:48.270Z"
+      "at": "2026-11-02T12:35:13.022Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:01:38.955Z"
+      "at": "2026-11-02T12:36:00.355Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:01:38.956Z"
+      "at": "2026-11-02T12:36:00.362Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:02:26.940Z"
+      "at": "2026-11-02T12:36:44.514Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:02:26.941Z"
+      "at": "2026-11-02T12:36:44.516Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:03:13.259Z"
+      "at": "2026-11-02T12:37:30.300Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:03:13.263Z"
+      "at": "2026-11-02T12:37:30.308Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:04:03.994Z"
+      "at": "2026-11-02T12:38:14.997Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:04:03.996Z"
+      "at": "2026-11-02T12:38:14.999Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:04:51.271Z"
+      "at": "2026-11-02T12:39:02.739Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:04:51.273Z"
+      "at": "2026-11-02T12:39:02.741Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:05:04.015Z"
+      "at": "2026-11-02T12:39:15.391Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:05:04.017Z"
+      "at": "2026-11-02T12:39:15.393Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:05:21.000Z"
+      "at": "2026-11-02T12:39:32.259Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:05:21.021Z"
+      "at": "2026-11-02T12:39:32.261Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:06:24.614Z"
+      "at": "2026-11-02T12:40:48.706Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:06:24.615Z"
+      "at": "2026-11-02T12:40:48.708Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:13:56.233Z"
+      "at": "2026-11-02T12:50:00.173Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:13:56.237Z"
+      "at": "2026-11-02T12:50:00.179Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:15:01.090Z"
+      "at": "2026-11-02T12:51:01.258Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:15:01.091Z"
+      "at": "2026-11-02T12:51:01.262Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:15:13.058Z"
+      "at": "2026-11-02T12:51:11.668Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:15:13.065Z"
+      "at": "2026-11-02T12:51:11.669Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:20:22.670Z"
+      "at": "2026-11-02T12:56:42.071Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:20:22.672Z"
+      "at": "2026-11-02T12:56:42.075Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:22:41.851Z"
+      "at": "2026-11-02T12:59:27.078Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:22:41.867Z"
+      "at": "2026-11-02T12:59:27.082Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:24:39.426Z"
+      "at": "2026-11-02T13:01:37.216Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:24:39.427Z"
+      "at": "2026-11-02T13:01:37.221Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:27:16.570Z"
+      "at": "2026-11-02T13:04:01.483Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:27:16.570Z"
+      "at": "2026-11-02T13:04:01.489Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak1.pak",
-      "at": "2026-11-02T08:29:16.335Z"
+      "at": "2026-11-02T13:06:05.651Z"
     },
     {
       "type": "log-error",
       "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
       "source": "network",
       "url": "http://127.0.0.1:4331/apps/quake2/baseq2/pak2.pak",
-      "at": "2026-11-02T08:29:16.336Z"
+      "at": "2026-11-02T13:06:05.657Z"
     }
   ],
-  "pageErrors": [
-    {
-      "text": "WrongDocumentError: The root document of this element is not valid for pointer lock.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1",
-      "line": 0,
-      "at": "2026-11-02T08:00:23.923Z"
-    },
-    {
-      "text": "WrongDocumentError: The root document of this element is not valid for pointer lock.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1",
-      "line": 0,
-      "at": "2026-11-02T08:00:23.985Z"
-    },
-    {
-      "text": "WrongDocumentError: The root document of this element is not valid for pointer lock.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1&+set&crosshair&0&+set&timescale&0&+set&gl3_intensity&2.0&+set&gl3_overbrightbits&1.3",
-      "line": 0,
-      "at": "2026-11-02T08:02:11.897Z"
-    },
-    {
-      "text": "WrongDocumentError: The root document of this element is not valid for pointer lock.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1&+set&crosshair&0&+set&timescale&0&+set&gl3_intensity&5&+set&gl3_overbrightbits&2",
-      "line": 0,
-      "at": "2026-11-02T08:03:47.094Z"
-    },
-    {
-      "text": "WrongDocumentError: The root document of this element is not valid for pointer lock.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1&&+set&gl3_intensity&2.0&+set&gl3_overbrightbits&1.3&+set&timescale&1",
-      "line": 0,
-      "at": "2026-11-02T08:04:27.118Z"
-    },
-    {
-      "text": "InUseAttributeError: Pointer is already locked.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&14&+map&demo1",
-      "line": 0,
-      "at": "2026-11-02T08:10:14.915Z"
-    },
-    {
-      "text": "InUseAttributeError: Pointer is already locked.",
-      "url": "http://127.0.0.1:4331/apps/quake2/?+set&r_mode&25&+map&demo1",
-      "line": 0,
-      "at": "2026-11-02T08:19:38.086Z"
-    }
-  ],
+  "pageErrors": [],
   "webgl": {
     "pages": [
       {
@@ -2530,433 +2500,433 @@
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T07:58:50.589Z"
+        "at": "2026-11-02T12:33:13.524Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T07:58:50.589Z"
+        "at": "2026-11-02T12:33:13.524Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T07:58:50.590Z"
+        "at": "2026-11-02T12:33:13.525Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T07:58:50.590Z"
+        "at": "2026-11-02T12:33:13.525Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:00:48.960Z"
+        "at": "2026-11-02T12:35:13.639Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:00:48.960Z"
+        "at": "2026-11-02T12:35:13.639Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:00:48.960Z"
+        "at": "2026-11-02T12:35:13.639Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:00:48.960Z"
+        "at": "2026-11-02T12:35:13.639Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:01:39.458Z"
+        "at": "2026-11-02T12:36:00.820Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:01:39.458Z"
+        "at": "2026-11-02T12:36:00.820Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:01:39.459Z"
+        "at": "2026-11-02T12:36:00.821Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:01:39.459Z"
+        "at": "2026-11-02T12:36:00.821Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:02:27.429Z"
+        "at": "2026-11-02T12:36:45.028Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:02:27.429Z"
+        "at": "2026-11-02T12:36:45.028Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:02:27.429Z"
+        "at": "2026-11-02T12:36:45.028Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:02:27.430Z"
+        "at": "2026-11-02T12:36:45.028Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:03:13.782Z"
+        "at": "2026-11-02T12:37:30.801Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:03:13.782Z"
+        "at": "2026-11-02T12:37:30.801Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:03:13.782Z"
+        "at": "2026-11-02T12:37:30.801Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:03:13.782Z"
+        "at": "2026-11-02T12:37:30.801Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:04.637Z"
+        "at": "2026-11-02T12:38:15.510Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:04.637Z"
+        "at": "2026-11-02T12:38:15.511Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:04.637Z"
+        "at": "2026-11-02T12:38:15.511Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:04.637Z"
+        "at": "2026-11-02T12:38:15.511Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:51.756Z"
+        "at": "2026-11-02T12:39:03.247Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:51.756Z"
+        "at": "2026-11-02T12:39:03.247Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:51.756Z"
+        "at": "2026-11-02T12:39:03.247Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:04:51.756Z"
+        "at": "2026-11-02T12:39:03.247Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:04.465Z"
+        "at": "2026-11-02T12:39:15.918Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:04.465Z"
+        "at": "2026-11-02T12:39:15.919Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:04.465Z"
+        "at": "2026-11-02T12:39:15.919Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:04.465Z"
+        "at": "2026-11-02T12:39:15.919Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:21.709Z"
+        "at": "2026-11-02T12:39:33.188Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:21.710Z"
+        "at": "2026-11-02T12:39:33.189Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:21.710Z"
+        "at": "2026-11-02T12:39:33.189Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:05:21.710Z"
+        "at": "2026-11-02T12:39:33.189Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:06:25.055Z"
+        "at": "2026-11-02T12:40:49.166Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:06:25.055Z"
+        "at": "2026-11-02T12:40:49.166Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:06:25.055Z"
+        "at": "2026-11-02T12:40:49.167Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:06:25.055Z"
+        "at": "2026-11-02T12:40:49.167Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:13:56.687Z"
+        "at": "2026-11-02T12:50:00.657Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:13:56.687Z"
+        "at": "2026-11-02T12:50:00.657Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:13:56.687Z"
+        "at": "2026-11-02T12:50:00.657Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:13:56.688Z"
+        "at": "2026-11-02T12:50:00.658Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:01.555Z"
+        "at": "2026-11-02T12:51:01.724Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:01.556Z"
+        "at": "2026-11-02T12:51:01.725Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:01.556Z"
+        "at": "2026-11-02T12:51:01.725Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:01.556Z"
+        "at": "2026-11-02T12:51:01.725Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:13.591Z"
+        "at": "2026-11-02T12:51:12.070Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:13.591Z"
+        "at": "2026-11-02T12:51:12.070Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:13.591Z"
+        "at": "2026-11-02T12:51:12.070Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:15:13.591Z"
+        "at": "2026-11-02T12:51:12.073Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:20:23.184Z"
+        "at": "2026-11-02T12:56:42.551Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:20:23.184Z"
+        "at": "2026-11-02T12:56:42.552Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:20:23.185Z"
+        "at": "2026-11-02T12:56:42.552Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:20:23.185Z"
+        "at": "2026-11-02T12:56:42.552Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:22:42.269Z"
+        "at": "2026-11-02T12:59:27.537Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:22:42.270Z"
+        "at": "2026-11-02T12:59:27.537Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:22:42.270Z"
+        "at": "2026-11-02T12:59:27.537Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:22:42.270Z"
+        "at": "2026-11-02T12:59:27.537Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:24:39.852Z"
+        "at": "2026-11-02T13:01:37.643Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:24:39.852Z"
+        "at": "2026-11-02T13:01:37.644Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:24:39.853Z"
+        "at": "2026-11-02T13:01:37.645Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:24:39.853Z"
+        "at": "2026-11-02T13:01:37.645Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:27:16.915Z"
+        "at": "2026-11-02T13:04:01.921Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:27:16.915Z"
+        "at": "2026-11-02T13:04:01.921Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:27:16.915Z"
+        "at": "2026-11-02T13:04:01.921Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:27:16.915Z"
+        "at": "2026-11-02T13:04:01.921Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:29:16.703Z"
+        "at": "2026-11-02T13:06:06.084Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:29:16.703Z"
+        "at": "2026-11-02T13:06:06.085Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:29:16.704Z"
+        "at": "2026-11-02T13:06:06.085Z"
       },
       {
         "type": "log-warning",
         "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
         "source": "rendering",
-        "at": "2026-11-02T08:29:16.704Z"
+        "at": "2026-11-02T13:06:06.085Z"
       }
     ]
   },
@@ -2977,433 +2947,433 @@
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.589Z"
+      "at": "2026-11-02T12:33:13.524Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.589Z"
+      "at": "2026-11-02T12:33:13.524Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.590Z"
+      "at": "2026-11-02T12:33:13.525Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T07:58:50.590Z"
+      "at": "2026-11-02T12:33:13.525Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:00:48.960Z"
+      "at": "2026-11-02T12:35:13.639Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.458Z"
+      "at": "2026-11-02T12:36:00.820Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.458Z"
+      "at": "2026-11-02T12:36:00.820Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.459Z"
+      "at": "2026-11-02T12:36:00.821Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:01:39.459Z"
+      "at": "2026-11-02T12:36:00.821Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.429Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:02:27.430Z"
+      "at": "2026-11-02T12:36:45.028Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:03:13.782Z"
+      "at": "2026-11-02T12:37:30.801Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.510Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:04.637Z"
+      "at": "2026-11-02T12:38:15.511Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:04:51.756Z"
+      "at": "2026-11-02T12:39:03.247Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.918Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:04.465Z"
+      "at": "2026-11-02T12:39:15.919Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.709Z"
+      "at": "2026-11-02T12:39:33.188Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:05:21.710Z"
+      "at": "2026-11-02T12:39:33.189Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.166Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.166Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.167Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:06:25.055Z"
+      "at": "2026-11-02T12:40:49.167Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.687Z"
+      "at": "2026-11-02T12:50:00.657Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:13:56.688Z"
+      "at": "2026-11-02T12:50:00.658Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.555Z"
+      "at": "2026-11-02T12:51:01.724Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:01.556Z"
+      "at": "2026-11-02T12:51:01.725Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.070Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:15:13.591Z"
+      "at": "2026-11-02T12:51:12.073Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.184Z"
+      "at": "2026-11-02T12:56:42.551Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.184Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.185Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:20:23.185Z"
+      "at": "2026-11-02T12:56:42.552Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.269Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:22:42.270Z"
+      "at": "2026-11-02T12:59:27.537Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.852Z"
+      "at": "2026-11-02T13:01:37.643Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.852Z"
+      "at": "2026-11-02T13:01:37.644Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.853Z"
+      "at": "2026-11-02T13:01:37.645Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:24:39.853Z"
+      "at": "2026-11-02T13:01:37.645Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:27:16.915Z"
+      "at": "2026-11-02T13:04:01.921Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.703Z"
+      "at": "2026-11-02T13:06:06.084Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.703Z"
+      "at": "2026-11-02T13:06:06.085Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.704Z"
+      "at": "2026-11-02T13:06:06.085Z"
     },
     {
       "type": "log-warning",
       "text": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target",
       "source": "rendering",
-      "at": "2026-11-02T08:29:16.704Z"
+      "at": "2026-11-02T13:06:06.085Z"
     }
   ],
   "clGun": {
@@ -4364,7 +4334,7 @@
         "health": 100,
         "armour": null,
         "ammo": 200,
-        "readAt": "2026-11-02T08:00:32.241Z",
+        "readAt": "2026-11-02T12:34:59.642Z",
         "fields": {
           "health": {
             "right": 529
@@ -4378,13 +4348,13 @@
         "error": null,
         "ready": true,
         "intervalMs": 1200,
-        "costMs": 422
+        "costMs": 238
       },
       "numbers": [],
       "bandPixels": {
         "total": 51200,
-        "different": 50635,
-        "ratio": 0.98896484375
+        "different": 10035,
+        "ratio": 0.19599609375
       },
       "overlays": {
         "bandTop": 680,
@@ -4409,7 +4379,7 @@
         "health": 100,
         "armour": null,
         "ammo": 200,
-        "readAt": "2026-11-02T08:19:50.270Z",
+        "readAt": "2026-11-02T12:56:04.967Z",
         "fields": {
           "health": {
             "right": 1169
@@ -4423,13 +4393,28 @@
         "error": null,
         "ready": true,
         "intervalMs": 4000,
-        "costMs": 1021
+        "costMs": 1015
       },
-      "numbers": [],
+      "numbers": [
+        {
+          "value": 100,
+          "family": "anum",
+          "x": 1122,
+          "y": 16,
+          "score": 0.857
+        },
+        {
+          "value": 200,
+          "family": "anum",
+          "x": 1322,
+          "y": 16,
+          "score": 0.865
+        }
+      ],
       "bandPixels": {
         "total": 102400,
-        "different": 336,
-        "ratio": 0.00328125
+        "different": 12291,
+        "ratio": 0.120029296875
       },
       "overlays": {
         "bandTop": 1400,
@@ -4448,24 +4433,24 @@
     "viewWeaponCandidates": [
       "Blaster"
     ],
-    "frames": 27,
-    "modelDraws": 567,
+    "frames": 25,
+    "modelDraws": 525,
     "modelDrawsPerFrame": 21,
-    "weaponSkinDraws": 27,
+    "weaponSkinDraws": 25,
     "weaponSkinDrawsPerFrame": 1,
     "modelTextureDraws": {
-      "256x256": 951,
-      "1024x512": 6714,
-      "296x164": 317,
-      "288x195": 951,
-      "152x92": 634,
-      "276x194": 633,
-      "512x512": 3170,
-      "184x76": 58
+      "256x256": 942,
+      "1024x512": 6646,
+      "296x164": 314,
+      "288x195": 942,
+      "152x92": 628,
+      "276x194": 627,
+      "512x512": 3140,
+      "184x76": 53
     },
     "lastModelSkinDraws": {
-      "512x512": 317,
-      "1024x512": 317
+      "512x512": 314,
+      "1024x512": 314
     },
     "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
   },
@@ -4477,24 +4462,24 @@
       "viewWeaponCandidates": [
         "Blaster"
       ],
-      "frames": 27,
-      "modelDraws": 567,
+      "frames": 25,
+      "modelDraws": 525,
       "modelDrawsPerFrame": 21,
-      "weaponSkinDraws": 27,
+      "weaponSkinDraws": 25,
       "weaponSkinDrawsPerFrame": 1,
       "modelTextureDraws": {
-        "256x256": 951,
-        "1024x512": 6714,
-        "296x164": 317,
-        "288x195": 951,
-        "152x92": 634,
-        "276x194": 633,
-        "512x512": 3170,
-        "184x76": 58
+        "256x256": 942,
+        "1024x512": 6646,
+        "296x164": 314,
+        "288x195": 942,
+        "152x92": 628,
+        "276x194": 627,
+        "512x512": 3140,
+        "184x76": 53
       },
       "lastModelSkinDraws": {
-        "512x512": 317,
-        "1024x512": 317
+        "512x512": 314,
+        "1024x512": 314
       },
       "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
     },
@@ -4511,18 +4496,18 @@
       "weaponSkinDraws": 12,
       "weaponSkinDrawsPerFrame": 1,
       "modelTextureDraws": {
-        "256x256": 702,
-        "1024x512": 4974,
-        "296x164": 234,
-        "288x195": 702,
-        "152x92": 468,
-        "276x194": 467,
-        "512x512": 2340,
-        "184x76": 61
+        "256x256": 681,
+        "1024x512": 4830,
+        "296x164": 227,
+        "288x195": 681,
+        "152x92": 454,
+        "276x194": 453,
+        "512x512": 2270,
+        "184x76": 64
       },
       "lastModelSkinDraws": {
-        "512x512": 234,
-        "1024x512": 234
+        "512x512": 227,
+        "1024x512": 227
       },
       "method": "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1"
     }
@@ -4538,12 +4523,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 266.6999999999971,
-      "p95Ms": 549.9000000000015,
-      "meanMs": 269.9900000000001,
+      "medianMs": 300.0500000000029,
+      "p95Ms": 616.7000000000044,
+      "meanMs": 297.48499999999984,
       "minMs": 16.599999999998545,
-      "maxMs": 600,
-      "fpsMedian": 3.7495313085864677
+      "maxMs": 633.2999999999956,
+      "fpsMedian": 3.3327778703549087
     },
     {
       "label": "1280x720/performance",
@@ -4555,12 +4540,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 216.65000000000146,
-      "p95Ms": 416.6999999999971,
-      "meanMs": 217.49000000000015,
-      "minMs": 16.599999999998545,
-      "maxMs": 416.70000000000437,
-      "fpsMedian": 4.615739672282452
+      "medianMs": 266.7000000000007,
+      "p95Ms": 516.7000000000044,
+      "meanMs": 284.1549999999996,
+      "minMs": 16.69999999999709,
+      "maxMs": 516.7999999999884,
+      "fpsMedian": 3.7495313085864166
     },
     {
       "label": "1280x720/off",
@@ -4572,12 +4557,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 199.95000000000437,
-      "p95Ms": 416.6000000000058,
-      "meanMs": 194.99000000000015,
-      "minMs": 16.60000000000582,
-      "maxMs": 416.6999999999971,
-      "fpsMedian": 5.001250312578035
+      "medianMs": 216.60000000000582,
+      "p95Ms": 433.3000000000029,
+      "meanMs": 208.32000000000045,
+      "minMs": 16.59999999999127,
+      "maxMs": 466.6000000000058,
+      "fpsMedian": 4.616805170821667
     },
     {
       "label": "2560x1440/high",
@@ -4589,12 +4574,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 1299.9000000000015,
-      "p95Ms": 2566.5,
-      "meanMs": 1289.1149999999993,
+      "medianMs": 1366.6500000000015,
+      "p95Ms": 2799.899999999994,
+      "meanMs": 1403.2799999999995,
       "minMs": 16.69999999999709,
-      "maxMs": 2566.5999999999913,
-      "fpsMedian": 0.7692899453804131
+      "maxMs": 2916.5,
+      "fpsMedian": 0.7317162404419558
     },
     {
       "label": "2560x1440/performance",
@@ -4606,12 +4591,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 849.9499999999971,
-      "p95Ms": 1699.9000000000233,
-      "meanMs": 857.4699999999997,
-      "minMs": 16.699999999982538,
-      "maxMs": 1733.2000000000116,
-      "fpsMedian": 1.1765397964586193
+      "medianMs": 899.9000000000087,
+      "p95Ms": 1783.1999999999825,
+      "meanMs": 903.3,
+      "minMs": 33.29999999998836,
+      "maxMs": 1816.5,
+      "fpsMedian": 1.1112345816201692
     },
     {
       "label": "2560x1440/off",
@@ -4623,12 +4608,12 @@
       "vendor": "Google Inc. (Google)",
       "software": true,
       "count": 20,
-      "medianMs": 700,
-      "p95Ms": 1366.6999999999825,
-      "meanMs": 705.8099999999991,
+      "medianMs": 716.7000000000116,
+      "p95Ms": 1433.2000000000116,
+      "meanMs": 707.475,
       "minMs": 16.60000000000582,
-      "maxMs": 1416.5,
-      "fpsMedian": 1.4285714285714286
+      "maxMs": 1466.7000000000116,
+      "fpsMedian": 1.3952839402818247
     }
   ],
   "screenshots": [
@@ -4646,7 +4631,7 @@
       "file": "docs/presentation-verification/shots/1280x720-high-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1284512,
+      "bytes": 1287310,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "high",
@@ -4666,7 +4651,7 @@
       "file": "docs/presentation-verification/shots/1280x720-performance-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1295075,
+      "bytes": 1289387,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "performance",
@@ -4676,7 +4661,7 @@
       "file": "docs/presentation-verification/shots/1280x720-off-menu.png",
       "width": 1280,
       "height": 720,
-      "bytes": 186356,
+      "bytes": 186477,
       "view": "main menu",
       "resolution": "1280x720",
       "level": "off",
@@ -4686,7 +4671,7 @@
       "file": "docs/presentation-verification/shots/1280x720-off-weapon.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1250762,
+      "bytes": 1253749,
       "view": "weapon in hand",
       "resolution": "1280x720",
       "level": "off",
@@ -4696,7 +4681,7 @@
       "file": "docs/presentation-verification/shots/1280x720-statusbar.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1291320,
+      "bytes": 1292727,
       "view": "the engine's own status bar in the canvas bottom band, health and ammo readable",
       "resolution": "1280x720",
       "health": 100,
@@ -4706,7 +4691,7 @@
       "file": "docs/presentation-verification/shots/1280x720-statusbar-no-page-ui.png",
       "width": 1280,
       "height": 720,
-      "bytes": 4250,
+      "bytes": 1290625,
       "view": "the same band with every page interface element hidden (diagnostic; the engine bar is translucent)",
       "resolution": "1280x720"
     },
@@ -4714,7 +4699,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-dark.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1285375,
+      "bytes": 1284322,
       "view": "the crosshair at the centre of the in-game view over a dark background",
       "resolution": "1280x720",
       "crosshair": "1",
@@ -4726,7 +4711,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-dark-alpha0.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1288080,
+      "bytes": 1288077,
       "view": "the same view with the crosshair hidden by its own alpha (one scene, one camera)",
       "resolution": "1280x720",
       "crosshair": "hidden (alpha 0)",
@@ -4737,7 +4722,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-dark-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1284450,
+      "bytes": 1284253,
       "view": "the same view with crosshair 0; no cross at the centre",
       "resolution": "1280x720",
       "crosshair": "0",
@@ -4749,7 +4734,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-bright.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1646149,
+      "bytes": 1646150,
       "view": "the crosshair at the centre of the in-game view over a bright background",
       "resolution": "1280x720",
       "crosshair": "1",
@@ -4772,7 +4757,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-bright-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1646292,
+      "bytes": 1646148,
       "view": "the same view with crosshair 0; no cross at the centre",
       "resolution": "1280x720",
       "crosshair": "0",
@@ -4784,7 +4769,7 @@
       "file": "docs/presentation-verification/shots/1280x720-resolution-menu.png",
       "width": 1280,
       "height": 720,
-      "bytes": 247785,
+      "bytes": 247842,
       "view": "VIDEO > video mode selected at 1366x768, apply shows one change",
       "resolution": "1280x720"
     },
@@ -4792,7 +4777,7 @@
       "file": "docs/presentation-verification/shots/1280x720-resolution-applied.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1185547,
+      "bytes": 1185358,
       "view": "the level restarted at 1366x768 after Apply",
       "resolution": "1280x720",
       "drawingBuffer": [
@@ -4804,7 +4789,7 @@
       "file": "docs/presentation-verification/shots/1280x720-newgame-first-area.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1316184,
+      "bytes": 1285386,
       "view": "demo1's first area after GAME > easy started a new game",
       "resolution": "1280x720",
       "source": "New Game"
@@ -4813,7 +4798,7 @@
       "file": "docs/presentation-verification/shots/1280x720-game-mode-page.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1231157,
+      "bytes": 1231230,
       "view": "the page with its interface, before game mode",
       "resolution": "1280x720",
       "mode": "page"
@@ -4822,7 +4807,7 @@
       "file": "docs/presentation-verification/shots/1280x720-game-mode-surface.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1232202,
+      "bytes": 1234932,
       "view": "game mode: the game surface alone, no page interface",
       "resolution": "1280x720",
       "mode": "game"
@@ -4831,7 +4816,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-blaster-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1175088,
+      "bytes": 1234523,
       "view": "the crosshair at rest with the blaster",
       "resolution": "1280x720",
       "crosshair": "on"
@@ -4840,7 +4825,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-blaster-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1173674,
+      "bytes": 1234059,
       "view": "the crosshair at rest with the blaster",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
@@ -4849,7 +4834,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-blaster-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1173846,
+      "bytes": 1232733,
       "view": "the crosshair at rest with the blaster",
       "resolution": "1280x720",
       "crosshair": "on"
@@ -4858,8 +4843,80 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-blaster-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1174305,
+      "bytes": 1233982,
       "view": "the crosshair at rest with the blaster",
+      "resolution": "1280x720",
+      "crosshair": "off (alpha 0)"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-on.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1234010,
+      "view": "the crosshair while firing",
+      "resolution": "1280x720",
+      "crosshair": "on"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-off.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1236519,
+      "view": "the crosshair while firing",
+      "resolution": "1280x720",
+      "crosshair": "off (alpha 0)"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-on.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1336949,
+      "view": "the crosshair while firing",
+      "resolution": "1280x720",
+      "crosshair": "on"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-off.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1348786,
+      "view": "the crosshair while firing",
+      "resolution": "1280x720",
+      "crosshair": "off (alpha 0)"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-on.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1204682,
+      "view": "the crosshair while crouching",
+      "resolution": "1280x720",
+      "crosshair": "on"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-off.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1205880,
+      "view": "the crosshair while crouching",
+      "resolution": "1280x720",
+      "crosshair": "off (alpha 0)"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-on.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1205866,
+      "view": "the crosshair while crouching",
+      "resolution": "1280x720",
+      "crosshair": "on"
+    },
+    {
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-off.png",
+      "width": 1280,
+      "height": 720,
+      "bytes": 1210445,
+      "view": "the crosshair while crouching",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
     },
@@ -4867,7 +4924,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-shotgun-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1174861,
+      "bytes": 1220666,
       "view": "the crosshair at rest with the shotgun",
       "resolution": "1280x720",
       "crosshair": "on"
@@ -4876,80 +4933,26 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-shotgun-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1174791,
+      "bytes": 1222721,
       "view": "the crosshair at rest with the shotgun",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
     },
     {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-on.png",
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-shotgun-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1184402,
-      "view": "the crosshair while firing",
+      "bytes": 1222340,
+      "view": "the crosshair at rest with the shotgun",
       "resolution": "1280x720",
       "crosshair": "on"
     },
     {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-off.png",
+      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-shotgun-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1255222,
-      "view": "the crosshair while firing",
-      "resolution": "1280x720",
-      "crosshair": "off (alpha 0)"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-on.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1182996,
-      "view": "the crosshair while firing",
-      "resolution": "1280x720",
-      "crosshair": "on"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-firing-off.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1187847,
-      "view": "the crosshair while firing",
-      "resolution": "1280x720",
-      "crosshair": "off (alpha 0)"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-on.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1159461,
-      "view": "the crosshair while crouching",
-      "resolution": "1280x720",
-      "crosshair": "on"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-off.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1160723,
-      "view": "the crosshair while crouching",
-      "resolution": "1280x720",
-      "crosshair": "off (alpha 0)"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-on.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1159565,
-      "view": "the crosshair while crouching",
-      "resolution": "1280x720",
-      "crosshair": "on"
-    },
-    {
-      "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-crouch-off.png",
-      "width": 1280,
-      "height": 720,
-      "bytes": 1164630,
-      "view": "the crosshair while crouching",
+      "bytes": 1222736,
+      "view": "the crosshair at rest with the shotgun",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
     },
@@ -4957,7 +4960,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-scale2-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1214809,
+      "bytes": 1289097,
       "view": "the crosshair at crosshair_scale 2",
       "resolution": "1280x720",
       "crosshair": "on"
@@ -4966,7 +4969,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-scale2-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1213418,
+      "bytes": 1290860,
       "view": "the crosshair at crosshair_scale 2",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
@@ -4975,7 +4978,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-scale2-on.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1215135,
+      "bytes": 1287566,
       "view": "the crosshair at crosshair_scale 2",
       "resolution": "1280x720",
       "crosshair": "on"
@@ -4984,7 +4987,7 @@
       "file": "docs/presentation-verification/shots/1280x720-crosshair-aim-scale2-off.png",
       "width": 1280,
       "height": 720,
-      "bytes": 1211825,
+      "bytes": 1287509,
       "view": "the crosshair at crosshair_scale 2",
       "resolution": "1280x720",
       "crosshair": "off (alpha 0)"
@@ -5003,7 +5006,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-high-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4852409,
+      "bytes": 5080132,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "high",
@@ -5013,7 +5016,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-performance-menu.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 563017,
+      "bytes": 563019,
       "view": "main menu",
       "resolution": "2560x1440",
       "level": "performance",
@@ -5023,7 +5026,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-performance-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4629976,
+      "bytes": 4630418,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "performance",
@@ -5033,7 +5036,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-off-menu.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 516875,
+      "bytes": 516286,
       "view": "main menu",
       "resolution": "2560x1440",
       "level": "off",
@@ -5043,7 +5046,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-off-weapon.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4226333,
+      "bytes": 4225756,
       "view": "weapon in hand",
       "resolution": "2560x1440",
       "level": "off",
@@ -5053,7 +5056,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-statusbar.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4633510,
+      "bytes": 4635399,
       "view": "the engine's own status bar in the canvas bottom band, health and ammo readable",
       "resolution": "2560x1440",
       "health": 100,
@@ -5063,7 +5066,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-statusbar-no-page-ui.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4631439,
+      "bytes": 4631641,
       "view": "the same band with every page interface element hidden (diagnostic; the engine bar is translucent)",
       "resolution": "2560x1440"
     },
@@ -5071,7 +5074,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-dark.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4616192,
+      "bytes": 4617537,
       "view": "the crosshair at the centre of the in-game view over a dark background",
       "resolution": "2560x1440",
       "crosshair": "1",
@@ -5083,7 +5086,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-dark-alpha0.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4615597,
+      "bytes": 4617429,
       "view": "the same view with the crosshair hidden by its own alpha (one scene, one camera)",
       "resolution": "2560x1440",
       "crosshair": "hidden (alpha 0)",
@@ -5094,7 +5097,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-dark-off.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 4617335,
+      "bytes": 4617000,
       "view": "the same view with crosshair 0; no cross at the centre",
       "resolution": "2560x1440",
       "crosshair": "0",
@@ -5106,7 +5109,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-bright.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 5901261,
+      "bytes": 5898489,
       "view": "the crosshair at the centre of the in-game view over a bright background",
       "resolution": "2560x1440",
       "crosshair": "1",
@@ -5118,7 +5121,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-bright-alpha0.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 5891773,
+      "bytes": 5890383,
       "view": "the same view with the crosshair hidden by its own alpha (one scene, one camera)",
       "resolution": "2560x1440",
       "crosshair": "hidden (alpha 0)",
@@ -5129,7 +5132,7 @@
       "file": "docs/presentation-verification/shots/2560x1440-crosshair-bright-off.png",
       "width": 2560,
       "height": 1440,
-      "bytes": 5900035,
+      "bytes": 5900770,
       "view": "the same view with crosshair 0; no cross at the centre",
       "resolution": "2560x1440",
       "crosshair": "0",
@@ -5451,7 +5454,7 @@
     "20 rAF samples give a nearest-rank p95; it is a small sample and not a percentile-tail measurement."
   ],
   "fatal": null,
-  "ok": false,
+  "ok": true,
   "presentation": {
     "palette": {
       "amber": [
@@ -8823,7 +8826,7 @@
           "scoreOff": 42.865011111111116,
           "centreLumaOn": 89,
           "centreLumaOff": 89,
-          "onDraws": 3,
+          "onDraws": 4,
           "offDraws": 0,
           "screenshots": [
             "docs/presentation-verification/shots/1280x720-crosshair-bright.png",
@@ -11744,28 +11747,28 @@
             "glass": 1
           },
           "failures": [],
-          "postDraws": 37,
-          "worldDraws": 15445,
-          "modelDraws": 809,
+          "postDraws": 31,
+          "worldDraws": 12926,
+          "modelDraws": 673,
           "modelTextureDraws": {
-            "256x256": 111,
-            "1024x512": 809,
-            "296x164": 37,
-            "288x195": 111,
-            "152x92": 74,
-            "276x194": 72,
-            "512x512": 370,
-            "184x76": 34
+            "256x256": 93,
+            "1024x512": 673,
+            "296x164": 31,
+            "288x195": 93,
+            "152x92": 62,
+            "276x194": 60,
+            "512x512": 310,
+            "184x76": 24
           },
           "lastModelSkinDraws": {
-            "512x512": 37,
-            "1024x512": 37
+            "512x512": 31,
+            "1024x512": 31
           },
-          "skyDraws": 23,
-          "uiDraws": 16727,
+          "skyDraws": 22,
+          "uiDraws": 17520,
           "fboSkips": 0,
-          "suppressedDraws": 48,
-          "crosshairDraws": 37,
+          "suppressedDraws": 32,
+          "crosshairDraws": 31,
           "supported": true,
           "enabled": true,
           "quality": "high",
@@ -11787,7 +11790,7 @@
           "hudMisses": 1,
           "hudFamilies": true,
           "hudReadIntervalMs": 1200,
-          "hudReadCostMs": 418,
+          "hudReadCostMs": 473,
           "programs": [
             "ui",
             "sky",
@@ -11831,7 +11834,7 @@
           "health": null,
           "armour": null,
           "ammo": null,
-          "readAt": "2026-11-02T08:05:37.431Z"
+          "readAt": "2026-11-02T12:39:50.213Z"
         },
         "startup": [
           "+set",
@@ -11889,7 +11892,7 @@
           "health": 100,
           "armour": null,
           "ammo": null,
-          "readAt": "2026-11-02T08:05:34.337Z",
+          "readAt": "2026-11-02T12:39:47.662Z",
           "fields": {
             "health": {
               "right": 529
@@ -11900,7 +11903,7 @@
           "error": null,
           "ready": true,
           "intervalMs": 1200,
-          "costMs": 418
+          "costMs": 473
         },
         "crosshair": {
           "alpha": 0.45,
@@ -11911,11 +11914,11 @@
           ],
           "tintHex": "#ddb589"
         },
-        "crosshairDraws": 37,
+        "crosshairDraws": 31,
         "verify": {
           "contextLost": 0,
           "contextLostAt": null,
-          "frames": 65
+          "frames": 74
         }
       },
       "quit": {
@@ -11941,7 +11944,7 @@
       },
       "enter": {
         "active": true,
-        "since": "2026-11-02T08:07:20.953Z",
+        "since": "2026-11-02T12:41:45.906Z",
         "source": "menu",
         "fullscreen": true,
         "requested": true,
@@ -12022,107 +12025,107 @@
       "frames": {
         "page": {
           "count": 81,
-          "medianMs": 300,
-          "p95Ms": 616.6000000000058,
-          "meanMs": 300.40370370370385,
-          "minMs": 16.70000000001164,
-          "maxMs": 666.6000000000058
+          "medianMs": 333.3999999999942,
+          "p95Ms": 666.7000000000116,
+          "meanMs": 338.0530864197528,
+          "minMs": 33.29999999998836,
+          "maxMs": 783.2999999999884
         },
         "game": {
           "count": 80,
-          "medianMs": 316.6000000000058,
-          "p95Ms": 349.8999999999942,
-          "meanMs": 296.8625000000002,
-          "minMs": 66.60000000000582,
+          "medianMs": 349.8999999999942,
+          "p95Ms": 416.5999999999767,
+          "meanMs": 336.2375,
+          "minMs": 116.69999999998254,
           "maxMs": 433.3000000000029
         },
         "pageSamples": 81,
         "gameSamples": 80,
-        "meanDelta": 0.011788149280597604,
-        "medianDelta": -0.05533333333335273
+        "meanDelta": 0.005370713928339658,
+        "medianDelta": -0.04949010197960494
       },
       "cpu": {
         "page": {
           "blocks": 3,
-          "frames": 100,
-          "taskPerFrame": 304.8616000000001,
-          "scriptPerFrame": 279.38581
+          "frames": 84,
+          "taskPerFrame": 367.0580000000004,
+          "scriptPerFrame": 328.3679642857139
         },
         "game": {
           "blocks": 3,
-          "frames": 100,
-          "taskPerFrame": 303.5668899999999,
-          "scriptPerFrame": 285.85590999999994
+          "frames": 87,
+          "taskPerFrame": 352.420804597701,
+          "scriptPerFrame": 323.2619885057472
         },
-        "delta": 0.029892321080265405,
+        "delta": 0.04218574104642758,
         "pairs": [
           {
-            "pageTaskPerFrame": 269.3232894736842,
-            "gameTaskPerFrame": 283.5395000000002,
-            "ratio": 1.0527849283071566
+            "pageTaskPerFrame": 355.88565517241375,
+            "gameTaskPerFrame": 352.261482758621,
+            "ratio": 0.989816469528571
           },
           {
-            "pageTaskPerFrame": 324.42777419354877,
-            "gameTaskPerFrame": 314.72987499999937,
-            "ratio": 0.9701076789197346
+            "pageTaskPerFrame": 366.0382500000005,
+            "gameTaskPerFrame": 350.59665517241297,
+            "ratio": 0.9578142589535724
           },
           {
-            "pageTaskPerFrame": 328.8585161290323,
-            "gameTaskPerFrame": 314.93471875,
-            "ratio": 0.9576602195286648
+            "pageTaskPerFrame": 380.11544444444525,
+            "gameTaskPerFrame": 354.40427586206914,
+            "ratio": 0.9323595792853036
           }
         ],
-        "readBackMs": 405.39999997615814,
+        "readBackMs": 387.60000002384186,
         "samples": [
           {
             "mode": "page",
-            "frames": 38,
-            "seconds": 10.236,
-            "taskPerFrame": 269.3232894736842,
-            "scriptPerFrame": 250.63526315789443
+            "frames": 29,
+            "seconds": 10.304,
+            "taskPerFrame": 355.88565517241375,
+            "scriptPerFrame": 317.91755172413764
           },
           {
             "mode": "game",
-            "frames": 36,
-            "seconds": 10.208,
-            "taskPerFrame": 283.5395000000002,
-            "scriptPerFrame": 266.05527777777775
+            "frames": 29,
+            "seconds": 10.223,
+            "taskPerFrame": 352.261482758621,
+            "scriptPerFrame": 322.3012413793111
           },
           {
             "mode": "page",
-            "frames": 31,
-            "seconds": 10.063,
-            "taskPerFrame": 324.42777419354877,
-            "scriptPerFrame": 294.7625161290326
+            "frames": 28,
+            "seconds": 10.545,
+            "taskPerFrame": 366.0382500000005,
+            "scriptPerFrame": 325.99867857142834
           },
           {
             "mode": "game",
-            "frames": 32,
-            "seconds": 10.073,
-            "taskPerFrame": 314.72987499999937,
-            "scriptPerFrame": 297.23321874999976
+            "frames": 29,
+            "seconds": 10.171,
+            "taskPerFrame": 350.59665517241297,
+            "scriptPerFrame": 318.9388620689652
           },
           {
             "mode": "page",
-            "frames": 31,
-            "seconds": 10.198,
-            "taskPerFrame": 328.8585161290323,
-            "scriptPerFrame": 299.2517096774194
+            "frames": 27,
+            "seconds": 10.264,
+            "taskPerFrame": 380.11544444444525,
+            "scriptPerFrame": 342.049518518518
           },
           {
             "mode": "game",
-            "frames": 32,
-            "seconds": 10.082,
-            "taskPerFrame": 314.93471875,
-            "scriptPerFrame": 296.7543125000001
+            "frames": 29,
+            "seconds": 10.279,
+            "taskPerFrame": 354.40427586206914,
+            "scriptPerFrame": 328.54586206896533
           }
         ]
       },
       "pageWork": {
         "attemptsOnPage": 4,
         "attemptsInGame": 0,
-        "readsOnPage": 5,
-        "seconds": 6.772
+        "readsOnPage": 4,
+        "seconds": 6.603
       },
       "screenshots": [
         "docs/presentation-verification/shots/1280x720-game-mode-page.png",
@@ -12135,7 +12138,7 @@
       "exit": {
         "byShortcut": {
           "active": false,
-          "since": "2026-11-02T08:09:57.008Z",
+          "since": "2026-11-02T12:44:32.893Z",
           "source": "keyboard",
           "fullscreen": false,
           "requested": false,
@@ -12157,7 +12160,7 @@
         },
         "byFullscreen": {
           "active": false,
-          "since": "2026-11-02T08:10:03.456Z",
+          "since": "2026-11-02T12:44:39.394Z",
           "source": "keyboard",
           "fullscreen": false,
           "requested": false,
@@ -12195,19 +12198,19 @@
           137
         ],
         "tintHex": "#ddb589",
-        "weapon": "v_shotg",
-        "weaponFactor": 1.08,
+        "weapon": "v_blast",
+        "weaponFactor": 1,
         "firing": false,
         "crouching": false,
         "fireLevel": 0,
         "crouchLevel": 0,
-        "factor": 1.08,
+        "factor": 1,
         "baseScale": 3,
-        "quadPx": 26,
-        "opaquePx": 23,
+        "quadPx": 24,
+        "opaquePx": 21,
         "dynamic": true,
         "reason": null,
-        "drawn": 675,
+        "drawn": 618,
         "fallback": 0,
         "skins": 10
       },
@@ -12231,7 +12234,7 @@
         "opaquePx": 23,
         "dynamic": true,
         "reason": null,
-        "drawn": 956,
+        "drawn": 1394,
         "fallback": 0,
         "skins": 10
       },
@@ -12247,15 +12250,15 @@
         "weaponFactor": 1,
         "firing": true,
         "crouching": false,
-        "fireLevel": 0.9934684507362604,
+        "fireLevel": 0.9961340798605272,
         "crouchLevel": 0,
-        "factor": 1.347713957757691,
+        "factor": 1.3486469279511843,
         "baseScale": 3,
         "quadPx": 32,
         "opaquePx": 28,
         "dynamic": true,
         "reason": null,
-        "drawn": 1061,
+        "drawn": 881,
         "fallback": 0,
         "skins": 10
       },
@@ -12271,15 +12274,15 @@
         "weaponFactor": 1,
         "firing": false,
         "crouching": false,
-        "fireLevel": 0.04487435127742645,
+        "fireLevel": 0.0009639757257341786,
         "crouchLevel": 0,
-        "factor": 1.0157060229470993,
+        "factor": 1.000337391504007,
         "baseScale": 3,
         "quadPx": 24,
         "opaquePx": 21,
         "dynamic": true,
         "reason": null,
-        "drawn": 1301,
+        "drawn": 1129,
         "fallback": 0,
         "skins": 10
       },
@@ -12296,14 +12299,14 @@
         "firing": false,
         "crouching": true,
         "fireLevel": 0,
-        "crouchLevel": 0.936708231575688,
-        "factor": 0.8313925183163762,
+        "crouchLevel": 0.971884340251028,
+        "factor": 0.825060818754815,
         "baseScale": 3,
         "quadPx": 20,
         "opaquePx": 17,
         "dynamic": true,
         "reason": null,
-        "drawn": 1327,
+        "drawn": 1154,
         "fallback": 0,
         "skins": 10
       },
@@ -12320,14 +12323,14 @@
         "firing": false,
         "crouching": false,
         "fireLevel": 0,
-        "crouchLevel": 0.03967068184007949,
-        "factor": 0.9928592772687856,
+        "crouchLevel": 0.02811565974897201,
+        "factor": 0.994939181245185,
         "baseScale": 3,
         "quadPx": 24,
         "opaquePx": 21,
         "dynamic": true,
         "reason": null,
-        "drawn": 1432,
+        "drawn": 1360,
         "fallback": 0,
         "skins": 10
       },
@@ -12342,7 +12345,7 @@
           "cy": 360,
           "width": 21,
           "height": 21,
-          "alpha": 0.45074071371232577
+          "alpha": 0.45
         },
         "shotgun": {
           "count": 84,
@@ -12357,16 +12360,16 @@
           "alpha": 0.45
         },
         "firing": {
-          "count": 100,
-          "minX": 628,
-          "minY": 348,
-          "maxX": 655,
-          "maxY": 374,
+          "count": 161,
+          "minX": 618,
+          "minY": 338,
+          "maxX": 659,
+          "maxY": 380,
           "cx": 640,
           "cy": 360,
-          "width": 28,
-          "height": 27,
-          "alpha": 0.45014619883040935
+          "width": 42,
+          "height": 43,
+          "alpha": 0.551948051948052
         },
         "crouch": {
           "count": 50,
@@ -12378,7 +12381,7 @@
           "cy": 360,
           "width": 17,
           "height": 18,
-          "alpha": 0.44986772486772486
+          "alpha": 0.45
         }
       },
       "screenshots": [
@@ -12409,7 +12412,7 @@
           "opaquePx": 14,
           "dynamic": true,
           "reason": null,
-          "drawn": 37,
+          "drawn": 30,
           "fallback": 0,
           "skins": 10
         },
@@ -12423,7 +12426,7 @@
           "cy": 360,
           "width": 14,
           "height": 14,
-          "alpha": 0.4503311258278146
+          "alpha": 0.45
         }
       }
     }

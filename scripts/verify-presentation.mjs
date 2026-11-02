@@ -2971,6 +2971,15 @@ async function steadyScreenshot(label) {
 
 async function crosshairAimPair(name, meta) {
   let on = null, off = null, onEntry = null, offEntry = null, stateOn = null, drift = 1;
+  // Every pair starts and ends at the configured opacity. Measured 2026-11-02:
+  // the page entered this section with the cross at alpha 0 (the previous
+  // section's off frame), and the pair then restored that same 0 after each
+  // capture -- so the blaster, crouch and scale-2 pairs were all two crossless
+  // pictures (0x0, 0 tinted pixels) while the state read still said 0.45.
+  const configured = await crosshairStateNow();
+  const pairAlpha = (configured && configured.alpha) || 0.45;
+  await crosshairAlpha(pairAlpha);
+  await waitFrames(2);
   for (let attempt = 0; attempt < 2; attempt++) {
     on = await steadyScreenshot(name + " on capture");
     onEntry = await captureBuffer(name + "-on.png", on, 1280, 720, { ...meta, crosshair: "on" });
@@ -2981,7 +2990,7 @@ async function crosshairAimPair(name, meta) {
     // before the capture, and hiding the cross changes nothing behind it.
     off = await stableScreenshot();
     offEntry = await captureBuffer(name + "-off.png", off, 1280, 720, { ...meta, crosshair: "off (alpha 0)" });
-    await crosshairAlpha(stateOn ? stateOn.alpha : 0.45);
+    await crosshairAlpha(pairAlpha);
     await waitFrames(2);
     drift = sceneDifferenceOutsideCentre(decodePng(on), decodePng(off));
     if (drift < 0.001) break;
