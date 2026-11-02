@@ -1418,13 +1418,38 @@ export class QuakeControl {
   // of this call is to get a command into the engine intact, so it gives each
   // key a frame's worth of room. It costs about 15 ms per character and it is
   // only ever on the console path, which is opt-in.
+  //
+  // The events are dispatched without waiting for each response, because the
+  // wait, not the gap, is what costs a frame. Measured on 2026-11-02 at
+  // 2560x1440 on this box: the software renderer's frame is ~1 s, every
+  // awaited Input.dispatchKeyEvent is serviced between frames, and
+  // `timescale 0` plus `condump q2state-probe` (31 characters, 62 events)
+  // took 87.9 s -- inside the acceptance runner's 90 s command bound only by
+  // luck. The engine reads its SDL event queue in order on the next frame and
+  // does not need a frame between keys, so the whole string is written to one
+  // ordered websocket and awaited together; the same command then completed in
+  // 15.0 s. Every command's echo was checked against the exact string typed
+  // (6/6 intact at 1280x720, 3/3 at 2560x1440), so no character was dropped.
+  // A character that describes a modifier key (none does today -- single
+  // characters are never `Shift`) would still be typed serially, because those
+  // events change `this.modifiers` as they go; the guard keeps a future
+  // describeKey change from interleaving that state.
   async #typeInto(game, text) {
     const characters = [...String(text)];
-    for (let index = 0; index < characters.length; index++) {
-      if (index > 0) await new Promise((resolve) => setTimeout(resolve, TYPE_KEY_GAP_MS));
-      await this.#sendKey(game, characters[index], true);
-      await this.#sendKey(game, characters[index], false);
+    const needsSerial = characters.some((character) => describeKey(character, false).bit);
+    if (needsSerial) {
+      for (let index = 0; index < characters.length; index++) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, TYPE_KEY_GAP_MS));
+        await this.#sendKey(game, characters[index], true);
+        await this.#sendKey(game, characters[index], false);
+      }
+      return characters.length;
     }
+    const pending = [];
+    for (const character of characters) {
+      pending.push(this.#sendKey(game, character, true), this.#sendKey(game, character, false));
+    }
+    await Promise.all(pending);
     return characters.length;
   }
 

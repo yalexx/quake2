@@ -335,6 +335,8 @@
       crosshairWeapon: crosshairWeapon, crosshairDynamic: aim.dynamic, gameMode: gameModeActive,
       hudReads: hud.reads, hudAttempts: hud.attempts, hudMisses: hud.misses,
       hudFamilies: Boolean(hud.families),
+      hudReadIntervalMs: Math.round(hudReadInterval),
+      hudReadCostMs: hudReadCost === null ? null : Math.round(hudReadCost),
       programs: Array.from(programs.values()).map(p=>p.kind) }; }
   };
   update();
@@ -751,13 +753,30 @@
   // buffer away -- the same window control/hud.mjs uses for its screenshots.
   let hudReadPending = false;
   let hudLastRead = 0;
+  // The read is a synchronous `gl.readPixels`: it blocks the main thread until
+  // the frame's GPU work has finished. The page displays none of it -- this is
+  // the control harness's reader -- so when one read costs a large fraction of
+  // a frame it must not run every 1.2 s. Measured on 2026-11-02 on this box:
+  // at 1280x720 a scheduled read costs 180-267 ms and the cadence stays at
+  // 1.2 s (unchanged, 46 reads in 70 s); at 2560x1440 it costs 687-1006 ms,
+  // and the fixed 1.2 s cadence ran 30 reads in 70 s (~24 s of blocked main
+  // thread) where the backed-off 4 s cadence ran 14 (~11 s). The interval is
+  // chosen from the read's own measured cost, with hysteresis, so a fast page
+  // is never slowed and a slow one is. Both the interval and the last cost are
+  // reported in status() and read().
+  const HUD_READ_MIN_MS = 1200;
+  const HUD_READ_SLOW_MS = 4000;
+  const HUD_READ_SLOW_COST_MS = 500;
+  const HUD_READ_FAST_COST_MS = 250;
+  let hudReadInterval = HUD_READ_MIN_MS;
+  let hudReadCost = null;
   function scheduleHudReads() {
     // nothing to schedule up front: reads are armed by drawn frames
   }
   function armHudRead() {
     if (!hud.families || gameModeActive) return;
     const now = performance.now();
-    if (hudReadPending || now - hudLastRead < 1200) return;
+    if (hudReadPending || now - hudLastRead < hudReadInterval) return;
     hudReadPending = true;
     // Queue the read for the *next* frame, after the engine's callback has run
     // (and registered its own next frame), so the read lands after the next
@@ -768,11 +787,25 @@
       requestAnimationFrame(() => {
         hudReadPending = false;
         hudLastRead = performance.now();
+        const started = performance.now();
+        let measured = false;
         try {
           if (keyDestNow() !== 0) return;
+          measured = true;
           readStatusBar();
         } catch (error) {
           hud.lastError = String(error && error.message ? error.message : error);
+        } finally {
+          // A read skipped because the menu or console owns the keyboard is
+          // not a fast read. Timing that path would report ~0 ms and reset a
+          // slow page's backoff to 1.2 s every time the console opened --
+          // exactly when the page is busiest -- so only a read that ran is
+          // measured.
+          if (measured) {
+            hudReadCost = performance.now() - started;
+            if (hudReadCost > HUD_READ_SLOW_COST_MS) hudReadInterval = HUD_READ_SLOW_MS;
+            else if (hudReadCost < HUD_READ_FAST_COST_MS) hudReadInterval = HUD_READ_MIN_MS;
+          }
         }
       });
     }, 0);
@@ -789,7 +822,8 @@
       if (hud.families) scheduleHudReads();
       return Boolean(hud.families);
     },
-    read() { return { ...hud.last, fields: hud.fields, reads: hud.reads, misses: hud.misses, error: hud.lastError, ready: Boolean(hud.families) }; },
+    read() { return { ...hud.last, fields: hud.fields, reads: hud.reads, misses: hud.misses, error: hud.lastError, ready: Boolean(hud.families),
+      intervalMs: Math.round(hudReadInterval), costMs: hudReadCost === null ? null : Math.round(hudReadCost) }; },
     readNow() { try { return readStatusBar(); } catch (error) { hud.lastError = String(error); return null; } },
     // Forget the bar's fields so the next read finds every number from
     // scratch. The HUD does this on its own every sixteenth read; this is for
