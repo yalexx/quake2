@@ -137,6 +137,13 @@ var Module;
     if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
   }
 
+  // True only once mobile-controls.js has decided this is a touch presentation
+  // (a coarse pointer or a real touch). Until then — and always on a desktop —
+  // the pointer-lock path is exactly the one it has always been.
+  function touchUiActive() {
+    return !!(window.quake2Touch && typeof window.quake2Touch.isTouchUi === "function" && window.quake2Touch.isTouchUi());
+  }
+
   function scheduleExitMessage() {
     clearTimeout(exitMessageTimer);
     exitMessageTimer = setTimeout(function () {
@@ -643,6 +650,10 @@ var Module;
     },
 
     captureMouse: function () {
+      // On a touch device the on-screen layer provides look movement without
+      // pointer lock; asking for it would be the desktop path the touch
+      // presentation deliberately does not use.
+      if (touchUiActive()) return;
       if (Module._canLockPointer && !Module._attemptPointerLock()) {
         Module._canLockPointer = false;
         console.info("Delayed pointer lock requested.");
@@ -661,11 +672,17 @@ var Module;
         dVW = "100vw";
         dVH = "100vh";
       }
+      // The stage is the usable viewport: the browser's dynamic viewport
+      // (dvh handles a phone's sliding URL bar) minus the display's safe-area
+      // insets. Both are 0 on a desktop, so its layout is unchanged.
+      const stageW = "(" + dVW + " - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px))";
+      const stageH = "(" + dVH + " - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))";
       const aspX = canvasElement.width + " / " + canvasElement.height;
       const aspY = canvasElement.height + " / " + canvasElement.width;
-      canvasElement.style.width = "calc(min(" + dVW + ", " + dVH + " * " + aspX + "))";
-      canvasElement.style.height = "calc(min(" + dVH + ", " + dVW + " * " + aspY + "))";
-      canvasElement.style.marginTop = "calc(0.5 * (" + dVH + " - (min(" + dVH + ", " + dVW + " * " + aspY + "))))";
+      canvasElement.style.width = "calc(min(" + stageW + ", " + stageH + " * " + aspX + "))";
+      canvasElement.style.height = "calc(min(" + stageH + ", " + stageW + " * " + aspY + "))";
+      canvasElement.style.marginTop = "calc(env(safe-area-inset-top, 0px) + 0.5 * (" + stageH + " - (min(" + stageH + ", " + stageW + " * " + aspY + "))))";
+      canvasElement.style.marginLeft = "calc(env(safe-area-inset-left, 0px) + 0.5 * (" + stageW + " - (min(" + stageW + ", " + stageH + " * " + aspX + "))))";
     },
 
     softExit: function (status) {
@@ -683,6 +700,8 @@ var Module;
     },
 
     _attemptPointerLock: function () {
+      // Touch presentation: the drag look zone replaces the locked mouse.
+      if (touchUiActive()) return false;
       if (document.pointerLockElement === null) {
         try {
           const request = canvasElement.requestPointerLock();
@@ -1161,6 +1180,10 @@ var Module;
   window.quake2App = {
     isMenuOpen: function () { return ui.open; },
     resume: function () { resumeGame(); },
+    // The touch layer feeds the engine through this exact event shape, so a
+    // touch key and a keyboard key are indistinguishable to SDL.
+    dispatchKey: dispatchKey,
+    tapKey: tapKey,
   };
 
   initializeSettings();
@@ -1260,12 +1283,16 @@ var Module;
     // own fullscreenchange handler is what brings the interface back.
     if (gameModeActive()) {
       if (ui.open) hideMenu();
+      if (window.quake2Touch && typeof window.quake2Touch.setPlaying === "function") window.quake2Touch.setPlaying(false);
       return;
     }
     // After QUIT the panel must not be reopened: the engine is still at its
     // menu, and showing the panel under the "Quake 2 has quit." plate would
     // offer Resume and put a running game back behind an invisible canvas.
-    if (ui.quitting) return;
+    if (ui.quitting) {
+      if (window.quake2Touch && typeof window.quake2Touch.setPlaying === "function") window.quake2Touch.setPlaying(false);
+      return;
+    }
     // One word: this poll runs eight times a second and only needs who owns
     // the keyboard. `read()` builds a whole reading -- position, angles, two
     // arrays and an ISO timestamp -- for a value the engine exposes directly.
@@ -1281,6 +1308,12 @@ var Module;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
     const playing = dest === 0 && !ui.open && visible;
+    // The touch layer follows the same playing state as the desktop prompt: it
+    // appears only while the engine really has the game, never over a menu,
+    // the console or the boot plate.
+    if (window.quake2Touch && typeof window.quake2Touch.setPlaying === "function") {
+      window.quake2Touch.setPlaying(playing);
+    }
     const chipsHidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
     setHidden(optionsChip, chipsHidden);
     setHidden(lightingChip, chipsHidden);
@@ -1288,7 +1321,9 @@ var Module;
       lightingPanel.hidden = true;
       lightingChip.setAttribute("aria-expanded", "false");
     }
-    const showPrompt = playing && visible && !locked && engineRunning;
+    // On touch there is no mouse to capture: the prompt and its pointer-lock
+    // path are desktop-only.
+    const showPrompt = playing && visible && !locked && engineRunning && !touchUiActive();
     if (showPrompt !== ui.prompt) {
       ui.prompt = showPrompt;
       setHidden(promptElement, !showPrompt);

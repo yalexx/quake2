@@ -2,11 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1">
+<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png?v=icon1">
-<link rel="stylesheet" href="style.css?v=rtx9">
+<link rel="stylesheet" href="style.css?v=touch2">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -18,6 +21,58 @@
 </div>
 
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
+
+<!-- Touch controls (mobile-controls.js). Inert and hidden on a desktop: the
+     layer is only shown when the device has a coarse pointer (or the first real
+     touch arrives), and everything below it feeds the engine's existing input
+     path. The right-hand area is transparent to touches, so the engine's own
+     touch look receives the drag; the buttons are the only opaque parts.
+     Every target is at least 44 px, and the pad stops clear of the engine's
+     status-bar band. -->
+<div id="mobile-controls" hidden>
+  <div id="mc-look" aria-hidden="true"></div>
+  <div id="mc-stick" role="group" aria-label="Movement thumbstick">
+    <div id="mc-stick-knob" aria-hidden="true"></div>
+  </div>
+  <div id="mc-actions" role="group" aria-label="Game actions">
+    <button id="mc-fire" type="button" class="mc-btn mc-btn-fire" data-mc-action="fire" aria-label="Fire">
+      <span class="mc-ico" aria-hidden="true">&#9678;</span><span class="mc-lbl" aria-hidden="true">FIRE</span>
+    </button>
+    <button id="mc-jump" type="button" class="mc-btn" data-mc-action="jump" aria-label="Jump">
+      <span class="mc-ico" aria-hidden="true">&#8593;</span><span class="mc-lbl" aria-hidden="true">JUMP</span>
+    </button>
+    <button id="mc-use" type="button" class="mc-btn" data-mc-action="use" aria-label="Use or open">
+      <span class="mc-ico" aria-hidden="true">&#9707;</span><span class="mc-lbl" aria-hidden="true">USE</span>
+    </button>
+    <button id="mc-prev" type="button" class="mc-btn mc-btn-small" data-mc-action="prev" aria-label="Previous weapon">
+      <span class="mc-ico" aria-hidden="true">&#8249;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
+    </button>
+    <button id="mc-next" type="button" class="mc-btn mc-btn-small" data-mc-action="next" aria-label="Next weapon">
+      <span class="mc-ico" aria-hidden="true">&#8250;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
+    </button>
+  </div>
+  <button id="mc-pause" type="button" class="mc-btn mc-btn-small" data-mc-action="pause" aria-label="Pause and open the menu">
+    <span class="mc-ico" aria-hidden="true">&#9776;</span><span class="mc-lbl" aria-hidden="true">MENU</span>
+  </button>
+  <button id="mc-toggle" type="button" aria-pressed="true" aria-label="Hide touch controls"><span aria-hidden="true">PAD</span></button>
+  <div id="mc-hint" role="status" aria-live="polite" hidden>
+    <b>Left stick</b> moves &middot; <b>drag the right side</b> to look &middot; <b>FIRE</b> shoots &middot; <b>JUMP</b> &amp; <b>USE</b> beside it
+  </div>
+</div>
+
+<!-- Portrait guide (mobile-controls.js). The game is made for landscape. The
+     dimmed layer does not take pointer events, so in portrait the page and its
+     menus stay usable; the card hides while the menu is open. The button is the
+     user gesture Android Chrome needs for full screen + orientation lock. -->
+<div id="rotate-overlay" hidden>
+  <div class="rotate-card" role="status" aria-live="polite">
+    <div class="rotate-icon" aria-hidden="true">&#8635;</div>
+    <p class="rotate-title">Rotate your device</p>
+    <p class="rotate-text">Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls.</p>
+    <button id="rotate-action" type="button">Use landscape</button>
+    <p id="rotate-note" class="rotate-note">If the screen does not turn, use your device's rotation setting.</p>
+  </div>
+</div>
 
 <!-- Full screen on open (fullscreen.js): the control is the way back out, and
      the hint points at the app's own window where the desktop blocks it. -->
@@ -194,8 +249,11 @@
 <script src="engine-state.js?v=rtx7"></script>
 <script src="rtx-materials.js?v=rtx6"></script>
 <script src="rtx-renderer.js?v=rtx9"></script>
-<script src="app.js?v=rtx8"></script>
+<script src="app.js?v=rtx9"></script>
 <script src="fullscreen.js?v=rtx7"></script>
 <script src="game-mode.js?v=rtx8"></script>
+<!-- After app.js: it installs the touch-only engine bindings on the Module that
+     app.js defines, before the engine's loader runs. -->
+<script src="mobile-controls.js?v=touch2"></script>
 </body>
 </html>
