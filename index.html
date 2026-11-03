@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png?v=icon1">
-<link rel="stylesheet" href="style.css?v=touch2">
+<link rel="stylesheet" href="style.css?v=touch3">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -88,17 +88,9 @@
      amber accent. It stops at the canvas's controls: the engine's own status
      bar owns the canvas's bottom band, with nothing drawn over it. -->
 <div id="ui">
-  <button id="options-chip" type="button">Options</button>
-  <button id="lighting-chip" type="button" aria-expanded="false" aria-controls="lighting-panel">Lighting</button>
-  <div id="lighting-panel" hidden>
-    <div class="segmented" role="group" aria-label="Lighting mode">
-      <button type="button" data-lighting="off">Off</button>
-      <button type="button" data-lighting="performance">Performance</button>
-      <button type="button" data-lighting="high">High</button>
-    </div>
-    <small id="rtx-status">Raster lighting · no ray tracing</small>
-    <small>Off returns every light to the engine's original shading.</small>
-  </div>
+  <!-- No settings control floats over the game: LIGHTING and OPTIONS both live
+       in the menu panel below, which the MENU control (touch) or Escape opens.
+       The play layer carries only the banner and the pointer-lock prompt. -->
   <div id="banner" role="status" aria-live="polite" hidden><span id="banner-text"></span></div>
   <div id="prompt" hidden><span>Click to capture the mouse</span></div>
 
@@ -208,6 +200,21 @@
           <button type="button" data-action="reset-options"><span class="label">reset defaults</span></button>
           <button type="button" data-action="note" data-note="go to console: the app has no console text input"><span class="label">go to console</span><span class="hint">hidden in this app</span></button>
         </nav>
+        <!-- A page control, not an engine row: the engine has no lighting
+             setting of its own. It sat as a floating chip over the game (the
+             reference image's "move to settings menu"); it lives here now, in
+             the settings panel the MENU control opens. rtx-renderer.js finds
+             these buttons by [data-lighting] and persists the choice itself. -->
+        <div class="menu-lighting" role="group" aria-label="Lighting">
+          <p class="view-title">LIGHTING</p>
+          <div class="segmented" role="group" aria-label="Lighting mode">
+            <button type="button" data-lighting="off">Off</button>
+            <button type="button" data-lighting="performance">Performance</button>
+            <button type="button" data-lighting="high">High</button>
+          </div>
+          <small id="rtx-status">Raster lighting · no ray tracing</small>
+          <small>Off returns every light to the engine's original shading. The choice is kept for the next visit.</small>
+        </div>
         <div class="menu-apply">
           <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint-options">no changes</span></button>
         </div>
@@ -249,7 +256,7 @@
 <script src="engine-state.js?v=rtx7"></script>
 <script src="rtx-materials.js?v=rtx6"></script>
 <script src="rtx-renderer.js?v=rtx9"></script>
-<script src="app.js?v=rtx9"></script>
+<script src="app.js?v=rtx10"></script>
 <script src="fullscreen.js?v=rtx7"></script>
 <script src="game-mode.js?v=rtx8"></script>
 <!-- After app.js: it installs the touch-only engine bindings on the Module that
