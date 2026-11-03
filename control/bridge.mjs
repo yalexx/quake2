@@ -673,11 +673,16 @@ function describeKey(name, shiftHeld) {
 // One WebSocket to one CDP target. CDP messages are JSON: requests carry an
 // id, replies echo it, and events come without one.
 class CdpSession {
-  constructor(socket) {
+  constructor(socket, timeoutMs = DEFAULT_TIMEOUT_MS) {
     this.socket = socket;
     this.nextId = 0;
     this.pending = new Map();
     this.listeners = new Set();
+    // The bridge's contract is that every round trip is bounded (see
+    // options.timeoutMs below); a send that is never answered has to be bounded
+    // here too, or a wedged target leaves its promise pending forever and every
+    // later call queues behind it.
+    this.timeoutMs = timeoutMs;
     socket.addEventListener("message", (event) => this.onMessage(event.data));
     socket.addEventListener("close", () => this.fail(new ControlError("the CDP socket closed", "DISCONNECTED")));
     socket.addEventListener("error", () => this.fail(new ControlError("the CDP socket failed", "DISCONNECTED")));
@@ -698,7 +703,7 @@ class CdpSession {
       }, timeoutMs);
       socket.addEventListener("open", () => {
         clearTimeout(timer);
-        resolve(new CdpSession(socket));
+        resolve(new CdpSession(socket, timeoutMs));
       }, { once: true });
       socket.addEventListener("error", () => {
         clearTimeout(timer);
@@ -721,6 +726,7 @@ class CdpSession {
     const entry = this.pending.get(message.id);
     if (!entry) return;
     this.pending.delete(message.id);
+    clearTimeout(entry.timer);
     if (message.error) entry.reject(new ControlError("CDP " + entry.method + " failed: " + message.error.message, "CDP_ERROR"));
     else entry.resolve(message.result);
   }
@@ -735,7 +741,10 @@ class CdpSession {
     this.closed = true;
     const pending = [...this.pending.values()];
     this.pending.clear();
-    for (const entry of pending) entry.reject(error);
+    for (const entry of pending) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
   }
 
   send(method, params = {}) {
@@ -745,11 +754,20 @@ class CdpSession {
         reject(new ControlError("the CDP socket is closed", "DISCONNECTED"));
         return;
       }
-      this.pending.set(id, { resolve, reject, method });
+      const timer = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.pending.delete(id);
+        reject(new ControlError("the CDP call " + method + " did not answer within " + this.timeoutMs + " ms", "TIMEOUT"));
+        // A target that cannot answer is wedged; drop the socket so the next
+        // call re-resolves it instead of queueing behind this one.
+        this.fail(new ControlError("the CDP socket was dropped after a timeout", "DISCONNECTED"));
+      }, this.timeoutMs);
+      this.pending.set(id, { resolve, reject, method, timer });
       try {
         this.socket.send(JSON.stringify({ id, method, params }));
       } catch (error) {
         this.pending.delete(id);
+        clearTimeout(timer);
         reject(new ControlError("the CDP socket failed: " + error.message, "DISCONNECTED"));
       }
     });
@@ -1400,13 +1418,38 @@ export class QuakeControl {
   // of this call is to get a command into the engine intact, so it gives each
   // key a frame's worth of room. It costs about 15 ms per character and it is
   // only ever on the console path, which is opt-in.
+  //
+  // The events are dispatched without waiting for each response, because the
+  // wait, not the gap, is what costs a frame. Measured on 2026-11-02 at
+  // 2560x1440 on this box: the software renderer's frame is ~1 s, every
+  // awaited Input.dispatchKeyEvent is serviced between frames, and
+  // `timescale 0` plus `condump q2state-probe` (31 characters, 62 events)
+  // took 87.9 s -- inside the acceptance runner's 90 s command bound only by
+  // luck. The engine reads its SDL event queue in order on the next frame and
+  // does not need a frame between keys, so the whole string is written to one
+  // ordered websocket and awaited together; the same command then completed in
+  // 15.0 s. Every command's echo was checked against the exact string typed
+  // (6/6 intact at 1280x720, 3/3 at 2560x1440), so no character was dropped.
+  // A character that describes a modifier key (none does today -- single
+  // characters are never `Shift`) would still be typed serially, because those
+  // events change `this.modifiers` as they go; the guard keeps a future
+  // describeKey change from interleaving that state.
   async #typeInto(game, text) {
     const characters = [...String(text)];
-    for (let index = 0; index < characters.length; index++) {
-      if (index > 0) await new Promise((resolve) => setTimeout(resolve, TYPE_KEY_GAP_MS));
-      await this.#sendKey(game, characters[index], true);
-      await this.#sendKey(game, characters[index], false);
+    const needsSerial = characters.some((character) => describeKey(character, false).bit);
+    if (needsSerial) {
+      for (let index = 0; index < characters.length; index++) {
+        if (index > 0) await new Promise((resolve) => setTimeout(resolve, TYPE_KEY_GAP_MS));
+        await this.#sendKey(game, characters[index], true);
+        await this.#sendKey(game, characters[index], false);
+      }
+      return characters.length;
     }
+    const pending = [];
+    for (const character of characters) {
+      pending.push(this.#sendKey(game, character, true), this.#sendKey(game, character, false));
+    }
+    await Promise.all(pending);
     return characters.length;
   }
 
@@ -1776,7 +1819,14 @@ export class QuakeControl {
   // state() reads; it is deleted again because the save store is synced from
   // this file system.
   async #askEngine(game, commands, attempts = 2) {
-    await this.focusCanvas(game);
+    // Console input needs keyboard focus, not pointer lock. Acquiring lock
+    // with a click can rotate the view (and fire) before the console opens.
+    // Keep keyboard-only queries observational with respect to the camera.
+    await game.evaluate(`(() => {
+      const canvas = document.getElementById("canvas");
+      if (!canvas) throw new Error("the game page has no canvas element");
+      canvas.focus();
+    })()`);
     const page = JSON.parse(await game.evaluate(stateExpression));
     if (!page.gameDir) return { text: null, gameDir: null, attempts: 0 };
     this.console.roundTrips++;

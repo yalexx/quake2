@@ -1,0 +1,123 @@
+{
+  "release": "1.0.0",
+  "app": {
+    "name": "Quake 2",
+    "manifest": "clawbox.json",
+    "kind": "server",
+    "port": 4231,
+    "start": "node server.js",
+    "basePath": "/apps/quake2/"
+  },
+  "verifiedAt": "2026-11-02T15:07:06+02:00",
+  "testedCommit": "ad7bf5c",
+  "branch": "clawbox/run-cxsxmcvb",
+  "gate": {
+    "command": "node scripts/verify-presentation.mjs --url http://127.0.0.1:4331/apps/quake2/",
+    "exitStatus": 0,
+    "verdict": "PASS",
+    "checksPassed": 219,
+    "checksTotal": 219,
+    "checksFailed": 0,
+    "failures": [],
+    "fatal": null,
+    "startedAt": "2026-11-02T12:33:11.145Z",
+    "finishedAt": "2026-11-02T13:07:06Z",
+    "durationSeconds": 2035,
+    "url": "http://127.0.0.1:4331/apps/quake2/",
+    "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-cxsxmcvb",
+    "port": 4331,
+    "portNote": "The installed ClawBox app instance holds 4231 and serves the project checkout; the gate ran this branch's own server on 4331 and hashed the served files against this checkout.",
+    "report": "docs/presentation-verification/report.json",
+    "log": "docs/release-verification-1.0.0.log",
+    "exitFile": "docs/release-verification-1.0.0.exit",
+    "screenshots": 53,
+    "screenshotsDir": "docs/presentation-verification/shots",
+    "resolutions": [
+      "1280x720",
+      "2560x1440"
+    ],
+    "httpStatus": 200,
+    "pageErrors": 0,
+    "consoleErrors": 0,
+    "nonFatal": {
+      "webglWarnings": 72,
+      "webglWarningText": "WebGL: INVALID_OPERATION: texParameter: no texture bound to target (engine texture setup)",
+      "optionalPak404s": [
+        "baseq2/pak1.pak",
+        "baseq2/pak2.pak"
+      ]
+    }
+  },
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "linux 7.0.0-38-generic",
+    "renderer": "ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)",
+    "browser": "/usr/bin/google-chrome --headless=new (SwiftShader)",
+    "display": "HDMI-A-1 connected 2560x1440+2560+0"
+  },
+  "fixes": [
+    {
+      "id": "console-key-dispatch",
+      "file": "control/bridge.mjs",
+      "what": "Console strings are typed as one ordered, non-awaited key batch with a serial fallback for modifier characters.",
+      "measured": "`timescale 0` plus `condump q2state-probe` took 87.9 s at 2560x1440 before, 14-15 s after; every echoed command matched the exact string typed (6/6 at 1280x720, 3/3 and 2/3 across 2560 probes)."
+    },
+    {
+      "id": "status-bar-read-backoff",
+      "file": "rtx-renderer.js",
+      "what": "The diagnostic status-bar gl.readPixels backs off from 1.2 s to 4 s only on drawing buffers at least 1920 px wide when one read costs more than 500 ms.",
+      "measured": "2560x1440: 30 reads in 70 s (~24 s blocked) became 14 reads (~11 s) with reads still succeeding (health 100). 1280x720 unchanged at 1.2 s (46 reads in 70 s, 180-267 ms each), which is the cadence the game-mode checks measure."
+    },
+    {
+      "id": "game-mode-wall-clock",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "Wall-clock no-regression bound uses p95 (within 5%) and the median of adjacent page/game block ratios (within 1.02), not pooled per-mode statistics.",
+      "measured": "A 2026-11-02 run read 5.5% slower by pooled median while the adjacent-block median was 1.003, the mean 1.2% better and p95 43% better; the pooled median was a drift artifact of always sampling page first."
+    },
+    {
+      "id": "main-thread-measurement",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "The main-thread check is a no-regression bound on the paired task/frame ratio (<= 1.02); the work game mode removes is asserted by the deterministic read-back suspension check.",
+      "measured": "The page performed 5 read-backs at 405 ms each while game mode performed 0, yet CDP TaskDuration was identical (304.9 vs 303.6 ms/frame): the read is a GPU sync wait, which TaskDuration does not count."
+    },
+    {
+      "id": "aim-check-setup",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "The blaster reference is measured at the spawn loadout with no weapon switch; invulnerability is set before the long captures; weapons are given after the reference; the firing and crouch checks run before the weapon change; the shotgun switch has a console fallback.",
+      "measured": "A 2026-11-02 run measured the reference as v_shotg because the 1 key was lost after `give all` (the tap's focus click cannot acquire pointer lock in this headless page)."
+    },
+    {
+      "id": "crosshair-pair-scene",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "Each crosshair pair waits for its own scene brightness (dark 20, bright 60) and recovers the game from its menu while waiting; every pair sets the configured crosshair alpha before the on frame and after the off frame.",
+      "measured": "A 2026-11-02 run captured the dark menu panel at luma 9.9 as the bright background (3 checks failed); a later run entered the aim section at alpha 0 and every pair was two crossless pictures (4 checks failed with 0 tinted pixels)."
+    },
+    {
+      "id": "pointer-lock-promises",
+      "file": "app.js",
+      "what": "Element.prototype.requestPointerLock is wrapped so the promise Chrome returns cannot become an uncaught page exception; the refusal is recorded in window.quake2PointerLockRefused and the standard pointerlockerror path is unchanged.",
+      "measured": "7 uncaught WrongDocumentError page exceptions became 0 in the verifying run."
+    },
+    {
+      "id": "harness-recovery",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "ensureGame retries a page-state read that times out instead of aborting the run, and every console attempt is recorded in the report notes.",
+      "measured": "The 2026-11-01 durable run aborted at check 194 on a single 60 s Runtime.evaluate timeout."
+    },
+    {
+      "id": "engine-config-isolation",
+      "file": "scripts/verify-presentation.mjs",
+      "what": "userdata/baseq2/config.cfg is quarantined for the run and restored on teardown, so persisted cvars cannot override the start-up lines each boot depends on.",
+      "measured": "Preserved from the owner's working tree; the verifying run used isolated user state."
+    }
+  ],
+  "limitations": [
+    "Publication was not performed: app_publish is not available to this run. The parent must publish version 1.0.0 from the branch.",
+    "clawbox.json carries no version field (the ClawBox manifest schema shown in the field guide has name/description/kind/port/start); the Store version is passed to app_publish.",
+    "The gate ran headless with the SwiftShader software renderer at roughly 1.3-3.3 fps. The 219 checks assert correctness and presentation; the frame-time checks are no-regression bounds, not GPU performance claims.",
+    "The verifying run used port 4331 because the installed app instance owns 4231. The gate's own file hash check proves the bytes served on 4331 are this checkout.",
+    "72 non-fatal WebGL warnings from the engine's texture setup and optional pak1/pak2 404 probes are recorded in the report and are not failures.",
+    "The game-mode and crosshair-aim checks run at 1280x720 by design; the 2560x1440 stage covers boot, lighting, weapon draws, status bar, crosshair presentation and menu parity.",
+    "Content is the Quake 2 demo PAKs (baseq2/pak0, pak9, pak10). engine/license.txt is the Id demo EULA; a Store listing must state the demo content and that the full game needs retail PAKs."
+  ]
+}

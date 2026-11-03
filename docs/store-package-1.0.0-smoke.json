@@ -1,0 +1,73 @@
+{
+  "url": "http://127.0.0.1:4399/?+map&demo1&+set&crosshair&0",
+  "bootedAt": "2026-11-02T13:24:09.002Z",
+  "seconds": 4,
+  "engine": {
+    "ok": true,
+    "source": "wasm-memory",
+    "position": {
+      "x": 128.0625,
+      "y": -319.9375,
+      "z": 64.0625
+    },
+    "angles": {
+      "pitch": 0,
+      "yaw": 135,
+      "roll": 0
+    },
+    "keyDest": 0,
+    "keyDestName": "game",
+    "inGame": true,
+    "consoleOpen": false,
+    "paused": false,
+    "dead": false,
+    "alive": true,
+    "aliveSource": "view-roll-above-strafe-lean",
+    "health": null,
+    "armour": null,
+    "ammo": null,
+    "readAt": "2026-11-02T13:24:07.671Z"
+  },
+  "canvas": {
+    "w": 1366,
+    "h": 768
+  },
+  "status": "Running...",
+  "startupArguments": [
+    "+set",
+    "vid_renderer",
+    "gles3",
+    "+set",
+    "r_retexturing",
+    "1",
+    "+set",
+    "gl3_usefbo",
+    "1",
+    "+set",
+    "cl_gun",
+    "1",
+    "+set",
+    "fov",
+    "90",
+    "+set",
+    "crosshair",
+    "1",
+    "+set",
+    "crosshair_scale",
+    "3",
+    "+set",
+    "q2_crosshair_alpha",
+    "0.45",
+    "+set",
+    "q2_crosshair_tint",
+    "ddb589",
+    "+map",
+    "demo1",
+    "+set",
+    "crosshair",
+    "0"
+  ],
+  "pageExceptions": [],
+  "consoleErrors": [],
+  "screenshot": "/tmp/q2store-smoke.png"
+}
