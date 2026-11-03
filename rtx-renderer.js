@@ -14,7 +14,7 @@
   const report = { version: 'raster-3', worldShaders: 0, postShaders: 0, modelShaders: 0, modelReliefShaders: 0,
     skyShaders: 0, matchedTextures: 0, materials: {}, failures: [], postDraws: 0, worldDraws: 0, modelDraws: 0,
     modelTextureDraws: {}, lastModelSkinDraws: {}, skyDraws: 0, uiDraws: 0, fboSkips: 0, suppressedDraws: 0,
-    crosshairDraws: 0, supported: false };
+    crosshairDraws: 0, weaponDraws: 0, weaponNeutralDraws: 0, supported: false };
 
   // The engine draws its crosshair as an 8x8 white picture (pics/ch1-3.pcx,
   // palette index 15) through a 2D shader that alpha-tests and does not blend.
@@ -95,7 +95,10 @@
   // Exponential approach: fast out, unhurried back, so the cross settles.
   const FIRE_TAU_IN = 0.045, FIRE_TAU_OUT = 0.18, CROUCH_TAU = 0.07;
 
-  // skin size ("296x164") -> [models]; filled from pak0 by usePaks below.
+  // skin size ("592x328") -> [models]; filled from every loaded pak by usePaks
+  // below. Both the original 1x skins in pak0 and the 2x skins pak10 overrides
+  // them with are indexed, so the gun in hand is named whichever size the
+  // engine actually binds.
   const weaponSkins = new Map();
   let crosshairWeapon = null;
   let crosshairWeaponFactor = 1;
@@ -138,19 +141,18 @@
 
   // The weapon in hand, named by the skin size the engine binds for the view
   // model it draws last before the 2D pass (the gun in hand; the same fact the
-  // acceptance checks use to name the blaster's draw). pak0's own skin headers
-  // supply the sizes, so no table of game data is embedded here.
-  function indexWeaponSkins(paks) {
-    let pak = null;
-    for (const name of Object.keys(paks || {})) {
-      if (/(^|\/)pak0\.pak$/i.test(name)) { pak = paks[name]; break; }
-    }
-    if (!pak || pak.byteLength < 16) return false;
-    const bytes = pak instanceof Uint8Array ? pak : new Uint8Array(pak);
+  // acceptance checks use to name the blaster's draw). The loaded paks' own
+  // skin headers supply the sizes, so no table of game data is embedded here.
+  // Index one PACK archive's models/weapons/v_*/skin.pcx headers. The key is the
+  // size the engine will bind (its own gl.texImage2D upload), read from the
+  // PCX header, so a model whose skin was replaced at another size (pak10's 2x
+  // skins) is still named.
+  function indexPakWeaponSkins(bytes) {
+    if (!bytes || bytes.byteLength < 16) return 0;
+    if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== "PACK") return 0;
     const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-    if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3]) !== "PACK") return false;
     const directoryOffset = view.getInt32(4, true), directoryLength = view.getInt32(8, true);
-    if (directoryOffset < 12 || directoryLength <= 0 || directoryOffset + directoryLength > bytes.byteLength) return false;
+    if (directoryOffset < 12 || directoryLength <= 0 || directoryOffset + directoryLength > bytes.byteLength) return 0;
     let indexed = 0;
     for (let at = directoryOffset; at + 64 <= directoryOffset + directoryLength; at += 64) {
       let end = at;
@@ -168,6 +170,26 @@
       if (!models.includes(match[1])) models.push(match[1]);
       weaponSkins.set(key, models);
       indexed++;
+    }
+    return indexed;
+  }
+
+  // Every pak handed to usePaks is scanned: pak0 holds the original skins and
+  // pak10 the 2x replacements the engine actually binds. The load order puts
+  // pak0 first, but both sizes stay in the map so a draw is named either way.
+  function indexWeaponSkins(paks) {
+    let indexed = 0;
+    for (const name of Object.keys(paks || {})) {
+      if (!/\.pak$/i.test(name)) continue;
+      const pak = paks[name];
+      if (!pak || pak.byteLength < 16) continue;
+      try {
+        const bytes = pak instanceof Uint8Array ? pak : new Uint8Array(pak);
+        indexed += indexPakWeaponSkins(bytes);
+      } catch (_) {
+        // A buffer that is not a readable PACK archive is skipped; the other
+        // archives are still indexed.
+      }
     }
     return indexed > 0;
   }
@@ -309,12 +331,13 @@
         skins: Array.from(weaponSkins.keys()).length,
       };
     },
-    // The pak buffers app.js downloaded, before it frees them: pak0's weapon
-    // skin headers are how a view-model draw is named.
+    // The pak buffers app.js downloaded, before it frees them: every archive's
+    // weapon skin headers are how a view-model draw is named (pak0's originals
+    // and pak10's 2x replacements alike).
     usePaks(paks) {
       try {
         indexWeaponSkins(paks);
-        aim.reason = weaponSkins.size ? null : "no weapon skins found in pak0";
+        aim.reason = weaponSkins.size ? null : "no weapon skins found in the loaded paks";
       } catch (error) {
         aim.reason = "pak index failed: " + String(error && error.message ? error.message : error);
         console.warn("Crosshair: could not index the weapon skins:", error);
@@ -1085,6 +1108,7 @@ vec3 q2SkyTint(vec3 col) {
   // -------------------------------------------------------------------------
   const modelFunctions = `
 uniform float q2RTX;
+uniform float q2Weapon;
 uniform vec4 q2Material;
 in vec3 q2ModelNormal;
 in vec3 q2ModelPos;
@@ -1098,6 +1122,13 @@ vec3 q2ModelShade(vec3 rgb) {
   float rim = pow(1.0 - max(dot(n, v), 0.0), 3.0);
   vec3 halfVector = normalize(key + v);
   float spec = pow(max(dot(n, halfVector), 0.0), mix(72.0, 8.0, q2Material.y));
+  if (q2Weapon > 0.5) {
+    // A view weapon gets a neutral shade: one luminance gain over the skin's
+    // own albedo. The blue-white sheen below is never mixed in, so the colour
+    // the artist drew keeps its hue and saturation instead of reading grey.
+    rgb *= 0.94 + 0.10 * lambert + 0.12 * spec;
+    return rgb;
+  }
   vec3 sheen = mix(vec3(0.78,0.87,1.0), max(rgb, vec3(0.25)), 0.35);
   rgb *= 0.90 + 0.12 * lambert;
   rgb += sheen * (rim * 0.14 + spec * 0.22) * q2Material.x;
@@ -1113,6 +1144,7 @@ vec3 q2ModelShade(vec3 rgb) {
   // is 0 whenever the raster look is off, so Off restores the original shader.
   const modelReliefFunctions = `
 uniform float q2Model;
+uniform float q2Weapon;
 vec3 q2ModelShade(vec3 albedo, vec2 uv) {
   float h = dot(albedo, vec3(0.2126, 0.7152, 0.0722));
   // Texture gradient -> a bump normal in the skin's own tangent frame. The
@@ -1128,9 +1160,16 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
   float diff = max(dot(n, l), 0.0);
   float spec = pow(max(dot(reflect(-l, n), vec3(0.0, 0.0, 1.0)), 0.0), 26.0);
   float lum = clamp(h * 1.8, 0.0, 1.0);
-  vec3 tint = mix(vec3(0.74, 0.82, 1.0), vec3(1.08, 0.99, 0.84), lum);
   albedo *= 0.94 + 0.12 * diff;
-  albedo += tint * spec * (0.04 + 0.10 * lum);
+  if (q2Weapon > 0.5) {
+    // A view weapon is shaded neutrally: the specular lobe rides on the
+    // albedo itself, a uniform gain, so no blue-white tint is added and the
+    // skin's hue and saturation survive untouched.
+    albedo *= 1.0 + spec * (0.04 + 0.10 * lum);
+  } else {
+    vec3 tint = mix(vec3(0.74, 0.82, 1.0), vec3(1.08, 0.99, 0.84), lum);
+    albedo += tint * spec * (0.04 + 0.10 * lum);
+  }
   return albedo;
 }
 `;
@@ -1221,6 +1260,9 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       const modeLocation = gl.getUniformLocation(program,'q2RTX');
       const materialLocation = gl.getUniformLocation(program,'q2Material');
       const modelLocation = gl.getUniformLocation(program,'q2Model');
+      // Present on the model/modelRelief programs only: 1 names the view
+      // weapon draw so the fragment uses the neutral shade.
+      const weaponLocation = gl.getUniformLocation(program,'q2Weapon');
       const skyLocation = gl.getUniformLocation(program,'q2Sky');
       const skyViewportLocation = gl.getUniformLocation(program,'q2SkyViewport');
       // Present only on the 2D crosshair picture program (added by transform).
@@ -1238,8 +1280,9 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         materialLocation ? 'world' : modeLocation ? 'post' : is2D ? 'ui' : 'original';
       programs.set(program,{ program, kind, modeLocation, materialLocation, modelLocation, skyLocation, skyViewportLocation,
         crosshairLocation: crosshairLocation || null, crosshairTintLocation: crosshairTintLocation || null,
+        weaponLocation: weaponLocation || null,
         textureLocation: textureLocation || null, textureUnit: null, lastCrosshair: null, lastCrosshairTint: null,
-        lastMode: -1, lastModel: -1, lastTexture: null, lastSky: -1 });
+        lastMode: -1, lastModel: -1, lastWeapon: -1, lastTexture: null, lastSky: -1 });
       if (kind === 'world') report.worldShaders++;
       if (kind === 'post') report.postShaders++;
       if (kind === 'model') report.modelShaders++;
@@ -1295,10 +1338,14 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
     // spread for it was allocation in the draw path for a fact the first 2D
     // draw consumes once.
     const modelSkinSizes = [];
+    // The size of the skin this model draw samples, when that size is one of
+    // the view weapons' skins (null otherwise).
+    let modelWeaponSkin = null;
     function noteModelTexture() {
       // Which skins are bound for this model draw, across every texture unit:
       // the engine does not promise the skin is on unit 0.
       modelSkinSizes.length = 0;
+      modelWeaponSkin = null;
       for (const texture of bound) {
         if (!texture) continue;
         const size = textureSizes.get(texture);
@@ -1310,19 +1357,37 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
       lastModelSkins = modelSkinSizes;
       for (const size of modelSkinSizes) {
         report.modelTextureDraws[size] = (report.modelTextureDraws[size] || 0) + 1;
-        if (weaponSkins.has(size)) weaponThisFrame = size;
+        if (weaponSkins.has(size)) {
+          weaponThisFrame = size;
+          if (!modelWeaponSkin) modelWeaponSkin = size;
+        }
       }
     }
-
-    // Which texture unit the 2D picture shader samples. The engine binds its
-    // sampler once when the program is made; read it lazily, not per draw.
-    function crosshairSamplerUnit() {
-      if (current.textureUnit === null) {
-        try { current.textureUnit = current.textureLocation ? gl.getUniform(current.program, current.textureLocation) : 0; }
-        catch (_) { current.textureUnit = 0; }
-        if (typeof current.textureUnit !== 'number') current.textureUnit = 0;
+    // Whether the current model draw samples a view-weapon skin. The shader's
+    // own sampler unit names the skin, so a stale binding on another unit
+    // cannot pass a monster off as the gun; the per-draw scan is only a
+    // fallback for a program whose sampler cannot be read.
+    function drawUsesWeaponSkin() {
+      if (!current) return false;
+      if (current.textureLocation) {
+        const size = textureSizes.get(bound[textureUnitOf(current)]);
+        if (size) return weaponSkins.has(size);
       }
-      return current.textureUnit;
+      return Boolean(modelWeaponSkin);
+    }
+    // Which texture unit a shader samples its `tex` sampler on. The engine
+    // binds its sampler once when the program is made; read it lazily, not per
+    // draw.
+    function textureUnitOf(program) {
+      if (program.textureUnit === null) {
+        try { program.textureUnit = program.textureLocation ? gl.getUniform(program.program, program.textureLocation) : 0; }
+        catch (_) { program.textureUnit = 0; }
+        if (typeof program.textureUnit !== 'number') program.textureUnit = 0;
+      }
+      return program.textureUnit;
+    }
+    function crosshairSamplerUnit() {
+      return textureUnitOf(current);
     }
     // The engine's crosshair is the only 2D picture draw of a 8x8 texture:
     // pics/ch1-3.pcx are the cross/dot/angle pictures and all three are 8x8,
@@ -1386,8 +1451,18 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         // q2ModelShade in the fragment.
         const value = mode() > 0 ? 1 : 0;
         if (current.lastModel !== value) { gl.uniform1f(current.modelLocation,value); current.lastModel = value; }
-        report.modelDraws++;
         noteModelTexture();
+        const weapon = drawUsesWeaponSkin() ? 1 : 0;
+        if (weapon) report.weaponDraws++;
+        if (current.weaponLocation && current.lastWeapon !== weapon) {
+          gl.uniform1f(current.weaponLocation, weapon);
+          current.lastWeapon = weapon;
+        }
+        // The neutral shade only runs while the raster look is on; Off
+        // (q2Model 0) skips q2ModelShade entirely and restores the engine's
+        // fragment exactly.
+        if (weapon && value > 0) report.weaponNeutralDraws++;
+        report.modelDraws++;
         sceneDirty = true;
         return;
       }
@@ -1415,7 +1490,17 @@ vec3 q2ModelShade(vec3 albedo, vec2 uv) {
         if (keyDestNow() !== 0) { report.suppressedDraws++; return true; }
       }
       else if (current.kind==='sky') { report.skyDraws++; }
-      else if (current.kind==='model') { report.modelDraws++; noteModelTexture(); sceneDirty=true; }
+      else if (current.kind==='model') {
+        report.modelDraws++; noteModelTexture();
+        const weapon = drawUsesWeaponSkin() ? 1 : 0;
+        if (weapon) report.weaponDraws++;
+        if (current.weaponLocation && current.lastWeapon !== weapon) {
+          gl.uniform1f(current.weaponLocation, weapon);
+          current.lastWeapon = weapon;
+        }
+        if (weapon && value > 0) report.weaponNeutralDraws++;
+        sceneDirty=true;
+      }
       else if (current.kind==='world') { report.worldDraws++; sceneDirty=true; worldThisFrame=true; }
       return false;
     }
