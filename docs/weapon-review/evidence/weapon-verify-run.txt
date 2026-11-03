@@ -1,4 +1,4 @@
-project /home/yanko/Projects/quake2/.clawbox/worktrees/t5-1
+project /home/yanko/Projects/quake2/.clawbox/worktrees/t5-2
 PASS S1 mean saturation rises by the stated threshold - mean 0.3153 → 0.3272 (+0.0120), threshold +0.005
 PASS S2 every weapon's saturation rises - smallest gain 0.0055
 PASS S3 mean chroma rises - mean 15.61 → 16.08
@@ -19,77 +19,39 @@ PASS P4 texture-pack reports every picture identical - 125 packed (125 identical
 starting session clean
 PASS A1 boots demo1 at 1280x720 with the game in hand - keyDest=game canvas=1280x720
 PASS A2 console is closed and cl_gun is 1 - consoleOpen=false
-PASS A3 cl_gun is 1 - cl_gun="1"
+FAIL A3 cl_gun is 1 - cl_gun="null"
+  retry "sv_cheats 1" ran=true echo=false
+  retry "give all" ran=false echo=false
 PASS A4 give all left the game running (console closed, keyDest=game) - keyDest=game consoleOpen=false
 clean weapon v_blast size 592x328 expect v_blast
-  retry "use Blaster" ran=false echo=false
-clean captured v_blast name=v_blast sizeDelta=57 gunPixels=39146 gunSat=0.841
-clean weapon v_shotg size 528x360 expect v_shotg
-clean captured v_shotg name=v_shotg sizeDelta=12 gunPixels=50020 gunSat=0.837
-clean weapon v_shotg2 size 592x388 expect v_hyperb/v_shotg2
-clean captured v_shotg2 name=v_hyperb/v_shotg2 sizeDelta=12 gunPixels=82075 gunSat=0.806
-clean weapon v_machn size 600x388 expect v_machn
-clean captured v_machn name=v_machn sizeDelta=18 gunPixels=42537 gunSat=0.855
-clean weapon v_chain size 528x328 expect v_chain
-clean captured v_chain name=v_chain sizeDelta=11 gunPixels=44817 gunSat=0.793
-clean weapon v_launch size 496x388 expect v_launch
-clean captured v_launch name=v_launch sizeDelta=13 gunPixels=38592 gunSat=0.853
-clean weapon v_rocket size 504x388 expect v_rocket
-clean captured v_rocket name=v_rocket sizeDelta=14 gunPixels=63389 gunSat=0.823
-clean weapon v_rail size 616x362 expect v_rail
-clean captured v_rail name=v_rail sizeDelta=13 gunPixels=99804 gunSat=0.883
-clean weapon v_hyperb size 592x388 expect v_hyperb/v_shotg2
-clean captured v_hyperb name=v_hyperb/v_shotg2 sizeDelta=14 gunPixels=77160 gunSat=0.759
-clean weapon v_bfg size 432x390 expect v_bfg/v_disint
-clean captured v_bfg name=v_bfg/v_disint sizeDelta=16 gunPixels=134144 gunSat=0.674
-starting session original
+  weapon never became v_blast - re-running give all
+  retry "sv_cheats 1" ran=false echo=false
+  weapon never became v_blast - re-running give all
   retry "give all" ran=false echo=false
+  retry "use Blaster" ran=false echo=false
+  weapon never became v_blast - re-running give all
+  retry "sv_cheats 1" ran=false echo=false
+session clean failed: Error: the drawn skin size 592x328 is not in modelTextureDraws (keys 256x256,1024x512,592x328,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,528x360,136x60,168x76,168x84,616x390,88x124,136x52,72x68,184x76,56x20,264x124,136x100)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1315:14)
+FAIL A0 clean session completed - the drawn skin size 592x328 is not in modelTextureDraws (keys 256x256,1024x512,592x328,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,528x360,136x60,168x76,168x84,616x390,88x124,136x52,72x68,184x76,56x20,264x124,136x100)
+starting session original
 original weapon v_blast size 296x164 expect v_blast
-original captured v_blast name=v_blast sizeDelta=36 gunPixels=43736 gunSat=0.772
-original weapon v_shotg size 264x180 expect v_shotg
-original captured v_shotg name=v_shotg sizeDelta=16 gunPixels=75853 gunSat=0.689
-original weapon v_shotg2 size 296x194 expect v_hyperb/v_shotg2
-original captured v_shotg2 name=v_hyperb/v_shotg2 sizeDelta=13 gunPixels=87334 gunSat=0.730
-original weapon v_machn size 300x194 expect v_machn
-original captured v_machn name=v_machn sizeDelta=20 gunPixels=48532 gunSat=0.768
-original weapon v_chain size 264x164 expect v_chain
-original captured v_chain name=v_chain sizeDelta=15 gunPixels=49527 gunSat=0.724
-original weapon v_launch size 248x194 expect v_launch
-original captured v_launch name=v_launch sizeDelta=13 gunPixels=45074 gunSat=0.765
-original weapon v_rocket size 252x194 expect v_rocket
-original captured v_rocket name=v_rocket sizeDelta=14 gunPixels=66722 gunSat=0.759
-original weapon v_rail size 308x181 expect v_rail
-original captured v_rail name=v_rail sizeDelta=19 gunPixels=107067 gunSat=0.894
-original weapon v_hyperb size 296x194 expect v_hyperb/v_shotg2
-original captured v_hyperb name=v_hyperb/v_shotg2 sizeDelta=18 gunPixels=84227 gunSat=0.727
-original weapon v_bfg size 216x195 expect v_bfg/v_disint
-original captured v_bfg name=v_bfg/v_disint sizeDelta=18 gunPixels=135731 gunSat=0.711
+  retry "cl_gun 0" ran=false echo=false
+  retry "cl_gun 0" ran=true echo=false
+session original failed: Error: the drawn skin size 296x164 is not in modelTextureDraws (keys 256x256,1024x512,296x164,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,264x180,136x60)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1343:29)
+FAIL O0 original-art baseline session completed - the drawn skin size 296x164 is not in modelTextureDraws (keys 256x256,1024x512,296x164,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,264x180,136x60)
 starting session extras
 extras weapon v_flareg size 624x338 expect v_blast/v_flareg
-extras captured v_flareg name=v_blast/v_flareg sizeDelta=36 gunPixels=91634 gunSat=0.735
-extras weapon v_disint size 432x390 expect v_bfg/v_disint/v_shotg
-extras captured v_disint name=v_bfg/v_disint/v_shotg sizeDelta=13 gunPixels=138746 gunSat=0.738
-extras weapon v_handgr size 616x390 expect v_handgr/v_machn
-extras captured v_handgr name=v_handgr/v_machn sizeDelta=17 gunPixels=140107 gunSat=0.840
-PASS G-v_blast v_blast reports its own skin draw and is not blank - name=v_blast (expected v_blast) skinΔ=57 lastΔ=0 weaponΔ=57 neutralΔ=57 gunPixels=39146 frame=1280x720
-PASS G-v_shotg v_shotg reports its own skin draw and is not blank - name=v_shotg (expected v_shotg) skinΔ=12 lastΔ=0 weaponΔ=29 neutralΔ=29 gunPixels=50020 frame=1280x720
-PASS G-v_shotg2 v_shotg2 reports its own skin draw and is not blank - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=12 lastΔ=0 weaponΔ=27 neutralΔ=27 gunPixels=82075 frame=1280x720
-PASS G-v_machn v_machn reports its own skin draw and is not blank - name=v_machn (expected v_machn) skinΔ=18 lastΔ=0 weaponΔ=35 neutralΔ=35 gunPixels=42537 frame=1280x720
-PASS G-v_chain v_chain reports its own skin draw and is not blank - name=v_chain (expected v_chain) skinΔ=11 lastΔ=0 weaponΔ=28 neutralΔ=28 gunPixels=44817 frame=1280x720
-PASS G-v_launch v_launch reports its own skin draw and is not blank - name=v_launch (expected v_launch) skinΔ=13 lastΔ=0 weaponΔ=29 neutralΔ=29 gunPixels=38592 frame=1280x720
-PASS G-v_rocket v_rocket reports its own skin draw and is not blank - name=v_rocket (expected v_rocket) skinΔ=14 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=63389 frame=1280x720
-PASS G-v_rail v_rail reports its own skin draw and is not blank - name=v_rail (expected v_rail) skinΔ=13 lastΔ=0 weaponΔ=30 neutralΔ=30 gunPixels=99804 frame=1280x720
-PASS G-v_hyperb v_hyperb reports its own skin draw and is not blank - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=14 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=77160 frame=1280x720
-PASS G-v_bfg v_bfg reports its own skin draw and is not blank - name=v_bfg/v_disint (expected v_bfg/v_disint) skinΔ=16 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=134144 frame=1280x720
-PASS G-v_flareg v_flareg reports its own skin draw and is not blank - name=v_blast/v_flareg (expected v_blast/v_flareg) skinΔ=36 lastΔ=0 weaponΔ=36 neutralΔ=36 gunPixels=91634 frame=1280x720
-PASS G-v_disint v_disint reports its own skin draw and is not blank - name=v_bfg/v_disint/v_shotg (expected v_bfg/v_disint/v_shotg) skinΔ=13 lastΔ=0 weaponΔ=30 neutralΔ=30 gunPixels=138746 frame=1280x720
-PASS G-v_handgr v_handgr reports its own skin draw and is not blank - name=v_handgr/v_machn (expected v_handgr/v_machn) skinΔ=17 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=140107 frame=1280x720
-PASS D-v_shotg2-v_hyperb v_shotg2 and v_hyperb draw different frames - 111205 changed pixels (limit 1000)
-PASS D-v_bfg-v_disint v_bfg and v_disint draw different frames - 244103 changed pixels (limit 1000)
-PASS D-v_flareg-v_blast v_flareg and v_blast draw different frames - 255701 changed pixels (limit 1000)
-PASS D-v_disint-v_shotg v_disint and v_shotg draw different frames - 264719 changed pixels (limit 1000)
-PASS D-v_handgr-v_machn v_handgr and v_machn draw different frames - 281946 changed pixels (limit 1000)
-PASS X-v_flareg v_flareg replaced the slot's original art - slot v_blast clean size 592x328 is not the drawn size 624x338 (skin draws Δ 36)
-PASS X-v_disint v_disint replaced the slot's original art - slot v_shotg clean size 528x360 is not the drawn size 432x390 (skin draws Δ 13)
-PASS X-v_handgr v_handgr replaced the slot's original art - slot v_machn clean size 600x388 is not the drawn size 616x390 (skin draws Δ 17)
-PASS G-I in-game gun pixels are at least as saturated as the original-art baseline - 2x 0.797 vs 1x 0.755 (+0.042) over 671684/743803 gun pixels
+  retry "cl_gun 0" ran=false echo=false
+session extras failed: Error: the drawn skin size 624x338 is not in modelTextureDraws (keys 256x256,1024x512,624x338,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,432x390,136x60)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1377:22)
+FAIL X0 extra-weapon session completed - the drawn skin size 624x338 is not in modelTextureDraws (keys 256x256,1024x512,624x338,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,432x390,136x60)
+FAIL D-v_shotg2-v_hyperb v_shotg2 and v_hyperb differ - missing capture
+FAIL D-v_bfg-v_disint v_bfg and v_disint differ - missing capture
+FAIL D-v_flareg-v_blast v_flareg and v_blast differ - missing capture
+FAIL D-v_disint-v_shotg v_disint and v_shotg differ - missing capture
+FAIL D-v_handgr-v_machn v_handgr and v_machn differ - missing capture

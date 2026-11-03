@@ -1,23 +1,6 @@
 {
-  "generated": "2026-11-03T08:02:21.360Z",
-  "gitHead": "85994fa194476739669765a6dd4f057de0492019",
-  "projectRoot": "/home/yanko/Projects/quake2/.clawbox/worktrees/t5-1",
-  "limits": {
-    "meanSaturationGain": 0.005,
-    "meanChromaGain": 0,
-    "cutoutRatio": 4,
-    "cutoutRatioTolerance": 0.001,
-    "fringeDistance": 48,
-    "fringeLumaDark": 12,
-    "fringeLumaLight": 243,
-    "fringeChroma": 24,
-    "edgeLumaShiftLevels": 20,
-    "blockRatioMax": 3,
-    "blockRatioPistolMargin": 0.5,
-    "blockRatioSensitivity": 1000,
-    "minGunPixels": 2000,
-    "minPairDiffPixels": 1000
-  },
+  "generated": "2026-11-03T08:23:13.302Z",
+  "gitHead": "d1e4ae6678b0dd26d3f92697b2349a5f59d15292",
   "checks": [
     {
       "id": "S1",
@@ -62,6 +45,13 @@
       "value": null
     },
     {
+      "id": "E3b",
+      "name": "scaled fringe texels are explained by the source art",
+      "pass": true,
+      "detail": "worst v_handgr 4 vs limit 8 (2x2 of the source's 1)",
+      "value": null
+    },
+    {
       "id": "E4",
       "name": "boundary brightness is not shifted by the upscale",
       "pass": true,
@@ -86,7 +76,7 @@
       "id": "B3",
       "name": "blockiness metric detects a nearest-neighbour upscale",
       "pass": true,
-      "detail": "control ratios 4800503570 … 9857793669",
+      "detail": "control ratios 5799702035 … 9857793669",
       "value": null
     },
     {
@@ -114,189 +104,7 @@
       "id": "P4",
       "name": "texture-pack reports every picture identical",
       "pass": true,
-      "detail": "125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed",
-      "value": null
-    },
-    {
-      "id": "A1",
-      "name": "boots demo1 at 1280x720 with the game in hand",
-      "pass": true,
-      "detail": "keyDest=game canvas=1280x720",
-      "value": null
-    },
-    {
-      "id": "A2",
-      "name": "console is closed and cl_gun is 1",
-      "pass": true,
-      "detail": "consoleOpen=false",
-      "value": null
-    },
-    {
-      "id": "A3",
-      "name": "cl_gun is 1",
-      "pass": true,
-      "detail": "cl_gun=\"1\"",
-      "value": null
-    },
-    {
-      "id": "A4",
-      "name": "give all left the game running (console closed, keyDest=game)",
-      "pass": true,
-      "detail": "keyDest=game consoleOpen=false",
-      "value": null
-    },
-    {
-      "id": "G-v_blast",
-      "name": "v_blast reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_blast (expected v_blast) skinΔ=57 lastΔ=0 weaponΔ=57 neutralΔ=57 gunPixels=39146 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_shotg",
-      "name": "v_shotg reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_shotg (expected v_shotg) skinΔ=12 lastΔ=0 weaponΔ=29 neutralΔ=29 gunPixels=50020 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_shotg2",
-      "name": "v_shotg2 reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=12 lastΔ=0 weaponΔ=27 neutralΔ=27 gunPixels=82075 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_machn",
-      "name": "v_machn reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_machn (expected v_machn) skinΔ=18 lastΔ=0 weaponΔ=35 neutralΔ=35 gunPixels=42537 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_chain",
-      "name": "v_chain reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_chain (expected v_chain) skinΔ=11 lastΔ=0 weaponΔ=28 neutralΔ=28 gunPixels=44817 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_launch",
-      "name": "v_launch reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_launch (expected v_launch) skinΔ=13 lastΔ=0 weaponΔ=29 neutralΔ=29 gunPixels=38592 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_rocket",
-      "name": "v_rocket reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_rocket (expected v_rocket) skinΔ=14 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=63389 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_rail",
-      "name": "v_rail reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_rail (expected v_rail) skinΔ=13 lastΔ=0 weaponΔ=30 neutralΔ=30 gunPixels=99804 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_hyperb",
-      "name": "v_hyperb reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=14 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=77160 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_bfg",
-      "name": "v_bfg reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_bfg/v_disint (expected v_bfg/v_disint) skinΔ=16 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=134144 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_flareg",
-      "name": "v_flareg reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_blast/v_flareg (expected v_blast/v_flareg) skinΔ=36 lastΔ=0 weaponΔ=36 neutralΔ=36 gunPixels=91634 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_disint",
-      "name": "v_disint reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_bfg/v_disint/v_shotg (expected v_bfg/v_disint/v_shotg) skinΔ=13 lastΔ=0 weaponΔ=30 neutralΔ=30 gunPixels=138746 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "G-v_handgr",
-      "name": "v_handgr reports its own skin draw and is not blank",
-      "pass": true,
-      "detail": "name=v_handgr/v_machn (expected v_handgr/v_machn) skinΔ=17 lastΔ=0 weaponΔ=32 neutralΔ=32 gunPixels=140107 frame=1280x720",
-      "value": null
-    },
-    {
-      "id": "D-v_shotg2-v_hyperb",
-      "name": "v_shotg2 and v_hyperb draw different frames",
-      "pass": true,
-      "detail": "111205 changed pixels (limit 1000)",
-      "value": null
-    },
-    {
-      "id": "D-v_bfg-v_disint",
-      "name": "v_bfg and v_disint draw different frames",
-      "pass": true,
-      "detail": "244103 changed pixels (limit 1000)",
-      "value": null
-    },
-    {
-      "id": "D-v_flareg-v_blast",
-      "name": "v_flareg and v_blast draw different frames",
-      "pass": true,
-      "detail": "255701 changed pixels (limit 1000)",
-      "value": null
-    },
-    {
-      "id": "D-v_disint-v_shotg",
-      "name": "v_disint and v_shotg draw different frames",
-      "pass": true,
-      "detail": "264719 changed pixels (limit 1000)",
-      "value": null
-    },
-    {
-      "id": "D-v_handgr-v_machn",
-      "name": "v_handgr and v_machn draw different frames",
-      "pass": true,
-      "detail": "281946 changed pixels (limit 1000)",
-      "value": null
-    },
-    {
-      "id": "X-v_flareg",
-      "name": "v_flareg replaced the slot's original art",
-      "pass": true,
-      "detail": "slot v_blast clean size 592x328 is not the drawn size 624x338 (skin draws Δ 36)",
-      "value": null
-    },
-    {
-      "id": "X-v_disint",
-      "name": "v_disint replaced the slot's original art",
-      "pass": true,
-      "detail": "slot v_shotg clean size 528x360 is not the drawn size 432x390 (skin draws Δ 13)",
-      "value": null
-    },
-    {
-      "id": "X-v_handgr",
-      "name": "v_handgr replaced the slot's original art",
-      "pass": true,
-      "detail": "slot v_machn clean size 600x388 is not the drawn size 616x390 (skin draws Δ 17)",
-      "value": null
-    },
-    {
-      "id": "G-I",
-      "name": "in-game gun pixels are at least as saturated as the original-art baseline",
-      "pass": true,
-      "detail": "2x 0.797 vs 1x 0.755 (+0.042) over 671684/743803 gun pixels",
+      "detail": "125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed (identical 125 of 125)",
       "value": null
     }
   ],
@@ -318,6 +126,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -328,17 +137,29 @@
       "blockAll": {
         "inside": 1.9969432988627058,
         "boundary": 4.114426374534647,
+        "ratioX": 2.060362142920074,
+        "insideY": 2.421373485909346,
+        "boundaryY": 4.86157015834825,
+        "ratioY": 2.007773764204116,
         "ratio": 2.060362142920074
       },
       "blockBottom": {
         "inside": 1.742288441850976,
         "boundary": 4.028209424755976,
+        "ratioX": 2.3120221244632018,
+        "insideY": 1.9465055794431219,
+        "boundaryY": 4.360502494802502,
+        "ratioY": 2.2401695329586486,
         "ratio": 2.3120221244632018
       },
       "blockControl": {
         "inside": 0,
         "boundary": 5.067883898305042,
-        "ratio": 5067883898.305041
+        "ratioX": 5067883898.305041,
+        "insideY": 0,
+        "boundaryY": 6.1642871414358655,
+        "ratioY": 6164287141.435865,
+        "ratio": 6164287141.435865
       }
     },
     {
@@ -358,6 +179,7 @@
       "edge": {
         "boundary": 89,
         "sourceBoundary": 38,
+        "sourceFringe": 29,
         "fringe": 63,
         "introduced": 0,
         "maxFringeDistance": 11,
@@ -368,17 +190,29 @@
       "blockAll": {
         "inside": 2.3060055660772742,
         "boundary": 4.791283840304276,
+        "ratioX": 2.0777416632409462,
+        "insideY": 2.577460132575587,
+        "boundaryY": 5.296362948620186,
+        "ratioY": 2.0548767686767953,
         "ratio": 2.0777416632409462
       },
       "blockBottom": {
         "inside": 2.634548321759291,
         "boundary": 5.223227344739864,
-        "ratio": 1.9825893120274645
+        "ratioX": 1.9825893120274645,
+        "insideY": 3.178821943392257,
+        "boundaryY": 6.381275448143051,
+        "ratioY": 2.0074340626116727,
+        "ratio": 2.0074340626116727
       },
       "blockControl": {
         "inside": 0,
         "boundary": 5.978193029150884,
-        "ratio": 5978193029.150884
+        "ratioX": 5978193029.150884,
+        "insideY": 0,
+        "boundaryY": 6.732766315388333,
+        "ratioY": 6732766315.388332,
+        "ratio": 6732766315.388332
       }
     },
     {
@@ -398,6 +232,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -408,17 +243,29 @@
       "blockAll": {
         "inside": 2.8943316035104876,
         "boundary": 5.539874803424599,
+        "ratioX": 1.9140428818540955,
+        "insideY": 3.7622918466143713,
+        "boundaryY": 6.8864619100963695,
+        "ratioY": 1.8303901427246776,
         "ratio": 1.9140428818540955
       },
       "blockBottom": {
         "inside": 4.041130262473762,
         "boundary": 7.500653780964508,
+        "ratioX": 1.856078199363218,
+        "insideY": 4.516176347019815,
+        "boundaryY": 8.248137526324728,
+        "ratioY": 1.8263541749798147,
         "ratio": 1.856078199363218
       },
       "blockControl": {
         "inside": 0,
         "boundary": 6.782975624672121,
-        "ratio": 6782975624.67212
+        "ratioX": 6782975624.67212,
+        "insideY": 0,
+        "boundaryY": 8.869649733930444,
+        "ratioY": 8869649733.930443,
+        "ratio": 8869649733.930443
       }
     },
     {
@@ -438,6 +285,7 @@
       "edge": {
         "boundary": 12,
         "sourceBoundary": 6,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -448,17 +296,29 @@
       "blockAll": {
         "inside": 2.0754545360822614,
         "boundary": 4.462910905767962,
+        "ratioX": 2.1503293992613255,
+        "insideY": 3.0903029037796435,
+        "boundaryY": 5.928236096717906,
+        "ratioY": 1.9183349598084005,
         "ratio": 2.1503293992613255
       },
       "blockBottom": {
         "inside": 2.1967363888889158,
         "boundary": 4.585287003687469,
+        "ratioX": 2.087317816957844,
+        "insideY": 3.2555045512819656,
+        "boundaryY": 6.092504502164387,
+        "ratioY": 1.8714470848352083,
         "ratio": 2.087317816957844
       },
       "blockControl": {
         "inside": 0,
         "boundary": 5.45922208047403,
-        "ratio": 5459222080.47403
+        "ratioX": 5459222080.47403,
+        "insideY": 0,
+        "boundaryY": 7.746976753021742,
+        "ratioY": 7746976753.021742,
+        "ratio": 7746976753.021742
       }
     },
     {
@@ -478,6 +338,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -488,17 +349,29 @@
       "blockAll": {
         "inside": 1.7289838899667176,
         "boundary": 3.9237942942588298,
+        "ratioX": 2.2694221253469062,
+        "insideY": 3.0707313955098554,
+        "boundaryY": 6.262413355176456,
+        "ratioY": 2.0393881940744163,
         "ratio": 2.2694221253469062
       },
       "blockBottom": {
         "inside": 2.468070994031234,
         "boundary": 4.809456331374705,
+        "ratioX": 1.9486701731862095,
+        "insideY": 2.640118859045018,
+        "boundaryY": 4.996137849650447,
+        "ratioY": 1.8923912582699578,
         "ratio": 1.9486701731862095
       },
       "blockControl": {
         "inside": 0,
         "boundary": 4.800503570434177,
-        "ratio": 4800503570.434176
+        "ratioX": 4800503570.434176,
+        "insideY": 0,
+        "boundaryY": 8.647030210075043,
+        "ratioY": 8647030210.075043,
+        "ratio": 8647030210.075043
       }
     },
     {
@@ -518,6 +391,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -528,17 +402,29 @@
       "blockAll": {
         "inside": 2.431005372879691,
         "boundary": 4.9926247652238676,
+        "ratioX": 2.0537283960461856,
+        "insideY": 2.645830613983743,
+        "boundaryY": 5.237733944091421,
+        "ratioY": 1.9796180134922285,
         "ratio": 2.0537283960461856
       },
       "blockBottom": {
         "inside": 2.1164663978494667,
         "boundary": 4.931726876362369,
+        "ratioX": 2.330170174860077,
+        "insideY": 2.753645419768385,
+        "boundaryY": 5.600226827607703,
+        "ratioY": 2.0337501652913432,
         "ratio": 2.330170174860077
       },
       "blockControl": {
         "inside": 0,
         "boundary": 6.206238094244441,
-        "ratio": 6206238094.24444
+        "ratioX": 6206238094.24444,
+        "insideY": 0,
+        "boundaryY": 6.624827532174297,
+        "ratioY": 6624827532.174297,
+        "ratio": 6624827532.174297
       }
     },
     {
@@ -558,6 +444,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -568,17 +455,29 @@
       "blockAll": {
         "inside": 2.2151233840612545,
         "boundary": 4.905878260154454,
+        "ratioX": 2.214720089839832,
+        "insideY": 2.8821979422348845,
+        "boundaryY": 5.570317378073105,
+        "ratioY": 1.9326630195821408,
         "ratio": 2.214720089839832
       },
       "blockBottom": {
         "inside": 1.357300544363077,
         "boundary": 3.4612871845949815,
+        "ratioX": 2.5501258354089993,
+        "insideY": 1.897800849613385,
+        "boundaryY": 4.026711940836937,
+        "ratioY": 2.121777920827282,
         "ratio": 2.5501258354089993
       },
       "blockControl": {
         "inside": 0,
         "boundary": 5.93531650716643,
-        "ratio": 5935316507.1664295
+        "ratioX": 5935316507.1664295,
+        "insideY": 0,
+        "boundaryY": 7.095270643144053,
+        "ratioY": 7095270643.1440525,
+        "ratio": 7095270643.1440525
       }
     },
     {
@@ -598,6 +497,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -608,16 +508,28 @@
       "blockAll": {
         "inside": 2.1709135215613324,
         "boundary": 4.67744273579603,
+        "ratioX": 2.1545965278395744,
+        "insideY": 2.0514673172131825,
+        "boundaryY": 4.34112344877297,
+        "ratioY": 2.1161065605813176,
         "ratio": 2.1545965278395744
       },
       "blockBottom": {
         "inside": 2.119342207792284,
         "boundary": 4.336810266202656,
-        "ratio": 2.0463001445718887
+        "ratioX": 2.0463001445718887,
+        "insideY": 1.7667502480159247,
+        "boundaryY": 3.7674505997476877,
+        "ratioY": 2.13241832227196,
+        "ratio": 2.13241832227196
       },
       "blockControl": {
         "inside": 0,
         "boundary": 5.799702035380372,
+        "ratioX": 5799702035.380372,
+        "insideY": 0,
+        "boundaryY": 5.402466504328739,
+        "ratioY": 5402466504.328739,
         "ratio": 5799702035.380372
       }
     },
@@ -638,6 +550,7 @@
       "edge": {
         "boundary": 4,
         "sourceBoundary": 2,
+        "sourceFringe": 2,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -648,17 +561,29 @@
       "blockAll": {
         "inside": 2.519646506686877,
         "boundary": 4.991108352262151,
+        "ratioX": 1.9808764201709539,
+        "insideY": 3.1539282529948993,
+        "boundaryY": 5.862111468981216,
+        "ratioY": 1.8586698868037619,
         "ratio": 1.9808764201709539
       },
       "blockBottom": {
         "inside": 2.9522788028412155,
         "boundary": 5.203593698391968,
+        "ratioX": 1.762568526178534,
+        "insideY": 4.060384052321292,
+        "boundaryY": 6.851580115829792,
+        "ratioY": 1.6874216890672677,
         "ratio": 1.762568526178534
       },
       "blockControl": {
         "inside": 0,
         "boundary": 6.296647632359907,
-        "ratio": 6296647632.359906
+        "ratioX": 6296647632.359906,
+        "insideY": 0,
+        "boundaryY": 7.583788860102684,
+        "ratioY": 7583788860.102684,
+        "ratio": 7583788860.102684
       }
     },
     {
@@ -678,6 +603,7 @@
       "edge": {
         "boundary": 94,
         "sourceBoundary": 40,
+        "sourceFringe": 13,
         "fringe": 23,
         "introduced": 0,
         "maxFringeDistance": 19,
@@ -688,17 +614,29 @@
       "blockAll": {
         "inside": 3.438713782051128,
         "boundary": 6.4315953607633425,
-        "ratio": 1.870349138777993
+        "ratioX": 1.870349138777993,
+        "insideY": 3.657072234092921,
+        "boundaryY": 6.867039602424597,
+        "ratioY": 1.8777424023531377,
+        "ratio": 1.8777424023531377
       },
       "blockBottom": {
         "inside": 3.726654410019096,
         "boundary": 6.746960256410424,
+        "ratioX": 1.8104604060605265,
+        "insideY": 3.4972210648149007,
+        "boundaryY": 6.205239357864456,
+        "ratioY": 1.774334319409941,
         "ratio": 1.8104604060605265
       },
       "blockControl": {
         "inside": 0,
         "boundary": 8.39691360763292,
-        "ratio": 8396913607.632919
+        "ratioX": 8396913607.632919,
+        "insideY": 0,
+        "boundaryY": 8.971763053646516,
+        "ratioY": 8971763053.646515,
+        "ratio": 8971763053.646515
       }
     },
     {
@@ -718,6 +656,7 @@
       "edge": {
         "boundary": 90,
         "sourceBoundary": 38,
+        "sourceFringe": 7,
         "fringe": 10,
         "introduced": 0,
         "maxFringeDistance": 0,
@@ -728,17 +667,29 @@
       "blockAll": {
         "inside": 2.67933030626775,
         "boundary": 5.3022039713772005,
+        "ratioX": 1.9789288237339642,
+        "insideY": 3.128991061253512,
+        "boundaryY": 5.961142933848543,
+        "ratioY": 1.9051326185190303,
         "ratio": 1.9789288237339642
       },
       "blockBottom": {
         "inside": 3.097569147673336,
         "boundary": 5.994862790697685,
-        "ratio": 1.9353442989967087
+        "ratioX": 1.9353442989967087,
+        "insideY": 2.8219829653371535,
+        "boundaryY": 5.464768849206353,
+        "ratioY": 1.9364995878185447,
+        "ratio": 1.9364995878185447
       },
       "blockControl": {
         "inside": 0,
         "boundary": 6.610684436493564,
-        "ratio": 6610684436.493564
+        "ratioX": 6610684436.493564,
+        "insideY": 0,
+        "boundaryY": 7.514563311378285,
+        "ratioY": 7514563311.378284,
+        "ratio": 7514563311.378284
       }
     },
     {
@@ -758,6 +709,7 @@
       "edge": {
         "boundary": 54,
         "sourceBoundary": 24,
+        "sourceFringe": 11,
         "fringe": 31,
         "introduced": 0,
         "maxFringeDistance": 44,
@@ -768,17 +720,29 @@
       "blockAll": {
         "inside": 3.424288423607819,
         "boundary": 6.638485892045056,
+        "ratioX": 1.9386468284265521,
+        "insideY": 4.112568369746315,
+        "boundaryY": 7.467368971306432,
+        "ratioY": 1.8157434235596817,
         "ratio": 1.9386468284265521
       },
       "blockBottom": {
         "inside": 4.267407192684541,
         "boundary": 7.6977234253830735,
+        "ratioX": 1.803840851789114,
+        "insideY": 4.247370569381372,
+        "boundaryY": 7.398205941446235,
+        "ratioY": 1.7418319924281482,
         "ratio": 1.803840851789114
       },
       "blockControl": {
         "inside": 0,
         "boundary": 8.374662417473466,
-        "ratio": 8374662417.473466
+        "ratioX": 8374662417.473466,
+        "insideY": 0,
+        "boundaryY": 9.836601457570344,
+        "ratioY": 9836601457.570343,
+        "ratio": 9836601457.570343
       }
     },
     {
@@ -798,6 +762,7 @@
       "edge": {
         "boundary": 32,
         "sourceBoundary": 16,
+        "sourceFringe": 1,
         "fringe": 4,
         "introduced": 0,
         "maxFringeDistance": 23,
@@ -808,473 +773,47 @@
       "blockAll": {
         "inside": 4.050676615050629,
         "boundary": 7.765716036080664,
-        "ratio": 1.9171404617259482
+        "ratioX": 1.9171404617259482,
+        "insideY": 3.367004770229247,
+        "boundaryY": 6.533099846029971,
+        "ratioY": 1.940329845622748,
+        "ratio": 1.940329845622748
       },
       "blockBottom": {
         "inside": 4.1896895604395095,
         "boundary": 8.311883237283682,
+        "ratioX": 1.9838900036335256,
+        "insideY": 3.7763728771228804,
+        "boundaryY": 7.417759698093957,
+        "ratioY": 1.964255103893595,
         "ratio": 1.9838900036335256
       },
       "blockControl": {
         "inside": 0,
         "boundary": 9.857793669088323,
+        "ratioX": 9857793669.088324,
+        "insideY": 0,
+        "boundaryY": 8.033484803855808,
+        "ratioY": 8033484803.855807,
         "ratio": 9857793669.088324
       }
-    }
-  ],
-  "inGame": [
-    {
-      "name": "v_blast",
-      "item": "Blaster",
-      "expectedName": "v_blast",
-      "expectedSize": "592x328",
-      "crosshairWeapon": "v_blast",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 57,
-      "neutralDrawsDelta": 57,
-      "modelTextureDelta": 57,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "2c86d14c76b8fe8390fc5b1681af83d45537606aea6602a01cdace44c8770303"
-      },
-      "gunPixels": 39146,
-      "gunSaturation": 0.8412977237879599,
-      "gunChroma": 108.43866550860879,
-      "shot": "docs/weapon-review/shots/v_blast.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_shotg",
-      "item": "Shotgun",
-      "expectedName": "v_shotg",
-      "expectedSize": "528x360",
-      "crosshairWeapon": "v_shotg",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 29,
-      "neutralDrawsDelta": 29,
-      "modelTextureDelta": 12,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "05b476690c6ba908a9c6adf1f6f3f524e641461d66e26719f6b1eb4b5e4bc2c4"
-      },
-      "gunPixels": 50020,
-      "gunSaturation": 0.8371871508264873,
-      "gunChroma": 58.56175529788085,
-      "shot": "docs/weapon-review/shots/v_shotg.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_shotg2",
-      "item": "Super Shotgun",
-      "expectedName": "v_hyperb/v_shotg2",
-      "expectedSize": "592x388",
-      "crosshairWeapon": "v_hyperb/v_shotg2",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 27,
-      "neutralDrawsDelta": 27,
-      "modelTextureDelta": 12,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "d3e02cee3d7dad46840aa165d551c116d58f1d25fcbbfa9e957d7f69cd8c089c"
-      },
-      "gunPixels": 82075,
-      "gunSaturation": 0.806441468811941,
-      "gunChroma": 97.75092293633871,
-      "shot": "docs/weapon-review/shots/v_shotg2.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_machn",
-      "item": "Machinegun",
-      "expectedName": "v_machn",
-      "expectedSize": "600x388",
-      "crosshairWeapon": "v_machn",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 35,
-      "neutralDrawsDelta": 35,
-      "modelTextureDelta": 18,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "dafee686af74b61fe44cd24d8bed6406bb2e72c3364b7b7196be87ad2471f956"
-      },
-      "gunPixels": 42537,
-      "gunSaturation": 0.8547905399822633,
-      "gunChroma": 108.35000117544726,
-      "shot": "docs/weapon-review/shots/v_machn.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_chain",
-      "item": "Chaingun",
-      "expectedName": "v_chain",
-      "expectedSize": "528x328",
-      "crosshairWeapon": "v_chain",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 28,
-      "neutralDrawsDelta": 28,
-      "modelTextureDelta": 11,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "efc8fa1d89bcbcc036b52168c21375fab58efc68d76abd1144c84d151520f401"
-      },
-      "gunPixels": 44817,
-      "gunSaturation": 0.7925816277643281,
-      "gunChroma": 92.77466140080773,
-      "shot": "docs/weapon-review/shots/v_chain.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_launch",
-      "item": "Grenade Launcher",
-      "expectedName": "v_launch",
-      "expectedSize": "496x388",
-      "crosshairWeapon": "v_launch",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 29,
-      "neutralDrawsDelta": 29,
-      "modelTextureDelta": 13,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "edb701404df0189a071e5e39254eeb0e03a818889ffc02197bc1736fe4322fef"
-      },
-      "gunPixels": 38592,
-      "gunSaturation": 0.8533213999249922,
-      "gunChroma": 99.72460613598673,
-      "shot": "docs/weapon-review/shots/v_launch.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_rocket",
-      "item": "Rocket Launcher",
-      "expectedName": "v_rocket",
-      "expectedSize": "504x388",
-      "crosshairWeapon": "v_rocket",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 32,
-      "neutralDrawsDelta": 32,
-      "modelTextureDelta": 14,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "58a2e9db93cef42d8e71c1499148e7359d82990477bace8d24db5f65af88ac4b"
-      },
-      "gunPixels": 63389,
-      "gunSaturation": 0.8229954080241937,
-      "gunChroma": 107.79199861174652,
-      "shot": "docs/weapon-review/shots/v_rocket.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_rail",
-      "item": "Railgun",
-      "expectedName": "v_rail",
-      "expectedSize": "616x362",
-      "crosshairWeapon": "v_rail",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 30,
-      "neutralDrawsDelta": 30,
-      "modelTextureDelta": 13,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "ca92ffbde8b173815313cbfbe4f796603fbdcfea5754ea338ca82411a0f57c3d"
-      },
-      "gunPixels": 99804,
-      "gunSaturation": 0.8834243407816419,
-      "gunChroma": 117.31261272093303,
-      "shot": "docs/weapon-review/shots/v_rail.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_hyperb",
-      "item": "HyperBlaster",
-      "expectedName": "v_hyperb/v_shotg2",
-      "expectedSize": "592x388",
-      "crosshairWeapon": "v_hyperb/v_shotg2",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 32,
-      "neutralDrawsDelta": 32,
-      "modelTextureDelta": 14,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "6d59234f7d1e0fb4e46d70122cb0e5ff9b254bfd2cad057c046e8167cb2fcbb1"
-      },
-      "gunPixels": 77160,
-      "gunSaturation": 0.7594358728441168,
-      "gunChroma": 89.95009072058062,
-      "shot": "docs/weapon-review/shots/v_hyperb.png",
-      "useOutput": null
-    },
-    {
-      "name": "v_bfg",
-      "item": "BFG10K",
-      "expectedName": "v_bfg/v_disint",
-      "expectedSize": "432x390",
-      "crosshairWeapon": "v_bfg/v_disint",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 32,
-      "neutralDrawsDelta": 32,
-      "modelTextureDelta": 16,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "5c5abf80601b68e60a75247d195f210ad99c72fd45ce140f6a88f9899a6d99f9"
-      },
-      "gunPixels": 134144,
-      "gunSaturation": 0.6738313991055839,
-      "gunChroma": 61.998941436068705,
-      "shot": "docs/weapon-review/shots/v_bfg.png",
-      "useOutput": null
-    }
-  ],
-  "extraTextures": [
-    {
-      "name": "v_flareg",
-      "item": "Blaster",
-      "expectedName": "v_blast/v_flareg",
-      "expectedSize": "624x338",
-      "crosshairWeapon": "v_blast/v_flareg",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 36,
-      "neutralDrawsDelta": 36,
-      "modelTextureDelta": 36,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "ca9d5579bcd7a4ed14a07b31cbaf5c8cd628d11c86becee35990b26ec09f153c"
-      },
-      "gunPixels": 91634,
-      "gunSaturation": 0.734530742594052,
-      "gunChroma": 99.29008883165638,
-      "shot": "docs/weapon-review/shots/v_flareg.png",
-      "useOutput": null,
-      "slot": "v_blast",
-      "slotOriginalSize": "592x328"
-    },
-    {
-      "name": "v_disint",
-      "item": "Shotgun",
-      "expectedName": "v_bfg/v_disint/v_shotg",
-      "expectedSize": "432x390",
-      "crosshairWeapon": "v_bfg/v_disint/v_shotg",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 30,
-      "neutralDrawsDelta": 30,
-      "modelTextureDelta": 13,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "6eaf90051397e74104f61636f99d0e8b5724daf948ab0b10f3f48d2b172ed489"
-      },
-      "gunPixels": 138746,
-      "gunSaturation": 0.7379235920899271,
-      "gunChroma": 116.3005708272671,
-      "shot": "docs/weapon-review/shots/v_disint.png",
-      "useOutput": null,
-      "slot": "v_shotg",
-      "slotOriginalSize": "528x360"
-    },
-    {
-      "name": "v_handgr",
-      "item": "Machinegun",
-      "expectedName": "v_handgr/v_machn",
-      "expectedSize": "616x390",
-      "crosshairWeapon": "v_handgr/v_machn",
-      "keyDest": 0,
-      "keyDestName": "game",
-      "consoleOpen": false,
-      "clGun": null,
-      "weaponDrawsDelta": 32,
-      "neutralDrawsDelta": 32,
-      "modelTextureDelta": 17,
-      "lastSkinDelta": 0,
-      "frame": {
-        "width": 1280,
-        "height": 720,
-        "sha256": "01c729e4bc82ad719aee0cb17709693484a84373e5ed4264c4540b899fa4c77a"
-      },
-      "gunPixels": 140107,
-      "gunSaturation": 0.8401039854815467,
-      "gunChroma": 181.27012212095042,
-      "shot": "docs/weapon-review/shots/v_handgr.png",
-      "useOutput": null,
-      "slot": "v_machn",
-      "slotOriginalSize": "600x388"
-    }
-  ],
-  "inGameBaseline": [
-    {
-      "name": "v_blast",
-      "gunPixels2x": 39146,
-      "sat2x": 0.8412977237879599,
-      "gunPixels1x": 43736,
-      "sat1x": 0.7716498059787459
-    },
-    {
-      "name": "v_shotg",
-      "gunPixels2x": 50020,
-      "sat2x": 0.8371871508264873,
-      "gunPixels1x": 75853,
-      "sat1x": 0.6893807782772553
-    },
-    {
-      "name": "v_shotg2",
-      "gunPixels2x": 82075,
-      "sat2x": 0.806441468811941,
-      "gunPixels1x": 87334,
-      "sat1x": 0.729765626668356
-    },
-    {
-      "name": "v_machn",
-      "gunPixels2x": 42537,
-      "sat2x": 0.8547905399822633,
-      "gunPixels1x": 48532,
-      "sat1x": 0.7680903353390792
-    },
-    {
-      "name": "v_chain",
-      "gunPixels2x": 44817,
-      "sat2x": 0.7925816277643281,
-      "gunPixels1x": 49527,
-      "sat1x": 0.7242394733161035
-    },
-    {
-      "name": "v_launch",
-      "gunPixels2x": 38592,
-      "sat2x": 0.8533213999249922,
-      "gunPixels1x": 45074,
-      "sat1x": 0.7650115689314293
-    },
-    {
-      "name": "v_rocket",
-      "gunPixels2x": 63389,
-      "sat2x": 0.8229954080241937,
-      "gunPixels1x": 66722,
-      "sat1x": 0.7589796779174395
-    },
-    {
-      "name": "v_rail",
-      "gunPixels2x": 99804,
-      "sat2x": 0.8834243407816419,
-      "gunPixels1x": 107067,
-      "sat1x": 0.8939365629475002
-    },
-    {
-      "name": "v_hyperb",
-      "gunPixels2x": 77160,
-      "sat2x": 0.7594358728441168,
-      "gunPixels1x": 84227,
-      "sat1x": 0.7268244551786363
-    },
-    {
-      "name": "v_bfg",
-      "gunPixels2x": 134144,
-      "sat2x": 0.6738313991055839,
-      "gunPixels1x": 135731,
-      "sat1x": 0.7106175126903812
-    }
-  ],
-  "sessions": [
-    {
-      "name": "clean",
-      "serverPort": 33759,
-      "debugPort": 45285,
-      "served": 0
-    },
-    {
-      "name": "original",
-      "serverPort": 44271,
-      "debugPort": 40907,
-      "served": 2
-    },
-    {
-      "name": "extras",
-      "serverPort": 43127,
-      "debugPort": 40433,
-      "served": 1
     }
   ],
   "commands": [
     {
       "label": "tex-check",
       "command": "node scripts/tex-check.mjs --only models/",
-      "status": 0,
-      "duration": 1020
+      "status": 0
     },
     {
       "label": "texture-pack",
       "command": "node scripts/texture-pack.mjs --dry-run --only models/",
-      "status": 0,
-      "duration": 2041
+      "status": 0
     },
     {
       "label": "texture-audit",
       "command": "node scripts/texture-audit.mjs --select",
-      "status": 0,
-      "duration": 1025
+      "status": 0
     }
-  ],
-  "pageChrome": true,
-  "pakSizes": {
-    "pak0": 47498591,
-    "pak10": 13770565,
-    "previousPak10": 12118560,
-    "originalPak10": 10109548,
-    "extraPak10": 14131168
-  }
+  ]
 }
