@@ -603,6 +603,16 @@ async function run() {
   const firstLive = await waitForFirstLive();
   check("first-show hint appears with the touch layer", firstLive.hintHidden === false, firstLive.hintText);
   check("first-show hint names look and fire", /look/i.test(firstLive.hintText || "") && /fire/i.test(firstLive.hintText || ""), firstLive.hintText);
+  const touchLightingChip = await rect("#lighting-chip");
+  const touchOptionsChip = await rect("#options-chip");
+  const firstHintBox = await rect("#mc-hint");
+  check("the Options and Lighting chips have a clear gap",
+    touchLightingChip && touchOptionsChip && touchLightingChip.right <= touchOptionsChip.left - 4,
+    { lighting: touchLightingChip, options: touchOptionsChip, gap: touchLightingChip && touchOptionsChip ? Number((touchOptionsChip.left - touchLightingChip.right).toFixed(2)) : null });
+  check("the first-show hint sits below the top chips",
+    firstHintBox && touchLightingChip && touchOptionsChip &&
+    firstHintBox.top >= Math.max(touchLightingChip.bottom, touchOptionsChip.bottom) + 2,
+    { hint: firstHintBox, chipsBottom: Math.max(touchLightingChip.bottom, touchOptionsChip.bottom) });
   const { state: spawn } = await waitForGame("landscape demo1");
   check("the touch layer is live over the running game", (await pageMetrics()).live === true);
   const metrics = await pageMetrics();
@@ -940,6 +950,13 @@ async function run() {
     stored: localStorage.getItem("quake2-touch-controls")
   }))()`);
   check("the pad comes back and the choice is stored", shown.actions !== "none" && shown.stored === "on", shown);
+  // A delayed synthetic tap from the safe helper can land after the check and
+  // toggle it off again; confirm the state the rest of the run relies on.
+  if (!(await evaluate("window.quake2Touch.isPadOn()"))) {
+    await evaluate("window.quake2Touch.toggle(); 1");
+    await sleep(250);
+  }
+  check("the pad is on for the remaining measurements", (await evaluate("window.quake2Touch.isPadOn()")) === true);
   await screenshot("landscape-844x390.png");
 
   // 932x430 landscape.
@@ -947,6 +964,11 @@ async function run() {
   console.log("landscape 932x430");
   await emulate(LANDSCAPE_932, true, MOBILE_UA, landscapeOrientation());
   await sleep(600);
+  if (!(await evaluate("window.quake2Touch.isPadOn()"))) {
+    await evaluate("window.quake2Touch.toggle(); 1");
+    await sleep(300);
+  }
+  check("932x430: the on-screen pad is available", (await evaluate("window.quake2Touch.isPadOn()")) === true);
   const wide = await pageMetrics();
   check("932x430: no horizontal overflow", wide.scroll.w <= wide.inner.w && wide.scroll.h <= wide.inner.h, { scroll: wide.scroll, inner: wide.inner });
   check("932x430: the canvas fits the viewport", wide.canvas && wide.canvas.x >= 0 && wide.canvas.right <= wide.inner.w + 0.5 && wide.canvas.bottom <= wide.inner.h + 0.5, wide.canvas);
@@ -1085,12 +1107,20 @@ async function run() {
   await navigate(baseUrl, "demo3");
   await waitForGame("demo3");
   await sleep(800);
+  if (!(await evaluate("window.quake2Touch.isPadOn()"))) {
+    await evaluate("window.quake2Touch.toggle(); 1");
+    await sleep(300);
+  }
+  check("the on-screen pad is available before the USE test",
+    (await evaluate("window.quake2Touch.isPadOn()")) === true);
   const useSpawn = await readEngine();
   check("demo3 spawn is next to the button", useSpawn.position && Math.abs(useSpawn.position.x - 1688) < 40 && Math.abs(useSpawn.position.y - 1412) < 40, useSpawn.position);
   // func_button *7's model centre in demo3. The bearing is computed from the
   // live view position, not assumed: the spawn is close enough that a degree
   // matters to the level's narrow use trace.
   const buttonBearing = Math.atan2(1408 - useSpawn.position.y, 1692 - useSpawn.position.x) * 180 / Math.PI;
+  const buttonPitch = -Math.atan2(-784 - useSpawn.position.z,
+    Math.hypot(1692 - useSpawn.position.x, 1408 - useSpawn.position.y)) * 180 / Math.PI;
   const entitiesNow = () => dumpJson(`(() => (window.quake2Engine.entities() || []).map((e) => ({ n: e.number, p: [e.position.x, e.position.y, e.position.z] })))()`);
   // The engine's SDL keyboard path wants a focused, active page. The touch
   // look and mouse fire work without it, so a long run can reach USE with the
@@ -1103,18 +1133,24 @@ async function run() {
     await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 5, y: 200, button: "left", buttons: 0, clickCount: 1 });
     await sleep(300);
   };
-  const aimAtButton = async (targetYaw = -45) => {
-    // The level's own spawn and the measured 49.4 degrees per 190 px of canvas
-    // drag are the only inputs. Two degrees is inside the use trace's cone.
-    for (let i = 0; i < 8; i++) {
+  const aimAtButton = async (targetYaw, targetPitch) => {
+    // Yaw and pitch both: the button is 1.8 px above the eye at 5.9 px range,
+    // and the use trace was observed to depend on where the view actually is.
+    const degreesPerPixel = 49.4 / 190;
+    for (let i = 0; i < 12; i++) {
       const now = await readEngine();
       const delta = ((targetYaw - now.angles.yaw + 540) % 360) - 180;
-      if (Math.abs(delta) < 0.25) break;
-      const degreesPerPixel = 49.4 / 190;
-      let pixels = -delta / degreesPerPixel;
-      pixels = Math.max(-200, Math.min(200, pixels));
-      const from = pixels < 0 ? 650 : 550;
-      await drag(from, 180, from + pixels, 180, 8, 35);
+      const pitchDelta = targetPitch - now.angles.pitch;
+      if (Math.abs(delta) < 0.25 && Math.abs(pitchDelta) < 0.7) break;
+      if (Math.abs(delta) >= 0.25) {
+        let pixels = Math.max(-200, Math.min(200, -delta / degreesPerPixel));
+        const from = pixels < 0 ? 650 : 550;
+        await drag(from, 180, from + pixels, 180, 8, 35);
+      }
+      if (Math.abs(pitchDelta) >= 0.7) {
+        const pixels = Math.max(-140, Math.min(140, pitchDelta / degreesPerPixel));
+        await drag(620, 200, 620, 200 + pixels, 8, 35);
+      }
     }
     return readEngine();
   };
@@ -1130,9 +1166,20 @@ async function run() {
     return found;
   };
   const attemptUse = async () => {
-    // Entities that are already moving on their own are not evidence of USE.
+    // The spawn's door can still be moving when the first aim lands. Let the
+    // entities around the button settle first; only then is a 250 ms quiet
+    // window a fair ambient baseline.
+    const nearButton = (list) => list.filter((e) => e.n !== 1 && Math.hypot(e.p[0] - 1692, e.p[1] - 1408) < 220);
+    let still = 0;
+    let lastNear = nearButton(await entitiesNow());
+    for (let i = 0; i < 24 && still < 3; i++) {
+      await sleep(150);
+      const nowNear = nearButton(await entitiesNow());
+      still = movementBetween(lastNear, nowNear, new Set()).length ? 0 : still + 1;
+      lastNear = nowNear;
+    }
     const quietA = await entitiesNow();
-    await sleep(350);
+    await sleep(250);
     const quietB = await entitiesNow();
     const ambient = new Set(movementBetween(quietA, quietB, new Set()).map((e) => e.n));
     await evaluate(`(() => {
@@ -1182,9 +1229,11 @@ async function run() {
     return found;
   };
   await focusGame();
-  const facing = await aimAtButton(buttonBearing);
+  const facing = await aimAtButton(buttonBearing, buttonPitch);
   const bearing = Math.abs((((buttonBearing - facing.angles.yaw + 540) % 360) - 180));
-  check("touch look turns the player toward the button", bearing <= 1.5, { yaw: facing.angles.yaw, target: buttonBearing, bearing });
+  const pitchError = Math.abs(buttonPitch - facing.angles.pitch);
+  check("touch look turns the player toward the button", bearing <= 1.5 && pitchError <= 2,
+    { yaw: facing.angles.yaw, target: buttonBearing, bearing, pitch: facing.angles.pitch, targetPitch: buttonPitch, pitchError });
   let moved = await attemptUse();
   // The level's use trace is narrower than the button's model: if the computed
   // bearing did not catch it, try the bearing the probe found works on this
@@ -1247,13 +1296,15 @@ async function cleanup() {
 
 // A runaway CDP call must not leave the run (and a headless Chrome) sitting
 // forever. Fourteen minutes is well above a healthy run.
-const watchdog = setTimeout(() => {
-  report.error = "watchdog: the run exceeded 16 minutes";
+const watchdog = setTimeout(async () => {
+  report.error = "watchdog: the run exceeded 18 minutes";
   report.passed = false;
-  console.error("watchdog: the run exceeded 16 minutes");
+  console.error("watchdog: the run exceeded 18 minutes");
   try { fs.writeFileSync(path.join(OUT, "report.json"), JSON.stringify(report, null, 2)); } catch { /* best effort */ }
+  // A hung run must not orphan its headless Chrome and app server.
+  try { await cleanup(); } catch { /* best effort */ }
   process.exit(3);
-}, 960000);
+}, 1080000);
 if (typeof watchdog.unref === "function") watchdog.unref();
 
 try {

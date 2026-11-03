@@ -1138,7 +1138,9 @@ body.is-game-mode #mobile-controls {
    seconds or as soon as the player uses a control. */
 #mc-hint {
   position: absolute;
-  top: var(--mc-top);
+  /* Below the top control row: the first-show hint must not run under the
+     Options/Lighting chips or the full-screen button. */
+  top: calc(var(--mc-top) + 60px);
   left: 50%;
   z-index: 1;
   transform: translateX(-50%);
@@ -1334,7 +1336,9 @@ body.touch-ui #lighting-chip {
    right edge below them free for the weapon-cycle pair. */
 body.touch-ui #lighting-chip {
   top: max(16px, calc(env(safe-area-inset-top, 0px) + 8px));
-  right: calc(max(18px, env(safe-area-inset-right, 0px) + 12px) + 100px);
+  /* The Options chip is 112.6 px wide at 18 px from the right; 124 px clears
+     its left edge with an 11 px gap instead of overlapping it by 12.6 px. */
+  right: calc(max(18px, env(safe-area-inset-right, 0px) + 12px) + 124px);
 }
 
 body.touch-ui #lighting-panel {
