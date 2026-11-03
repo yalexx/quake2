@@ -88,6 +88,9 @@ const scratchRoot = process.env.CLAWBOX_RUN_ARTIFACTS_DIR || os.tmpdir();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const checks = [];
 const logLines = [];
+// Every session registers here so an interrupt still kills the server and the
+// headless browser this run started, rather than leaving them behind.
+const activeSessions = new Set();
 
 function log(...parts) {
   const line = parts.map((part) => (typeof part === "string" ? part : JSON.stringify(part))).join(" ");
@@ -269,6 +272,7 @@ function boundaryStats(original, scaled) {
     }
   }
   let sourceBoundary = 0;
+  let sourceFringe = 0;
   let sourceLumaSum = 0;
   for (let y = 0; y < original.height; y++) {
     for (let x = 0; x < original.width; x++) {
@@ -284,12 +288,14 @@ function boundaryStats(original, scaled) {
       if (adjacent) {
         sourceBoundary++;
         sourceLumaSum += luma(original.palette, index);
+        if (nearFringe(original.palette, index)) sourceFringe++;
       }
     }
   }
   return {
     boundary,
     sourceBoundary,
+    sourceFringe,
     fringe,
     introduced,
     maxFringeDistance,
@@ -310,6 +316,10 @@ function blockRatio(pcx, from = 0, to = 1) {
   let insideCount = 0;
   let boundary = 0;
   let boundaryCount = 0;
+  let insideY = 0;
+  let insideCountY = 0;
+  let boundaryY = 0;
+  let boundaryCountY = 0;
   for (let y = y0; y < y1; y++) {
     for (let x = 0; x < pcx.width - 1; x++) {
       const step = Math.abs(luma(pcx.palette, pcx.indices[y * pcx.width + x]) - luma(pcx.palette, pcx.indices[y * pcx.width + x + 1]));
@@ -322,9 +332,27 @@ function blockRatio(pcx, from = 0, to = 1) {
       }
     }
   }
+  // The same step across the horizontal 2-texel grid, so a vertically banded
+  // upscale cannot pass on the horizontal number alone.
+  for (let y = y0; y < y1 - 1; y++) {
+    for (let x = 0; x < pcx.width; x++) {
+      const step = Math.abs(luma(pcx.palette, pcx.indices[y * pcx.width + x]) - luma(pcx.palette, pcx.indices[(y + 1) * pcx.width + x]));
+      if (y % 2 === 0) {
+        insideY += step;
+        insideCountY++;
+      } else {
+        boundaryY += step;
+        boundaryCountY++;
+      }
+    }
+  }
   const insideMean = insideCount ? inside / insideCount : 0;
   const boundaryMean = boundaryCount ? boundary / boundaryCount : 0;
-  return { inside: insideMean, boundary: boundaryMean, ratio: boundaryMean / (insideMean || 1e-9) };
+  const insideMeanY = insideCountY ? insideY / insideCountY : 0;
+  const boundaryMeanY = boundaryCountY ? boundaryY / boundaryCountY : 0;
+  const ratioX = boundaryMean / (insideMean || 1e-9);
+  const ratioY = boundaryMeanY / (insideMeanY || 1e-9);
+  return { inside: insideMean, boundary: boundaryMean, ratioX, insideY: insideMeanY, boundaryY: boundaryMeanY, ratioY, ratio: Math.max(ratioX, ratioY) };
 }
 
 function nearestNeighbour2x(pcx) {
@@ -412,7 +440,9 @@ function analyseTextures(pak0, pak10) {
       opaqueScaled: after.opaque,
       cutoutOriginal,
       cutoutScaled,
-      cutoutRatio: cutoutOriginal ? cutoutScaled / cutoutOriginal : null,
+      // A skin with no transparent texel must keep none; that is a 4x count of
+      // zero, not an unknown ratio.
+      cutoutRatio: cutoutOriginal ? cutoutScaled / cutoutOriginal : cutoutScaled === 0 ? LIMITS.cutoutRatio : 0,
       cutoutMismatch: mismatch,
       edge: edges,
       blockAll: blockRatio(scaled),
@@ -534,6 +564,7 @@ class Session {
     this.chrome = null;
     this.cdp = null;
     this.served = 0;
+    activeSessions.add(this);
   }
   async start() {
     this.serverPort = await freePort();
@@ -653,6 +684,7 @@ class Session {
     return Buffer.from(result.data, "base64");
   }
   async close() {
+    activeSessions.delete(this);
     try {
       if (this.cdp) this.cdp.close();
     } catch {
@@ -826,6 +858,28 @@ function gunStats(shot, noGun) {
   return { pixels, saturation: pixels ? saturation / pixels : 0, chroma: pixels ? chromaSum / pixels : 0 };
 }
 
+// Changed pixels in the upper 40% of the frame, where the first-person weapon
+// never reaches: a proxy for demo motion between two captures. Two back-to-back
+// frames with the gun still drawn measure it without involving the gun.
+function noiseStats(a, b) {
+  if (a.width !== b.width || a.height !== b.height) return 0;
+  const width = a.width;
+  const height = Math.floor(a.height * 0.4);
+  let pixels = 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const at = (y * width + x) * 4;
+      const diff = Math.max(
+        Math.abs(a.data[at] - b.data[at]),
+        Math.abs(a.data[at + 1] - b.data[at + 1]),
+        Math.abs(a.data[at + 2] - b.data[at + 2]),
+      );
+      if (diff > 16) pixels++;
+    }
+  }
+  return pixels;
+}
+
 function diffPixels(a, b) {
   if (a.width !== b.width || a.height !== b.height) return { pixels: -1, total: 0 };
   const width = a.width;
@@ -891,32 +945,63 @@ async function captureWeapons(session, engine, list, options) {
     } catch (error) {
       log(session.name, "switch failed", weapon.name, error.message);
     }
-    const gunFrame = await captureStill(session, engine);
-    const shot = gunFrame.shot;
-    const state = gunFrame.state;
-    crosshair = await session.crosshair();
-    const after = await session.status();
+    // Capture the weapon in hand, then the same view with the view weapon
+    // hidden: the changed pixels are the gun. A cvar change lands on the next
+    // drawn frame and a headless capture can beat it, which would report a real
+    // gun as zero gun pixels; a demo that is animating would contribute pixels
+    // of its own. So the pair is retried until the frames differ, the upper
+    // 40% of the screen (where the view weapon never reaches) is sampled as
+    // scene noise, and the pair is captured again if the counter snapshot or
+    // the weapon frame itself went stale. An identical pair is never believed.
+    let shot = null;
+    let state = null;
+    let noGun = null;
+    let gun = null;
+    let crosshairShot = null;
+    let sceneNoise = 0;
+    let after = null;
+    let textureDelta = 0;
+    for (let pair = 1; pair <= 3; pair++) {
+      const gunFrame = await captureStill(session, engine);
+      shot = gunFrame.shot;
+      state = gunFrame.state;
+      after = await session.status();
+      crosshairShot = await session.crosshair();
+      const decodedShot = decodeShot(shot);
+      // The same frame twice with the gun still drawn: anything that moves in
+      // the upper 40% is the demo, not the weapon.
+      const noiseShot = (await captureStill(session, engine)).shot;
+      sceneNoise = noiseStats(decodedShot, decodeShot(noiseShot));
+      const need = Math.max(LIMITS.minGunPixels, 8 * sceneNoise);
+      for (let attempt = 1; attempt <= 4; attempt++) {
+        await engine.runUntilEcho("cl_gun 0", 6, 12);
+        await sleep(200 * attempt);
+        const candidate = (await captureStill(session, engine)).shot;
+        const measured = gunStats(decodedShot, decodeShot(candidate));
+        noGun = candidate;
+        gun = measured;
+        if (measured.pixels >= need) break;
+        log(session.name, "gun hide not applied to", weapon.name, "attempt", attempt, "gunPixels=" + measured.pixels, "sceneNoise=" + sceneNoise);
+      }
+      await engine.runUntilEcho("cl_gun 1", 6, 12);
+      await engine.ensureGame(8000);
+      textureDelta = (after.modelTextureDraws[size] || 0) - (before.modelTextureDraws[size] || 0);
+      if (gun.pixels >= need && textureDelta > 0) break;
+      log(session.name, "weapon pair not settled for", weapon.name, "- recapturing", "gunPixels=" + gun.pixels, "textureDelta=" + textureDelta);
+      await sleep(800);
+    }
+    crosshair = crosshairShot;
     const delta = (key) => (after[key] || 0) - (before[key] || 0);
-    const textureDelta = (after.modelTextureDraws[size] || 0) - (before.modelTextureDraws[size] || 0);
     const lastSkinDelta = (after.lastModelSkinDraws[size] || 0) - (before.lastModelSkinDraws[size] || 0);
-    if (results.length === 0 && textureDelta <= 0) {
+    if (results.length === 0 && !Object.prototype.hasOwnProperty.call(after.modelTextureDraws, size)) {
       throw new Error("the drawn skin size " + size + " is not in modelTextureDraws (keys " + Object.keys(after.modelTextureDraws).join(",") + ")");
     }
     const shotInfo = pngSize(shot);
     if (options.saveShots) {
       fs.writeFileSync(path.join(options.shotsDir, weapon.name + ".png"), shot);
     }
-    // The same frame with the view weapon hidden: every changed pixel is the
-    // gun (the page chrome is hidden and the player is stationary).
-    await engine.runUntilEcho("cl_gun 0", 6, 12);
-    const noGun = (await captureStill(session, engine)).shot;
     fs.mkdirSync(path.join(scratchRoot, "weapon-verify-no-gun"), { recursive: true });
     fs.writeFileSync(path.join(scratchRoot, "weapon-verify-no-gun", session.name + "-" + weapon.name + ".png"), noGun);
-    await engine.runUntilEcho("cl_gun 1", 6, 12);
-    await engine.ensureGame(8000);
-    const decodedShot = decodeShot(shot);
-    const decodedNoGun = decodeShot(noGun);
-    const gun = gunStats(decodedShot, decodedNoGun);
     const record = {
       name: weapon.name,
       item: weapon.item,
@@ -933,6 +1018,7 @@ async function captureWeapons(session, engine, list, options) {
       lastSkinDelta,
       frame: { width: shotInfo.width, height: shotInfo.height, sha256: sha256(shot) },
       gunPixels: gun.pixels,
+      sceneNoise,
       gunSaturation: gun.saturation,
       gunChroma: gun.chroma,
       shot: options.saveShots ? path.relative(ROOT, path.join(options.shotsDir, weapon.name + ".png")) : null,
@@ -994,7 +1080,7 @@ function buildReport(context) {
   line();
   line("- **In game.** The checkout's own `server.js` on a spare port, with a headless Chromium of this run on a spare debugging port (no dependency on the live server on 4231 or the kiosk on 18801/9222). `demo1` is loaded at 1280x720 with the app's normal arguments plus `+set r_mode 14` (1280x720). After `sv_cheats 1; give all`, each weapon is put in hand with `use <item>`, the console is closed, `keyDest` is checked back at game and the frame is captured with the page's own chrome (Options/Lighting chips, pointer-lock prompt, fullscreen button) hidden by a page-only style element. The engine's HUD/status bar is untouched and visible.");
   line("- **Counters.** Every capture asserts the RTX renderer's per-skin-size `modelTextureDraws` advanced for the size the engine bound, that `weaponDraws` and the neutral-shading counter (`weaponNeutralDraws`, the t4 path) advanced, and that the frame equals the weapon the crosshair code names from the bound skin size. `lastModelSkinDraws` is recorded too, but it is only incremented for the skin of the frame's last model draw, so it can legitimately stay flat when the game draws an item or monster after the gun; it is not part of the assertion. A blank or wrong gun frame would fail the skin-draw and the gun-pixel checks below.");
-  line("- **Gun pixels.** A second capture with `cl_gun 0` in the same frame shows the scene without the gun; the changed pixels are the drawn weapon. This proves the shot is not blank and gives the in-game saturation sample.");
+  line("- **Gun pixels.** A second capture of the same view with `cl_gun 0` shows the scene without the gun; the changed pixels are the drawn weapon, and they must exceed both " + LIMITS.minGunPixels + " and 8x the demo motion measured between two back-to-back gun frames in the upper 40% of the screen (where the view weapon never reaches). The pair is retried until the hide has landed, so the shot is proved not blank and gives the in-game saturation sample.");
   line("- **Texture metrics.** The 13 pak10 skins and the 13 pak0 originals are decoded with the project's PCX reader (row length = width, matching the engine) and compared: mean HSV saturation and mean chroma over opaque texels, index-255 counts and the exact 2x2 cut-out mask, fringe colours on the cut-out boundary, and a 2-texel blockiness ratio (boundary luma step / inside-block luma step), whole skin and pistol-bottom band.");
   line("- **Project passes.** `tex-check`, `texture-pack --dry-run` and `texture-audit --select` are run from this checkout and their exit codes and summaries recorded.");
   line();
@@ -1016,19 +1102,20 @@ function buildReport(context) {
   line("| Cut-out count ratio (2x skin / original) | = " + LIMITS.cutoutRatio + " (2x2 replication) |");
   line("| Cut-out mask mismatch | 0 texels |");
   line("| Introduced near-black/near-white fringe | 0, where fringe = luma ≤ " + LIMITS.fringeLumaDark + " or ≥ " + LIMITS.fringeLumaLight + ", chroma ≤ " + LIMITS.fringeChroma + ", farther than " + LIMITS.fringeDistance + " (max channel RGB) from every source 3x3 colour |");
+  line("| Scaled boundary fringe vs source | ≤ 4 × the source's own boundary fringe + 4 (the 2x2 expansion; the originals paint dark outlines of their own) |");
   line("| Boundary mean-luma shift vs source | ≤ " + LIMITS.edgeLumaShiftLevels + " levels (of 255); a percentage is meaningless where the original outline is near-black |");
-  line("| Blockiness ratio (all / bottom 40%) | < " + LIMITS.blockRatioMax.toFixed(1) + " |");
+  line("| Blockiness ratio, horizontal and vertical (all / bottom 40%) | < " + LIMITS.blockRatioMax.toFixed(1) + " (the max of the two axes) |");
   line("| Pistol-bottom band vs other weapons | v_blast ≤ worst other + " + LIMITS.blockRatioPistolMargin.toFixed(1) + " |");
   line("| Nearest-neighbour 2x control | > " + LIMITS.blockRatioSensitivity + " (the metric must catch a blocky upscale) |");
-  line("| Gun pixels per captured frame | ≥ " + LIMITS.minGunPixels + " |");
+  line("| Gun pixels per captured frame | ≥ " + LIMITS.minGunPixels + " and ≥ 8 × the upper-frame scene noise |");
   line("| Same-size weapon pair difference | > " + LIMITS.minPairDiffPixels + " pixels |");
   line();
   line("## In-game captures");
   line();
-  line("| Weapon | Item | Skin size | RTX name | Skin draws Δ | Neutral draws Δ | Gun pixels | In-game sat | Screenshot |");
-  line("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |");
+  line("| Weapon | Item | Skin size | RTX name | Skin draws Δ | Neutral draws Δ | Gun pixels | Scene noise | In-game sat | Screenshot |");
+  line("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
   for (const item of inGame) {
-    line("| " + item.name + " | " + (item.item || "substituted") + " | " + item.expectedSize + " | " + (item.crosshairWeapon || "n/a") + " | " + item.modelTextureDelta + " | " + item.neutralDrawsDelta + " | " + item.gunPixels + " | " + fmt(item.gunSaturation, 3) + " | " + (item.shot || "—") + " |");
+    line("| " + item.name + " | " + (item.item || "substituted") + " | " + item.expectedSize + " | " + (item.crosshairWeapon || "n/a") + " | " + item.modelTextureDelta + " | " + item.neutralDrawsDelta + " | " + item.gunPixels + " | " + (item.sceneNoise || 0) + " | " + fmt(item.gunSaturation, 3) + " | " + (item.shot || "—") + " |");
   }
   line();
   if (extraTextures.length) {
@@ -1036,10 +1123,10 @@ function buildReport(context) {
     line();
     line("baseq2 has no item for `v_flareg`, `v_disint` or `v_handgr` (the console answers `unknown item: …`), so the model cannot be put in hand through the game. For these three only, a separate session is served a test-only pak10, built in memory, that swaps each model and skin into a real slot (`v_flareg`→`v_blast`, `v_disint`→`v_shotg`, `v_handgr`→`v_machn`) and adds `models/weapons/v_flareg/skin.pcx` so the renderer's size index can name the 624x338 skin. The slot's item is given with `use`, so the engine really draws the substituted model and skin; no repository file is changed and the archive is delivered by CDP request interception for that session only.");
     line();
-    line("| Weapon | Slot | Skin size | RTX name | Skin draws Δ | Slot's clean 2x size | Gun pixels | In-game sat | Screenshot |");
-    line("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |");
+    line("| Weapon | Slot | Skin size | RTX name | Skin draws Δ | Slot's clean 2x size | Gun pixels | Scene noise | In-game sat | Screenshot |");
+    line("| --- | --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |");
     for (const item of extraTextures) {
-      line("| " + item.name + " | " + item.slot + " | " + item.expectedSize + " | " + (item.crosshairWeapon || "n/a") + " | " + item.modelTextureDelta + " | " + item.slotOriginalSize + " | " + item.gunPixels + " | " + fmt(item.gunSaturation, 3) + " | " + (item.shot || "—") + " |");
+      line("| " + item.name + " | " + item.slot + " | " + item.expectedSize + " | " + (item.crosshairWeapon || "n/a") + " | " + item.modelTextureDelta + " | " + item.slotOriginalSize + " | " + item.gunPixels + " | " + (item.sceneNoise || 0) + " | " + fmt(item.gunSaturation, 3) + " | " + (item.shot || "—") + " |");
     }
     line();
   }
@@ -1077,14 +1164,14 @@ function buildReport(context) {
   line();
   line("## Edges, cut-out and blockiness");
   line();
-  line("| Weapon | 255 count 1x → 2x | Ratio | Mask mismatch | Boundary texels | Introduced fringe | Fringe max dist | Boundary luma shift | Block ratio all | Block ratio bottom 40% | NN control |");
-  line("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
+  line("| Weapon | 255 count 1x → 2x | Ratio | Mask mismatch | Boundary texels | Boundary fringe 2x / 1x | Introduced fringe | Fringe max dist | Boundary luma shift | Block ratio all (max) | Block ratio vertical | Block ratio bottom 40% | NN control |");
+  line("| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |");
   for (const item of texture) {
     const shift = item.edge.lumaMean - item.edge.sourceLumaMean;
-    line("| " + item.name + " | " + item.cutoutOriginal + " → " + item.cutoutScaled + " | " + fmt(item.cutoutRatio, 2) + " | " + item.cutoutMismatch + " | " + item.edge.boundary + " | " + item.edge.introduced + " | " + item.edge.maxFringeDistance + " | " + (shift >= 0 ? "+" : "") + fmt(shift, 1) + " | " + fmt(item.blockAll.ratio, 2) + " | " + fmt(item.blockBottom.ratio, 2) + " | " + fmt(item.blockControl.ratio, 0) + " |");
+    line("| " + item.name + " | " + item.cutoutOriginal + " → " + item.cutoutScaled + " | " + fmt(item.cutoutRatio, 2) + " | " + item.cutoutMismatch + " | " + item.edge.boundary + " | " + item.edge.fringe + " / " + item.edge.sourceFringe + " | " + item.edge.introduced + " | " + item.edge.maxFringeDistance + " | " + (shift >= 0 ? "+" : "") + fmt(shift, 1) + " | " + fmt(item.blockAll.ratio, 2) + " | " + fmt(item.blockAll.ratioY, 2) + " | " + fmt(item.blockBottom.ratio, 2) + " | " + fmt(item.blockControl.ratio, 0) + " |");
   }
   line();
-  line("The nearest-neighbour control is a 2x replication of the original skin: its inside-block step is zero, so the ratio explodes (…e+9 in the JSON). The real skins sit near 2 — one step on each side of an edge, none locked to the 2-texel grid.");
+  line("The nearest-neighbour control is a 2x replication of the original skin: its inside-block step is zero, so the ratio explodes (…e+9 in the JSON). The real skins sit near 2 on both axes — one step on each side of an edge, none locked to the 2-texel grid. Every scaled boundary fringe texel is accounted for by the source's own dark/light outline (the `Boundary fringe 2x / 1x` column), and `Introduced fringe` counts only a near-fringe colour more than " + LIMITS.fringeDistance + " levels from every source 3x3 colour.");
   line();
   line("## Project passes");
   line();
@@ -1134,9 +1221,9 @@ function buildReport(context) {
   line();
   line("- The three extra view models (`v_flareg`, `v_disint`, `v_handgr`) have no item in `game_baseq2.wasm`; `use` answers `unknown item: …`. Their captures therefore use the test-only substituted pak10 described above. The frame's RTX name lists every model whose skin has that size, so it reads `v_blast/v_flareg`, `v_bfg/v_disint/v_shotg`, `v_handgr/v_machn`; the extra weapon's own name is present and its 2x skin size is drawn, and the screenshot is the extra weapon, distinguished from the slot's real weapon by the pair-difference check.");
   line("- `v_flareg`'s skin ships as `base.pcx`, which `rtx-renderer.js`'s size index deliberately does not scan (it indexes `skin.pcx` only). The test pak adds a `models/weapons/v_flareg/skin.pcx` entry with the same bytes so the renderer can name the size; the engine never loads that added entry.");
-  line("- In-game saturation compares the rendered gun pixels of the 2x session with a baseline session whose pak10 weapon entries hold the pak0 originals (test-only archive, same delivery path). It is a rendered-pixel measurement: lighting (the neutral weapon path) and the palette are part of it, which is the point of an end-to-end check.");
+  line("- In-game saturation compares the rendered gun pixels of the 2x session with a baseline session whose pak10 weapon entries hold the pak0 originals (test-only archive, same delivery path). It is a rendered-pixel measurement: lighting (the neutral weapon path) and the palette are part of it, which is the point of an end-to-end check. The baseline frames pass the same name, draw-counter and gun-pixel checks (`O-*`) before their numbers are used.");
   line("- Saturation is `(max−min)/max` per pixel, the same definition `model-art.mjs` uses; chroma is `max−min`. Means are per opaque texel, so the 2x skin and the 1x original weigh their own pixels equally.");
-  line("- The blockiness ratio is measured at 2-texel period: an inside-block step (even x) versus a block-boundary step (odd x), averaged over the skin (and over the lower 40% for the pistol). A nearest-neighbour 2x upscale makes the inside step zero; a smoothed upscale keeps the two comparable.");
+  line("- The blockiness ratio is measured at 2-texel period on both axes: an inside-block luma step versus a block-boundary luma step, averaged over the skin (and over the lower 40% for the pistol). A nearest-neighbour 2x upscale makes the inside step zero; a smoothed upscale keeps the two comparable. The pair difference and the gun/no-gun difference are measured against a frame-to-frame scene-noise sample so demo motion cannot be mistaken for the weapon.");
   line("- `r_mode 14` is the engine's 1280x720 mode (from its own mode strings); the page and canvas are asserted at 1280x720 before any capture.");
   line();
   line("## Environment");
@@ -1152,6 +1239,30 @@ function buildReport(context) {
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
+
+// An interrupt (Ctrl-C, a run timeout) must not leave the server or the
+// headless browser it started behind: close every live session, then exit.
+let shuttingDown = false;
+async function shutdown(signal) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  log("received " + signal + ", closing " + activeSessions.size + " session(s)");
+  await Promise.all([...activeSessions].map((session) => session.close().catch(() => {})));
+  process.exit(signal === "SIGINT" ? 130 : 143);
+}
+process.once("SIGINT", () => { shutdown("SIGINT"); });
+process.once("SIGTERM", () => { shutdown("SIGTERM"); });
+process.on("exit", () => {
+  for (const session of activeSessions) {
+    for (const child of [session.chrome, session.server]) {
+      try {
+        if (child && child.exitCode === null) child.kill("SIGKILL");
+      } catch {
+        // already gone
+      }
+    }
+  }
+});
 
 async function main() {
   fs.mkdirSync(shotsDir, { recursive: true });
@@ -1194,6 +1305,19 @@ async function main() {
   const fringeFailures = texture.filter((item) => item.edge.introduced !== 0);
   check("E3", "no near-black/near-white fringe introduced at the cut-out", fringeFailures.length === 0,
     fringeFailures.length ? "introduced: " + fringeFailures.map((item) => item.name + "=" + item.edge.introduced).join(", ") : "0 introduced; worst fringe colour distance " + Math.max(...texture.map((item) => item.edge.maxFringeDistance)) + " (limit " + LIMITS.fringeDistance + ")");
+  // The source art legitimately paints near-black outlines around its cut-outs,
+  // so "no fringe" means none the upscale invented: the scaled boundary fringe
+  // may not exceed the source's own, expanded 2x2 (plus a small allowance for
+  // the boundary geometry changing shape).
+  const fringeExpansion = texture.filter((item) => item.edge.fringe > 4 * item.edge.sourceFringe + 4);
+  const worstExpansion = texture.reduce((worst, item) => {
+    const over = item.edge.fringe - (4 * item.edge.sourceFringe + 4);
+    return over > worst.over ? { name: item.name, over, item } : worst;
+  }, { name: "", over: -Infinity, item: null });
+  check("E3b", "scaled fringe texels are explained by the source art", fringeExpansion.length === 0,
+    fringeExpansion.length
+      ? "over: " + fringeExpansion.map((item) => item.name + "=" + item.edge.fringe + " vs " + (4 * item.edge.sourceFringe + 4)).join(", ")
+      : "worst " + worstExpansion.name + " " + worstExpansion.item.edge.fringe + " vs limit " + (4 * worstExpansion.item.edge.sourceFringe + 4) + " (2x2 of the source's " + worstExpansion.item.edge.sourceFringe + ")");
   const worstShift = texture.reduce((worst, item) => {
     const shift = Math.abs(item.edge.lumaMean - item.edge.sourceLumaMean);
     return shift > worst.shift ? { name: item.name, shift } : worst;
@@ -1229,7 +1353,12 @@ async function main() {
   check("P2", "texture-pack --dry-run --only models/ exits 0", commands[1].status === 0, "exit " + commands[1].status);
   check("P3", "texture-audit --select exits 0", commands[2].status === 0, "exit " + commands[2].status);
   const packedLine = (commands[1].stdout.match(/^\d+ packed .*$/m) || [""])[0];
-  check("P4", "texture-pack reports every picture identical", /0 failed/.test(packedLine) && /identical to the original/.test(packedLine), packedLine || "no summary line");
+  const packedMatch = packedLine.match(/^(\d+) packed \((\d+) identical to the original\), (\d+) without art, (\d+) skipped, (\d+) failed/);
+  const packedCount = packedMatch ? Number(packedMatch[1]) : 0;
+  const identicalCount = packedMatch ? Number(packedMatch[2]) : -1;
+  const failedCount = packedMatch ? Number(packedMatch[5]) : -1;
+  check("P4", "texture-pack reports every picture identical", Boolean(packedMatch) && packedCount > 0 && identicalCount === packedCount && failedCount === 0,
+    packedLine ? packedLine + " (identical " + identicalCount + " of " + packedCount + ")" : "no summary line");
 
   if (texturesOnly) {
     const report = buildReport({ texture: textureReport, extraTextures: [], inGame: [], inGameBaseline: null, sessions: [], commands, gitHead, pakSizes: { pak0: pak0.length, pak10: pak10.length, previousPak10 } });
@@ -1325,6 +1454,13 @@ async function main() {
       shotsDir,
     });
     await engine.disconnect();
+    // The baseline's own frames must be right too: a failed switch there would
+    // silently attribute one weapon's 1x saturation to another in G-I.
+    for (const item of baselineResults) {
+      check("O-" + item.name, item.name + " baseline frame reports its own 1x skin and a gun",
+        item.crosshairWeapon === item.expectedName && item.modelTextureDelta > 0 && item.gunPixels >= Math.max(LIMITS.minGunPixels, 8 * (item.sceneNoise || 0)),
+        "name=" + item.crosshairWeapon + " (expected " + item.expectedName + ") sizeΔ=" + item.modelTextureDelta + " gunPixels=" + item.gunPixels + " sceneNoise=" + item.sceneNoise);
+    }
     const byName = new Map(inGame.map((item) => [item.name, item]));
     inGameBaseline = baselineResults.map((item) => ({
       name: item.name,
@@ -1380,8 +1516,8 @@ async function main() {
   // ---- In-game checks ----------------------------------------------------
   const allCaptures = inGame.concat(extraTextures);
   for (const item of allCaptures) {
-    check("G-" + item.name, item.name + " reports its own skin draw and is not blank", item.crosshairWeapon === item.expectedName && item.modelTextureDelta > 0 && item.weaponDrawsDelta > 0 && item.neutralDrawsDelta > 0 && item.gunPixels >= LIMITS.minGunPixels && item.frame.width === 1280 && item.frame.height === 720,
-      "name=" + item.crosshairWeapon + " (expected " + item.expectedName + ") skinΔ=" + item.modelTextureDelta + " lastΔ=" + item.lastSkinDelta + " weaponΔ=" + item.weaponDrawsDelta + " neutralΔ=" + item.neutralDrawsDelta + " gunPixels=" + item.gunPixels + " frame=" + item.frame.width + "x" + item.frame.height);
+    check("G-" + item.name, item.name + " reports its own skin draw and is not blank", item.crosshairWeapon === item.expectedName && item.modelTextureDelta > 0 && item.weaponDrawsDelta > 0 && item.neutralDrawsDelta > 0 && item.gunPixels >= Math.max(LIMITS.minGunPixels, 8 * (item.sceneNoise || 0)) && item.frame.width === 1280 && item.frame.height === 720,
+      "name=" + item.crosshairWeapon + " (expected " + item.expectedName + ") skinΔ=" + item.modelTextureDelta + " lastΔ=" + item.lastSkinDelta + " weaponΔ=" + item.weaponDrawsDelta + " neutralΔ=" + item.neutralDrawsDelta + " gunPixels=" + item.gunPixels + " sceneNoise=" + item.sceneNoise + " frame=" + item.frame.width + "x" + item.frame.height);
   }
   // Same-size pairs must differ: the name alone cannot tell them apart.
   const byName = new Map(allCaptures.map((item) => [item.name, item]));

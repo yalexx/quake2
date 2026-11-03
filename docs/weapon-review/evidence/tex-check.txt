@@ -129,4 +129,4 @@ source art, not an entry of its own (15): assets/textures/hud/pics_backtile.png,
 checked 125 pictures of 611 entries: 125 with art (2.3 MB), 0 of them at 4x (0 B), 0 without, 0 the wrong size, 0 unreadable, 0 unclaimed, 15 source picture(s)
 
 
-[exit 0, 1020 ms]
+[exit 0, 310 ms]

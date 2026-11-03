@@ -130,4 +130,4 @@ left alone baseq2/pak0.pak: 45.3 MB, 1106 entries, 125 replaced
 no 4x art: no hires archive written (baseq2/pak9.pak)
 
 
-[exit 0, 2041 ms]
+[exit 0, 672 ms]

@@ -1202,4 +1202,4 @@ $ node scripts/texture-audit.mjs --select
 }
 
 
-[exit 0, 1025 ms]
+[exit 0, 384 ms]
