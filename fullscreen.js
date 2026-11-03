@@ -1,12 +1,12 @@
-// Quake 2 for ClawBox: full screen on open.
+// Quake 2 for ClawBox: full screen by the player's own request.
 //
-// The owner wants the game the whole screen as soon as they open the app, so
-// this asks for full screen at once and, because every browser refuses a
-// request that did not come from a user gesture, repeats it on the first
-// click/keypress — which is also the click that grabs the mouse, so the game
-// goes full screen the moment the owner starts playing. A small button in the
-// corner toggles it back and forth afterwards, and Esc (the browser's own way
-// out) leaves it too.
+// Full screen is entered only when the player presses the corner button. The
+// page asks for nothing on its own: not at load, and not on the first click on
+// the game. A page that took the whole screen the moment the player clicked to
+// start playing was doing something the player did not ask for, and it made
+// the first click mean two things at once. The button toggles the mode, its
+// aria/title state follows the browser's own `fullscreenchange`, and Esc (the
+// browser's own way out) leaves it too.
 //
 // The ClawBox desktop frames a web app in a sandboxed document when the app
 // has no `launch: "window"` metadata, and Chrome refuses full screen to such
@@ -29,14 +29,14 @@
   var exitFn = document.exitFullscreen || document.webkitExitFullscreen;
   var supported = typeof requestFn === "function";
   // "Refused for want of a gesture" is not a failure worth telling anyone
-  // about — the next click fixes it. A document that cannot go full screen at
-  // all is, and `fullscreenEnabled` is the reliable way to know: Chrome
-  // reports false inside the desktop's sandboxed frame before any request is
-  // made, and its refusals there say "Disallowed by permissions policy".
+  // about — every request this file makes now comes from the button's own
+  // click. A document that cannot go full screen at all is, and
+  // `fullscreenEnabled` is the reliable way to know: Chrome reports false
+  // inside the desktop's sandboxed frame before any request is made, and its
+  // refusals there say "Disallowed by permissions policy".
   var blocked = typeof document.fullscreenEnabled === "boolean" && !document.fullscreenEnabled;
   var framed = window !== window.top;
   var hintTimer = 0;
-  var armed = true;
 
   function fullscreenElement() {
     return document.fullscreenElement || document.webkitFullscreenElement || null;
@@ -117,18 +117,10 @@
       sync();
       return;
     }
-    // Everything else is the gesture rule: the next click asks again.
-    console.info("Full screen is waiting for a click:", message);
-  }
-
-  function onFirstGesture(event) {
-    if (!armed) return;
-    if (event && event.target === button) return;
-    armed = false;
-    if (isFullscreen() || blocked) return;
-    // Best effort inside the gesture that also grabs the mouse; a refusal
-    // here is expected where full screen is disallowed and is handled above.
-    void request().then(sync).catch(onRefused);
+    // Everything else is this browser refusing this document for now. Nothing
+    // retries on its own any more, so say so where the page's own log can see
+    // it; the button stays available for another try.
+    console.info("Full screen was refused:", message);
   }
 
   function openOwnWindow() {
@@ -154,11 +146,6 @@
     if (blocked) openOwnWindow();
     else toggle();
   });
-  // The game's own click handler keeps focus and the mouse; this one only
-  // asks for the screen, and runs first (capture) so both share the gesture.
-  ["pointerdown", "touchstart", "keydown"].forEach(function (name) {
-    document.addEventListener(name, onFirstGesture, { capture: true, passive: true });
-  });
   document.addEventListener("fullscreenchange", sync);
   document.addEventListener("webkitfullscreenchange", sync);
 
@@ -182,9 +169,7 @@
     // The desktop framed this app in a sandboxed document: say where full
     // screen does work instead of pretending a click will fix it.
     if (framed) showHint(true);
-    return;
   }
-  // At load the browser will refuse for want of a gesture; that refusal is
-  // the normal path, and the first click picks it up.
-  void request().then(sync).catch(onRefused);
+  // Nothing is requested here. The button's own click is the only request
+  // this file makes, so no automatic full screen can happen at any point.
 })();
