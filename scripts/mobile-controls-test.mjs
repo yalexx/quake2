@@ -603,16 +603,18 @@ async function run() {
   const firstLive = await waitForFirstLive();
   check("first-show hint appears with the touch layer", firstLive.hintHidden === false, firstLive.hintText);
   check("first-show hint names look and fire", /look/i.test(firstLive.hintText || "") && /fire/i.test(firstLive.hintText || ""), firstLive.hintText);
-  const touchLightingChip = await rect("#lighting-chip");
-  const touchOptionsChip = await rect("#options-chip");
-  const firstHintBox = await rect("#mc-hint");
-  check("the Options and Lighting chips have a clear gap",
-    touchLightingChip && touchOptionsChip && touchLightingChip.right <= touchOptionsChip.left - 4,
-    { lighting: touchLightingChip, options: touchOptionsChip, gap: touchLightingChip && touchOptionsChip ? Number((touchOptionsChip.left - touchLightingChip.right).toFixed(2)) : null });
-  check("the first-show hint sits below the top chips",
-    firstHintBox && touchLightingChip && touchOptionsChip &&
-    firstHintBox.top >= Math.max(touchLightingChip.bottom, touchOptionsChip.bottom) + 2,
-    { hint: firstHintBox, chipsBottom: Math.max(touchLightingChip.bottom, touchOptionsChip.bottom) });
+  // The play layer carries no settings control: LIGHTING and OPTIONS moved
+  // into the menu the MENU control opens.
+  const playLayer = await dumpJson(`(() => ({
+    chips: ["options-chip", "lighting-chip", "lighting-panel"].filter((id) => document.getElementById(id)),
+    visibleLighting: Array.from(document.querySelectorAll("[data-lighting]")).filter((element) => element.offsetParent !== null).length,
+    uiButtons: Array.from(document.querySelectorAll("#ui > button")).map((button) => button.id),
+    menuOpen: document.getElementById("menu-layer").hidden === false,
+  }))()`);
+  check("no settings control floats over the play layer",
+    playLayer && playLayer.chips.length === 0 && playLayer.visibleLighting === 0 &&
+    playLayer.uiButtons.length === 0 && playLayer.menuOpen === false,
+    "no chip and no visible lighting control over the game", playLayer);
   const { state: spawn } = await waitForGame("landscape demo1");
   check("the touch layer is live over the running game", (await pageMetrics()).live === true);
   const metrics = await pageMetrics();
@@ -632,9 +634,38 @@ async function run() {
   const nextBox = await rect("#mc-next");
   const pauseBox = await rect("#mc-pause");
   const toggleBox = await rect("#mc-toggle");
+  const fullscreenBox = await rect("#fullscreen-button");
+  const firstHintBox = await rect("#mc-hint");
   const stickBox = await rect("#mc-stick");
   const lookBox = await rect("#mc-look");
   const stickCentre = { x: stickBox.left + stickBox.w / 2, y: stickBox.top + stickBox.h / 2 };
+
+  // The top row at 844x390: PAD, MENU and Full screen share it at 44 px, and
+  // nothing in it may overlap anything else, the weapon pair or the hint.
+  const topRow = [toggleBox, pauseBox, fullscreenBox];
+  const overlaps = (a, b) => a && b &&
+    !(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5);
+  const rowClash = [];
+  for (const [nameA, a] of [["#mc-toggle", toggleBox], ["#mc-pause", pauseBox], ["#fullscreen-button", fullscreenBox],
+    ["#mc-prev", prevBox], ["#mc-next", nextBox], ["#mc-hint", firstHintBox]]) {
+    for (const [nameB, b] of [["#mc-toggle", toggleBox], ["#mc-pause", pauseBox], ["#fullscreen-button", fullscreenBox],
+      ["#mc-prev", prevBox], ["#mc-next", nextBox], ["#mc-hint", firstHintBox]]) {
+      if (nameA < nameB && overlaps(a, b)) rowClash.push(nameA + " / " + nameB);
+    }
+  }
+  check("the top row carries PAD, MENU and Full screen at 844x390",
+    topRow.every((box) => box && box.w >= 44 && box.h >= 44 && box.top >= 0 && box.bottom <= metrics.inner.h + 0.5 &&
+      box.left >= 0 && box.right <= metrics.inner.w + 0.5 && box.display !== "none"),
+    topRow.map((box) => box && { id: box.text, left: Number(box.left.toFixed(1)), right: Number(box.right.toFixed(1)),
+      top: Number(box.top.toFixed(1)), bottom: Number(box.bottom.toFixed(1)), w: box.w, h: box.h }));
+  check("PAD, MENU, Full screen, the weapon pair and the hint do not overlap",
+    rowClash.length === 0,
+    "no pair of the six control boxes intersects",
+    JSON.stringify(rowClash));
+  check("the first-show hint sits below the top control row",
+    firstHintBox && topRow.every((box) => box && firstHintBox.top >= box.bottom + 2),
+    { hintTop: firstHintBox && Number(firstHintBox.top.toFixed(1)),
+      rowBottom: Number(Math.max(...topRow.map((box) => box ? box.bottom : 0)).toFixed(1)) });
 
   const buttons = [fireBox, jumpBox, useBox, prevBox, nextBox, pauseBox, toggleBox];
   check("FIRE is the large primary action (>= 72 px)", fireBox && fireBox.w >= 72 && fireBox.h >= 72, { w: fireBox && fireBox.w, h: fireBox && fireBox.h });
@@ -665,9 +696,7 @@ async function run() {
         return boxes[selector].text.includes(label) && boxes[selector].aria;
       }), null);
 
-  // The page's own controls on touch: full screen, the lighting panel and the
-  // game-mode row all need a finger-sized target and to fit the viewport.
-  const fullscreenBox = await rect("#fullscreen-button");
+  // The full-screen control shares the top row and must stay tappable there.
   const fullscreenHit = await dumpJson(`(() => {
     const box = document.getElementById("fullscreen-button").getBoundingClientRect();
     const element = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
@@ -678,32 +707,6 @@ async function run() {
     fullscreenBox && fullscreenBox.h >= 44 && fullscreenBox.left >= 0 && fullscreenBox.right <= metrics.inner.w + 0.5 &&
     fullscreenHit && fullscreenHit.id === "fullscreen-button",
     { box: fullscreenBox, hit: fullscreenHit });
-  const optionsBox = await rect("#options-chip");
-  const optionsHit = await dumpJson(`(() => {
-    const box = document.getElementById("options-chip").getBoundingClientRect();
-    const element = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    const button = element && element.closest ? element.closest("button") : null;
-    return { id: button ? button.id : null };
-  })()`);
-  check("the Options chip is finger-sized and tappable",
-    optionsBox && optionsBox.h >= 44 && optionsBox.left >= 0 && optionsBox.right <= metrics.inner.w + 0.5 &&
-    optionsHit && optionsHit.id === "options-chip", { box: optionsBox, hit: optionsHit });
-  await tapSelectorSafe("#lighting-chip");
-  await sleep(300);
-  const lighting = await dumpJson(`(() => {
-    const panel = document.getElementById("lighting-panel");
-    const box = panel.getBoundingClientRect();
-    const buttons = Array.from(panel.querySelectorAll(".segmented button")).map((button) => button.getBoundingClientRect().height);
-    return { hidden: panel.hidden, display: getComputedStyle(panel).display, x: box.x, y: box.y, w: box.width, h: box.height,
-      right: box.right, bottom: box.bottom, buttons, inner: [innerWidth, innerHeight],
-      scrollHeight: panel.scrollHeight, clientHeight: panel.clientHeight };
-  })()`);
-  check("the lighting panel fits the small screen and its mode buttons are finger-sized",
-    lighting && lighting.hidden === false && lighting.x >= 0 && lighting.right <= lighting.inner[0] + 0.5 &&
-    lighting.bottom <= lighting.inner[1] + 0.5 && lighting.scrollHeight <= lighting.clientHeight + 1 &&
-    lighting.buttons.every((height) => height >= 44), lighting);
-  await tapSelectorSafe("#lighting-chip");
-  await sleep(200);
 
   // Safe-area insets: Chrome can emulate a notch and a home indicator. The
   // controls and the canvas must move inside them, not under them.
@@ -923,6 +926,118 @@ async function run() {
   }
   await sleep(500);
 
+  // The menu is the settings panel now: LIGHTING and OPTIONS have no floating
+  // control over the game. Open it with MENU and drive the lighting group, an
+  // OPTIONS row, Apply and Reset the way a player would.
+  stage = "menu-settings";
+  await tapSelector("#mc-pause");
+  await waitFor("the menu to open for the settings checks", async () => (await pageMetrics()).menuOpen === true, 8000, 120);
+  await tapSelectorSafe('[data-action="options"]');
+  await sleep(350);
+  const lightingGroup = await dumpJson(`(() => {
+    const menu = document.getElementById("menu");
+    const buttons = Array.from(menu.querySelectorAll("[data-lighting]"));
+    if (buttons[0]) buttons[0].scrollIntoView({ block: "center" });
+    const panel = menu.getBoundingClientRect();
+    return { count: buttons.length, inner: [innerWidth, innerHeight],
+      panel: { left: panel.left, right: panel.right, top: panel.top, bottom: panel.bottom },
+      buttons: buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { id: button.dataset.lighting, w: box.width, h: box.height,
+          left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+          x: box.left + box.width / 2, y: box.top + box.height / 2,
+          insidePanel: box.left >= panel.left - 1 && box.right <= panel.right + 1 &&
+            box.top >= panel.top - 1 && box.bottom <= panel.bottom + 1 };
+      }) };
+  })()`);
+  check("the settings menu carries the three lighting modes at 844x390",
+    lightingGroup && lightingGroup.count === 3 && lightingGroup.buttons.every((box) =>
+      box.h >= 44 && box.w >= 44 && box.insidePanel &&
+      box.left >= 0 && box.right <= lightingGroup.inner[0] + 0.5 &&
+      box.top >= 0 && box.bottom <= lightingGroup.inner[1] + 0.5),
+    lightingGroup && lightingGroup.buttons.map((box) => ({ id: box.id, w: Number(box.w.toFixed(1)), h: Number(box.h.toFixed(1)) })));
+  await screenshot("landscape-844x390-settings.png");
+  const lightingStatus = async () => dumpJson(`(() => ({
+    text: document.getElementById("rtx-status").textContent.trim(),
+    mode: window.quake2RTX ? window.quake2RTX.status().mode : null,
+  }))()`);
+  const lightingBefore = await lightingStatus();
+  const lightingBox = (id) => lightingGroup.buttons.find((box) => box.id === id);
+  await tapPointSafe(lightingBox("high").x, lightingBox("high").y);
+  await sleep(400);
+  const lightingHigh = await lightingStatus();
+  check("a lighting tap inside the menu changes the RTX status",
+    lightingHigh.text !== lightingBefore.text && /high/i.test(lightingHigh.text || "") && lightingHigh.mode === 2,
+    { before: lightingBefore, after: lightingHigh });
+  await tapPointSafe(lightingBox("off").x, lightingBox("off").y);
+  await sleep(400);
+  const lightingOff = await lightingStatus();
+  check("the Off lighting mode is applied from the menu",
+    lightingOff.mode === 0 && /original lighting/i.test(lightingOff.text || ""), lightingOff);
+  await tapPointSafe(lightingBox("performance").x, lightingBox("performance").y);
+  await sleep(400);
+
+  const optionsVolumeBefore = await dumpJson(`(() => {
+    const row = document.querySelector('[data-view="options"] [data-cvar="s_volume"]');
+    row.scrollIntoView({ block: "center" });
+    const box = row.getBoundingClientRect();
+    return { value: row.querySelector(".value").textContent, index: row.dataset.index, h: box.height,
+      x: box.left + box.width / 2, y: box.top + box.height / 2 };
+  })()`);
+  await tapPointSafe(optionsVolumeBefore.x, optionsVolumeBefore.y);
+  await sleep(300);
+  const optionsVolumeAfter = await dumpJson(`(() => {
+    const row = document.querySelector('[data-view="options"] [data-cvar="s_volume"]');
+    const hint = document.getElementById("apply-hint-options");
+    return { value: row.querySelector(".value").textContent, index: row.dataset.index,
+      changed: row.classList.contains("changed"), hint: hint ? hint.textContent : null };
+  })()`);
+  check("an OPTIONS row cycles a cvar by tap",
+    optionsVolumeBefore.h >= 44 && optionsVolumeAfter.value !== optionsVolumeBefore.value && optionsVolumeAfter.changed === true &&
+    /^\d+ change/.test(optionsVolumeAfter.hint || ""),
+    { before: optionsVolumeBefore.value, after: optionsVolumeAfter.value, hint: optionsVolumeAfter.hint });
+  const expectedVolume = Number(optionsVolumeAfter.value).toFixed(1);
+  const applyBox = await dumpJson(`(() => {
+    const row = document.querySelector('[data-view="options"] [data-action="apply"]');
+    row.scrollIntoView({ block: "center" });
+    const box = row.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2, h: box.height };
+  })()`);
+  check("the OPTIONS apply control is finger-sized", applyBox && applyBox.h >= 44, applyBox);
+  await tapPointSafe(applyBox.x, applyBox.y);
+  await waitFor("the reload with the applied cvar", async () => {
+    const search = await evaluate("location.search");
+    return typeof search === "string" && search.includes("+set&s_volume&" + expectedVolume);
+  }, 30000, 300);
+  const appliedSearch = await evaluate("location.search");
+  check("Apply carries the changed cvar on the start-up line",
+    appliedSearch.includes("+set&s_volume&" + expectedVolume), { value: expectedVolume, search: appliedSearch });
+  await waitForFirstLive();
+  await waitForGame("after applying a setting");
+
+  // Reset defaults: every OPTIONS row goes back to its default on the line.
+  await tapSelector("#mc-pause");
+  await waitFor("the menu to reopen after Apply", async () => (await pageMetrics()).menuOpen === true, 8000, 120);
+  await tapSelectorSafe('[data-action="options"]');
+  await sleep(350);
+  const resetBox = await dumpJson(`(() => {
+    const row = document.querySelector('[data-view="options"] [data-action="reset-options"]');
+    row.scrollIntoView({ block: "center" });
+    const box = row.getBoundingClientRect();
+    return { x: box.left + box.width / 2, y: box.top + box.height / 2, h: box.height };
+  })()`);
+  check("the OPTIONS reset control is finger-sized", resetBox && resetBox.h >= 44, resetBox);
+  await tapPointSafe(resetBox.x, resetBox.y);
+  await waitFor("the reload after Reset defaults", async () => {
+    const search = await evaluate("location.search");
+    return typeof search === "string" && search.includes("+set&s_volume&0.7");
+  }, 30000, 300);
+  const resetSearch = await evaluate("location.search");
+  check("Reset defaults carries the default on the start-up line",
+    resetSearch.includes("+set&s_volume&0.7"), { search: resetSearch });
+  await waitForFirstLive();
+  await waitForGame("after resetting settings");
+
   // Show/hide and persistence.
   stage = "toggle";
   await tapSelectorSafe("#mc-toggle");
@@ -976,6 +1091,34 @@ async function run() {
   const wideFire = await rect("#mc-fire");
   check("932x430: FIRE stays large and inside the viewport", wideFire.w >= 72 && wideFire.right <= wide.inner.w + 0.5 && wideFire.bottom <= wide.inner.h + 0.5, wideFire);
   await screenshot("landscape-932x430.png");
+
+  // The settings sheet must fit the wider phone too.
+  await tapSelector("#mc-pause");
+  await waitFor("932x430: the menu opens", async () => (await pageMetrics()).menuOpen === true, 8000, 120);
+  await tapSelectorSafe('[data-action="options"]');
+  await sleep(350);
+  const wideLighting = await dumpJson(`(() => {
+    const menu = document.getElementById("menu");
+    const buttons = Array.from(menu.querySelectorAll("[data-lighting]"));
+    if (buttons[0]) buttons[0].scrollIntoView({ block: "center" });
+    const panel = menu.getBoundingClientRect();
+    return { inner: [innerWidth, innerHeight],
+      buttons: buttons.map((button) => {
+        const box = button.getBoundingClientRect();
+        return { id: button.dataset.lighting, w: box.width, h: box.height,
+          left: box.left, right: box.right, top: box.top, bottom: box.bottom,
+          insidePanel: box.left >= panel.left - 1 && box.right <= panel.right + 1 &&
+            box.top >= panel.top - 1 && box.bottom <= panel.bottom + 1 };
+      }) };
+  })()`);
+  check("932x430: the lighting modes are finger-sized and fit the viewport",
+    wideLighting && wideLighting.buttons.length === 3 && wideLighting.buttons.every((box) =>
+      box.h >= 44 && box.w >= 44 && box.insidePanel &&
+      box.left >= 0 && box.right <= wideLighting.inner[0] + 0.5 &&
+      box.top >= 0 && box.bottom <= wideLighting.inner[1] + 0.5),
+    wideLighting && wideLighting.buttons.map((box) => ({ id: box.id, w: Number(box.w.toFixed(1)), h: Number(box.h.toFixed(1)) })));
+  await tapSelectorSafe('.menu-foot [data-action="resume"]');
+  await waitFor("932x430: the game resumes", async () => (await readEngine()).keyDest === 0, 8000, 120);
 
   // Portrait: guide, menus, no pad.
   stage = "portrait";
@@ -1061,16 +1204,23 @@ async function run() {
   check("desktop: canvas is letterboxed to the engine aspect at 1280x720", desktop.canvas && near(desktop.canvas.w, 1280, 1) && near(desktop.canvas.h, 720, 1), desktop.canvas);
   check("desktop: no page scroll or overflow", desktop.scroll.w <= desktop.inner.w && desktop.scroll.h <= desktop.inner.h, { scroll: desktop.scroll, inner: desktop.inner });
   const desktopGeometry = await dumpJson(`(() => {
-    const options = getComputedStyle(document.getElementById("options-chip"));
     const menu = getComputedStyle(document.getElementById("menu"));
-    const lighting = getComputedStyle(document.getElementById("lighting-panel"));
     const heading = getComputedStyle(document.querySelector(".menu-head h1"));
-    return { optionsTop: options.top, optionsRight: options.right, menuWidth: menu.width, lightingWidth: lighting.width, headingSize: heading.fontSize };
+    const fullscreen = getComputedStyle(document.getElementById("fullscreen-button"));
+    return { menuWidth: menu.width, headingSize: heading.fontSize,
+      chips: ["options-chip", "lighting-chip", "lighting-panel"].filter((id) => document.getElementById(id)),
+      playLayerControls: Array.from(document.querySelectorAll("#ui > button, #ui > .segmented, #ui > div[id]"))
+        .filter((element) => !["banner", "prompt", "menu-layer"].includes(element.id)).map((element) => element.id || element.className),
+      lightingButtons: document.querySelectorAll("#menu [data-lighting]").length,
+      fullscreenLeft: fullscreen.left, fullscreenBottom: fullscreen.bottom, fullscreenTop: fullscreen.top };
   })()`);
-  check("desktop: the original chip, menu and heading geometry is unchanged",
-    near(parseFloat(desktopGeometry.optionsTop), 16, 0.5) && near(parseFloat(desktopGeometry.optionsRight), 18, 0.5) &&
-    near(parseFloat(desktopGeometry.menuWidth), 392, 0.5) && near(parseFloat(desktopGeometry.lightingWidth), 244, 0.5) &&
-    near(parseFloat(desktopGeometry.headingSize), 26, 0.5), desktopGeometry);
+  check("desktop: menu, heading and full-screen geometry is unchanged, with no settings chip",
+    near(parseFloat(desktopGeometry.menuWidth), 392, 0.5) && near(parseFloat(desktopGeometry.headingSize), 26, 0.5) &&
+    desktopGeometry.chips.length === 0 && desktopGeometry.playLayerControls.length === 0 &&
+    desktopGeometry.lightingButtons === 3 &&
+    near(parseFloat(desktopGeometry.fullscreenLeft), 12, 0.5) &&
+    near(parseFloat(desktopGeometry.fullscreenBottom), 52, 0.5),
+    desktopGeometry);
   const beforeKeys = await readEngine();
   await keyEvent("rawKeyDown", "w", "KeyW", 87);
   await sleep(700);

@@ -1137,6 +1137,36 @@ async function navigateResolution(resolution) {
 }
 
 async function setLighting(level) {
+  // LIGHTING lives in the settings panel the MENU control opens (the play
+  // layer carries no settings control), so the menu has to be open and on its
+  // OPTIONS view before the three modes are on screen. If the menu was already
+  // up it stays up; otherwise it is opened for the click and resumed after.
+  const wasOpen = (await state()).menuHidden === false;
+  if (!wasOpen && !(await openMenu())) fatal("the menu did not open for the lighting check");
+  const optionsView = await evaluate(`(() => {
+    const view = document.querySelector('#menu .menu-view[data-view="options"]');
+    return view ? !view.hidden : false;
+  })()`);
+  if (!optionsView) {
+    if (!(await click('[data-action="options"]'))) fatal("the OPTIONS row is missing");
+    await sleep(350);
+  }
+  // The button must be reachable in the open panel, not merely present in the
+  // document: scroll it into view and hit-test it at its own centre.
+  const reach = await evaluate(`(() => {
+    const button = document.querySelector('[data-lighting="${level}"]');
+    if (!button) return null;
+    button.scrollIntoView({ block: "center" });
+    const box = button.getBoundingClientRect();
+    const panel = document.getElementById("menu").getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return { id: button.dataset.lighting, w: box.width, h: box.height,
+      insidePanel: box.top >= panel.top - 1 && box.bottom <= panel.bottom + 1,
+      hit: hit ? hit.closest("[data-lighting]") === button : false };
+  })()`);
+  if (!reach) fatal("the " + level + " lighting button is missing");
+  check("lighting " + level + " control is in the open settings panel", reach.insidePanel === true && reach.hit === true,
+    "the " + level + " button under its own click point inside #menu", JSON.stringify(reach));
   const found = await click('[data-lighting="' + level + '"]');
   if (!found) fatal("the " + level + " lighting button is missing");
   await sleep(600);
@@ -1147,6 +1177,7 @@ async function setLighting(level) {
   check("lighting " + level + " applied", ok, "mode " + expected + (level === "off" ? " (Off)" : " (" + level + ")"),
     "mode " + now.mode + ", quality " + now.quality + ", enabled " + now.enabled);
   if (!ok) fatal("lighting " + level + " did not apply");
+  if (!wasOpen) await resume();
   await waitFrames(2);
 }
 
@@ -2168,16 +2199,23 @@ async function interfaceStateCheck(resolution) {
   }
   const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
 
-  // 1. The Options chip asks the engine for its menu (the pause) with a
-  // synthetic Escape; the panel must already be up when that Escape arrives
-  // and must stay up while the engine is at its menu.
-  await click("#options-chip");
+  // 1. MENU (Escape on a desktop, the MENU control on touch) pauses the game
+  // and opens the panel; the panel must stay up while the engine is at its
+  // menu. There is no settings chip over the play layer to open it instead.
+  if (!(await openMenu())) fatal(label + ": MENU/Escape did not open the menu");
   await sleep(1800);
-  const chip = await state();
-  check(label + ": the Options chip pauses the game and the panel stays",
-    Boolean(chip.engine) && chip.engine.keyDestName === "menu" && chip.menuHidden === false,
-    "key_dest menu and the panel visible after the chip",
-    "key_dest " + (chip.engine && chip.engine.keyDestName) + ", menuHidden " + chip.menuHidden);
+  const menuOpened = await state();
+  check(label + ": MENU/Escape pauses the game and the panel stays",
+    Boolean(menuOpened.engine) && menuOpened.engine.keyDestName === "menu" && menuOpened.menuHidden === false,
+    "key_dest menu and the panel visible after MENU/Escape",
+    "key_dest " + (menuOpened.engine && menuOpened.engine.keyDestName) + ", menuHidden " + menuOpened.menuHidden);
+  const playLayer = await evaluate(`(() => Array.from(document.querySelectorAll("#ui > button, #ui > .segmented, #ui > div[id]"))
+    .filter((element) => !["banner", "prompt", "menu-layer"].includes(element.id))
+    .map((element) => element.id || element.className))()`);
+  check(label + ": no settings control floats over the play layer",
+    Array.isArray(playLayer) && playLayer.length === 0,
+    "no #ui children besides the banner, the prompt and the menu layer",
+    JSON.stringify(playLayer));
   await resume();
 
   // 2. A note row answers where the player can see it: inside the panel, not
@@ -2263,7 +2301,7 @@ async function interfaceStateCheck(resolution) {
     "walked " + heldKey.walked.toFixed(1) + " units with " + heldKey.key.toUpperCase() +
       " held; drift after Resume " + heldKey.drift.toFixed(1) + " units over 1.4 s");
   if (!report.interfaceState) report.interfaceState = {};
-  report.interfaceState[label] = { chip, quit, heldKey };
+  report.interfaceState[label] = { menuOpened, playLayer, quit, heldKey };
 }
 
 // ---- Game mode: the native-fullscreen presentation ----------------------
@@ -2300,7 +2338,13 @@ function pageLayers() {
       fullscreenButton: read("fullscreen-button"),
       loading: read("loading"),
       hint: read("fullscreen-hint"),
-      chips: read("options-chip") && read("options-chip").display !== "none" ? "visible" : "hidden",
+      // Settings live in the menu now. The play layer must carry no settings
+      // control at all: no chip, no lighting switch, just the banner and the
+      // pointer-lock prompt over the game.
+      playLayerControls: Array.from(document.querySelectorAll("#ui > button, #ui > .segmented, #ui > div[id]"))
+        .filter((element) => !["banner", "prompt", "menu-layer"].includes(element.id))
+        .map((element) => element.id || element.className),
+      lightingButtons: document.querySelectorAll("#menu [data-lighting]").length,
       prompt: read("prompt") && read("prompt").display !== "none" && !read("prompt").hidden ? "visible" : "hidden",
       bodyClass: document.body.className,
       bodyBackground: getComputedStyle(document.body).backgroundColor,
@@ -2468,8 +2512,8 @@ async function gameModeCheck(resolution) {
   await sleep(1200);
 
   // The normal-page sample state: the game playing, full screen, and the
-  // pointer free, which is when the page shows its own interface (the Options
-  // chip and the capture prompt, exactly as at boot).
+  // pointer free, which is when the page shows its own interface (the capture
+  // prompt and the touch controls, exactly as at boot — no settings control).
   const unlockPointer = async () => {
     if (!(await evaluate("document.pointerLockElement !== null"))) return;
     // Release the pointer inside game mode, where the app does not answer a
@@ -2504,9 +2548,11 @@ async function gameModeCheck(resolution) {
   const pageLayersBefore = await pageLayers();
   check(label + ": the page's own interface is on screen for the comparison",
     pageLayersBefore.ui && pageLayersBefore.ui.display !== "none" &&
-      pageLayersBefore.chips === "visible" && pageLayersBefore.prompt === "visible",
-    "#ui, the Options chip and the capture prompt visible on the normal page",
-    JSON.stringify({ ui: pageLayersBefore.ui, chips: pageLayersBefore.chips, prompt: pageLayersBefore.prompt }));
+      pageLayersBefore.playLayerControls.length === 0 && pageLayersBefore.lightingButtons === 3 &&
+      pageLayersBefore.prompt === "visible",
+    "#ui and the capture prompt visible, no settings control in the play layer, the three lighting modes in the menu",
+    JSON.stringify({ ui: pageLayersBefore.ui, controls: pageLayersBefore.playLayerControls,
+      lightingButtons: pageLayersBefore.lightingButtons, prompt: pageLayersBefore.prompt }));
 
   // What the normal page does per second: the status-bar read-back (a
   // framebuffer read every 1.2 s). Game mode suspends it. The counter is of
@@ -2524,9 +2570,9 @@ async function gameModeCheck(resolution) {
   // interface path the owner has, and the click is the user gesture full
   // screen needs.
   if (!(await openMenu())) fatal(label + ": the menu did not open before the game-mode entry");
-  // The interface is used with the pointer free (the app hides its chips while
-  // the mouse is locked, and a locked pointer delivers every click to the
-  // canvas), so release it before the coordinate click on the row.
+  // The interface is used with the pointer free (a locked pointer delivers
+  // every click to the canvas), so release it before the coordinate click on
+  // the row.
   await evaluate("document.exitPointerLock ? document.exitPointerLock() : null");
   await sleep(400);
   await click('[data-action="video"]');

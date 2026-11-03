@@ -172,121 +172,9 @@ canvas {
 
 /* The canvas's bottom band belongs to the engine's own status bar. Nothing in
    this layer is positioned over it: the controls sit at the top or well above
-   the bar, and the band is left to the game at every resolution. */
-
-#options-chip {
-  position: absolute;
-  top: max(16px, calc(env(safe-area-inset-top, 0px) + 8px));
-  right: max(18px, calc(env(safe-area-inset-right, 0px) + 12px));
-  padding: 9px 14px;
-  color: var(--muted);
-  background: rgba(8, 10, 12, 0.72);
-  border: 1px solid var(--line-soft);
-  border-radius: 2px;
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  cursor: pointer;
-  pointer-events: auto;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-
-#options-chip::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  margin-right: 8px;
-  vertical-align: 1px;
-  background: var(--amber-dim);
-  border-radius: 50%;
-}
-
-#options-chip:hover,
-#options-chip:focus-visible {
-  color: var(--text);
-  border-color: var(--line);
-  background: rgba(14, 16, 18, 0.92);
-  outline: none;
-}
-
-#options-chip[hidden] {
-  display: none;
-}
-
-/* The app's own lighting switch (the engine has no such setting): a second
-   chip under Options, with the three modes the renderer supports. */
-#lighting-chip {
-  position: absolute;
-  top: max(56px, calc(env(safe-area-inset-top, 0px) + 48px));
-  right: max(18px, calc(env(safe-area-inset-right, 0px) + 12px));
-  padding: 9px 14px;
-  color: var(--muted);
-  background: rgba(8, 10, 12, 0.72);
-  border: 1px solid var(--line-soft);
-  border-radius: 2px;
-  font-size: 10px;
-  letter-spacing: 0.24em;
-  text-transform: uppercase;
-  cursor: pointer;
-  pointer-events: auto;
-  transition: color 140ms ease, border-color 140ms ease, background 140ms ease;
-}
-
-#lighting-chip::before {
-  content: "";
-  display: inline-block;
-  width: 4px;
-  height: 4px;
-  margin-right: 8px;
-  vertical-align: 1px;
-  background: var(--amber);
-  border-radius: 50%;
-  opacity: 0.75;
-}
-
-#lighting-chip:hover,
-#lighting-chip:focus-visible {
-  color: var(--text);
-  border-color: var(--line);
-  background: rgba(14, 16, 18, 0.92);
-  outline: none;
-}
-
-#lighting-chip[hidden],
-#lighting-panel[hidden] {
-  display: none;
-}
-
-#lighting-panel {
-  position: absolute;
-  top: max(94px, calc(env(safe-area-inset-top, 0px) + 86px));
-  right: max(18px, calc(env(safe-area-inset-right, 0px) + 12px));
-  width: min(244px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 36px));
-  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 110px);
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  padding: 12px;
-  color: var(--muted);
-  background: rgba(9, 11, 13, 0.94);
-  border: 1px solid var(--line-soft);
-  border-radius: 3px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  font-size: 11px;
-  pointer-events: auto;
-}
-
-#lighting-panel .segmented {
-  margin-bottom: 10px;
-}
-
-#lighting-panel small {
-  display: block;
-  margin-top: 8px;
-  color: var(--dim);
-  font-size: 10.5px;
-  line-height: 1.5;
-}
+   the bar, and the band is left to the game at every resolution. No settings
+   control floats here at all: LIGHTING and OPTIONS live in the menu panel
+   (see .menu-lighting), which the MENU control or Escape opens. */
 
 .segmented {
   display: flex;
@@ -858,6 +746,41 @@ body.is-game-mode #loading {
   color: #f0e7d2;
 }
 
+/* The app's own lighting switch: a page control (the engine has no such
+   setting) that now lives in the OPTIONS view, under the engine's rows. The
+   three modes are the renderer's own; rtx-renderer.js finds them by
+   [data-lighting] and keeps the choice in localStorage. */
+.menu-lighting {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.menu-lighting .view-title {
+  margin: 0 0 6px;
+}
+
+.menu-lighting .segmented {
+  margin: 0;
+}
+
+.menu-lighting .segmented button {
+  min-height: 34px;
+  font-size: 10px;
+}
+
+.menu-lighting small {
+  display: block;
+  margin-top: 7px;
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.menu-lighting #rtx-status {
+  color: var(--muted);
+}
+
 /* ---- Touch controls (mobile-controls.js) --------------------------------
    Inert on a desktop: the layer exists in the DOM but is display:none until
    mobile-controls.js decides this is a touch presentation.
@@ -1138,8 +1061,8 @@ body.is-game-mode #mobile-controls {
    seconds or as soon as the player uses a control. */
 #mc-hint {
   position: absolute;
-  /* Below the top control row: the first-show hint must not run under the
-     Options/Lighting chips or the full-screen button. */
+  /* Below the top control row: the first-show hint must not run under PAD,
+     MENU or the full-screen button. */
   top: calc(var(--mc-top) + 60px);
   left: 50%;
   z-index: 1;
@@ -1205,7 +1128,7 @@ body.is-game-mode #mobile-controls {
   }
 }
 
-/* On a narrow landscape screen the hint drops below the top chips. */
+/* On a narrow landscape screen the hint drops below the top control row. */
 @media (max-width: 760px) {
   #mc-hint {
     top: calc(env(safe-area-inset-top, 0px) + 68px);
@@ -1323,42 +1246,23 @@ body.mc-portrait #mc-toggle {
 /* ---- Touch presentation: page controls sized for a finger -----------------
    Scoped to body.touch-ui, which only mobile-controls.js adds. A desktop never
    matches any rule in this block. */
-body.touch-ui #options-chip,
-body.touch-ui #lighting-chip {
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 16px;
-  font-size: 11px;
-}
 
-/* On touch the two chips sit side by side in the top-right corner, leaving the
-   right edge below them free for the weapon-cycle pair. */
-body.touch-ui #lighting-chip {
-  top: max(16px, calc(env(safe-area-inset-top, 0px) + 8px));
-  /* The Options chip is 112.6 px wide at 18 px from the right; 124 px clears
-     its left edge with an 11 px gap instead of overlapping it by 12.6 px. */
-  right: calc(max(18px, env(safe-area-inset-right, 0px) + 12px) + 124px);
-}
-
-body.touch-ui #lighting-panel {
-  top: max(68px, calc(env(safe-area-inset-top, 0px) + 60px));
-  box-sizing: border-box;
-  width: min(280px, calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 36px));
-  max-height: calc(100dvh - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px) - 140px);
-}
-
+/* The lighting modes live in the menu now, where a finger needs 44 px on each
+   of the three buttons. */
 body.touch-ui .segmented button {
   min-height: 44px;
   font-size: 10.5px;
 }
 
-/* The fullscreen control lives at the top left on touch: the bottom left is
-   the thumbstick's corner. */
+/* One top row on touch, left to right: PAD (52 px at 10), MENU (46 px at 70),
+   Full screen (from 126 px). Nothing else floats over the play area, and the
+   row clears the first-show hint, which starts at --mc-top + 60 px. */
 body.touch-ui #fullscreen-button {
-  top: max(60px, calc(env(safe-area-inset-top, 0px) + 52px));
+  /* The same 8 px safe-area top the pad's --mc-top uses. That variable lives
+     on #mobile-controls and would not be readable here. */
+  top: max(8px, calc(env(safe-area-inset-top, 0px) + 8px));
   bottom: auto;
-  left: calc(env(safe-area-inset-left, 0px) + 10px);
+  left: calc(env(safe-area-inset-left, 0px) + 125px);
   min-height: 44px;
   padding: 0 12px;
   opacity: 0.72;
@@ -1367,7 +1271,8 @@ body.touch-ui #fullscreen-button {
 body.touch-ui #fullscreen-hint {
   left: calc(env(safe-area-inset-left, 0px) + 10px);
   bottom: auto;
-  top: max(112px, calc(env(safe-area-inset-top, 0px) + 104px));
+  /* Below the top row's 44 px targets, clear of the row's own box. */
+  top: max(62px, calc(env(safe-area-inset-top, 0px) + 62px));
   max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px);
 }
 

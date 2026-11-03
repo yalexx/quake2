@@ -754,9 +754,6 @@ var Module;
 
   const menuLayer = document.getElementById("menu-layer");
   const menuPanel = document.getElementById("menu");
-  const optionsChip = document.getElementById("options-chip");
-  const lightingChip = document.getElementById("lighting-chip");
-  const lightingPanel = document.getElementById("lighting-panel");
   const bannerElement = document.getElementById("banner");
   const bannerTextElement = document.getElementById("banner-text");
   const menuNoteElement = document.getElementById("menu-note");
@@ -851,7 +848,34 @@ var Module;
   function reloadWith(commands) {
     const parts = window.location.search.replace(/^\?/, "").split("&").filter(Boolean);
     const next = parts.concat(commands);
-    window.location.search = "?" + next.join("&");
+    // The engine refuses a start-up line with too many arguments -- a second
+    // Reset appending a pair per setting printed "argc > MAX_NUM_ARGVS" and
+    // stopped the engine before it drew a frame. It scans the line in order
+    // and the last +set of a cvar (and the last +map) is the one that wins,
+    // so each group collapses to its final value before the page reloads.
+    const merged = [];
+    const setAt = Object.create(null);
+    let mapAt = -1;
+    for (let i = 0; i < next.length; i++) {
+      const token = next[i];
+      if ((token === "+set" || token === "set") && i + 2 < next.length) {
+        const cvar = next[i + 1];
+        const group = [token, cvar, next[i + 2]];
+        if (setAt[cvar] !== undefined) merged[setAt[cvar]] = group;
+        else { setAt[cvar] = merged.length; merged.push(group); }
+        i += 2;
+        continue;
+      }
+      if (token === "+map" && i + 1 < next.length) {
+        const group = [token, next[i + 1]];
+        if (mapAt >= 0) merged[mapAt] = group;
+        else { mapAt = merged.length; merged.push(group); }
+        i += 1;
+        continue;
+      }
+      merged.push(token);
+    }
+    window.location.search = "?" + merged.flat().join("&");
   }
 
   // ---- Menu presentation -------------------------------------------------
@@ -903,10 +927,6 @@ var Module;
     ui.open = true;
     menuLayer.hidden = false;
     document.body.classList.add("menu-open");
-    optionsChip.hidden = true;
-    lightingChip.hidden = true;
-    lightingPanel.hidden = true;
-    lightingChip.setAttribute("aria-expanded", "false");
     promptElement.hidden = true;
     setView(view || "main");
   }
@@ -1109,11 +1129,18 @@ var Module;
     const commands = [];
     for (const button of menuPanel.querySelectorAll('.menu-view[data-view="' + view + '"] .setting[data-cvar], .menu-view[data-view="' + view + '"] .setting[data-cvars]')) {
       if (button.dataset.default === undefined) continue;
+      // A row already showing its default needs no command: the engine keeps
+      // it, and a pair per row (there are eleven in OPTIONS) is exactly the
+      // length of start-up line the engine refused as argc > MAX_NUM_ARGVS.
+      const read = readValue(button);
+      const differs = read && String(read.value) !== String(button.dataset.default);
       button.dataset.index = String(defaultIndex(button));
       showSetting(button);
+      if (!differs) continue;
       for (const cvar of rowCvars(button)) commands.push("+set", cvar, button.dataset.default);
     }
     refreshApply();
+    if (!commands.length) { showPanelNote("The defaults are already in place"); return; }
     showBanner("Restoring the defaults…", 5000);
     reloadWith(commands);
   }
@@ -1219,8 +1246,8 @@ var Module;
   // scroll underneath it, and pointer lock must not be requested behind it.
   window.addEventListener("keydown", function (event) {
     if (!ui.open) return;
-    // The app's own engine taps (Resume, F6, F9, the Options chip's Escape):
-    // the panel must not eat them. It still owns every real key.
+    // The app's own engine taps (Resume, F6, F9): the panel must not eat
+    // them. It still owns every real key.
     if (event.__q2synthetic) return;
     // Alt+Enter is the game-mode shortcut, handled by game-mode.js after this
     // listener; without this it would activate the focused row (which can be
@@ -1254,21 +1281,6 @@ var Module;
     event.preventDefault();
   }, true);
 
-  lightingChip.addEventListener("click", function () {
-    const open = lightingPanel.hidden;
-    lightingPanel.hidden = !open;
-    lightingChip.setAttribute("aria-expanded", String(open));
-  });
-
-  optionsChip.addEventListener("click", function () {
-    // Opening from the chip asks the engine for its menu, which is the pause.
-    showMenu("options");
-    tapKey(ESCAPE_KEY);
-    ui.closing = true;
-    clearTimeout(optionsChip.closingTimer);
-    optionsChip.closingTimer = setTimeout(function () { ui.closing = false; }, 900);
-  });
-
   // The engine's own status bar is the only HUD: nothing is drawn over the
   // canvas's bottom band. rtx-renderer.js still reads its digits back out of
   // the frame for the control harness (`window.quake2Hud`); that reader is
@@ -1301,9 +1313,7 @@ var Module;
     // the game after the panel has been put away, the closing hold is over.
     // Keeping the fixed 900 ms window shut the app's own Escape handling for
     // that long, so an Escape pressed just after Resume did nothing. Only a
-    // closed panel releases it: the Options chip sets the same hold while its
-    // panel is up, before the engine's menu has opened, and releasing it there
-    // would hide the panel and reopen it on the main view.
+    // closed panel releases it.
     if (ui.closing && !ui.open && dest === 0) ui.closing = false;
     const visible = canvasElement.style.display === "block";
     const locked = document.pointerLockElement === canvasElement;
@@ -1313,13 +1323,6 @@ var Module;
     // the console or the boot plate.
     if (window.quake2Touch && typeof window.quake2Touch.setPlaying === "function") {
       window.quake2Touch.setPlaying(playing);
-    }
-    const chipsHidden = ui.open || locked || !engineRunning || !visible || dest !== 0;
-    setHidden(optionsChip, chipsHidden);
-    setHidden(lightingChip, chipsHidden);
-    if (chipsHidden && !lightingPanel.hidden) {
-      lightingPanel.hidden = true;
-      lightingChip.setAttribute("aria-expanded", "false");
     }
     // On touch there is no mouse to capture: the prompt and its pointer-lock
     // path are desktop-only.
