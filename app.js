@@ -597,6 +597,8 @@ var Module;
       if (userStore && FS.filesystems && FS.filesystems.IDBFS) useServerStorage(FS.filesystems.IDBFS);
       engineRunning = true;
       hideIndicator();
+      // From the first frame the engine draws: see "The first engine frame".
+      startBootFrameWatch();
     },
 
     monitorRunDependencies: function (left) {
@@ -1503,6 +1505,85 @@ var Module;
       showMessage("Could not load the game engine.", "Reload the page to try again.");
     };
     document.body.appendChild(mainScript);
+  }
+
+  // ---- The first engine frame ---------------------------------------------
+  // The start-up line carries the app's defaults as a chain of `+set` commands
+  // and the level's `+map`. A command line is a command *session* to an id
+  // Tech engine, and if a start-up command ever brings the engine's own
+  // console up the player lands on a wall of text with the game paused. Every
+  // command on the line is load-bearing -- synthetic DOM keys reach the
+  // engine's key bindings but never the console's text input, so a cvar can
+  // only be set before the engine starts -- and dropping one to keep the
+  // console quiet would be a worse bug than the console.
+  //
+  // So the console is watched instead of the line being trimmed.
+  // `window.quake2BootFrame` is the record a probe reads: who owned the
+  // keyboard on the first frame the engine had its game surface up, how many
+  // frames had come before it, and whether a console had to be shut on the
+  // way. It is written once and never changed afterwards, so a reading taken
+  // later still describes that frame.
+  //
+  // If the console does come up, it is closed with the engine's own Escape --
+  // the same key the interface already uses to leave a console or a menu --
+  // and the watch keeps running until the level has had a few seconds, so a
+  // console opened by the level load cannot outlive the boot either. A console
+  // the player opens after that is theirs and is left alone.
+  try { window.quake2BootFrame = null; } catch (error) { /* optional */ }
+  const bootFrame = { keyDest: null, consoleOpen: null, at: null, frames: 0, consoleFrames: 0, closedConsole: false };
+  let bootWatch = null;
+
+  function startBootFrameWatch() {
+    if (bootWatch) return;
+    bootWatch = { frames: 0, consoleFrames: 0, escapes: 0, lastEscapeAt: -1000, started: performance.now(), done: false };
+    // The engine's own frame loop is the only clock that cannot miss a frame
+    // (engine-state.js measured a 100 ms timer blind to a console that was up
+    // for ten frames); the browser's rAF is the same queue once the engine's
+    // main loop starts.
+    const schedule = typeof Module.requestAnimationFrame === "function"
+      ? Module.requestAnimationFrame
+      : window.requestAnimationFrame.bind(window);
+    function watchFrame() {
+      if (bootWatch.done) return;
+      bootWatch.frames++;
+      let dest = null;
+      try {
+        if (window.quake2Engine && typeof window.quake2Engine.keyDest === "function") dest = window.quake2Engine.keyDest();
+      } catch (error) {
+        dest = null;
+      }
+      if (typeof dest === "number") {
+        if (dest === 1) {
+          bootWatch.consoleFrames++;
+          // One Escape per quarter second while the console holds the
+          // keyboard: enough to shut it on the first frame it appears, not
+          // enough to flood the engine's key queue if it refuses to close.
+          const now = performance.now();
+          if (now - bootWatch.lastEscapeAt > 250) {
+            bootWatch.lastEscapeAt = now;
+            bootWatch.escapes++;
+            tapKey(ESCAPE_KEY);
+          }
+        } else if (bootFrame.keyDest === null && canvasElement.style.display === "block") {
+          // The engine's video is up (`Module.hideConsole` has run) and the
+          // keyboard is not the console's: this is the frame the player lands
+          // on. A console closed above is on the record, not hidden.
+          bootFrame.keyDest = dest;
+          bootFrame.consoleOpen = dest === 1;
+          bootFrame.at = Math.round(performance.now());
+          bootFrame.frames = bootWatch.frames;
+          bootFrame.consoleFrames = bootWatch.consoleFrames;
+          bootFrame.closedConsole = bootWatch.escapes > 0;
+          try { window.quake2BootFrame = bootFrame; } catch (error) { /* optional */ }
+        }
+      }
+      // Hold the watch for a few seconds after landing, then let go; a boot
+      // that never shows a surface is not watched for ever either.
+      const elapsed = performance.now() - bootWatch.started;
+      if (elapsed > 30000 || (bootFrame.keyDest !== null && elapsed > 8000)) bootWatch.done = true;
+      if (!bootWatch.done) schedule(watchFrame);
+    }
+    schedule(watchFrame);
   }
 
   async function boot() {
