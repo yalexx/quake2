@@ -1,0 +1,112 @@
+project /home/yanko/Projects/quake2/.clawbox/worktrees/run-t9js74ra
+PASS S1 mean saturation rises by the stated threshold - mean 0.3153 → 0.3272 (+0.0120), threshold +0.005
+PASS S2 every weapon's saturation rises - smallest gain 0.0055
+PASS S3 mean chroma rises - mean 15.61 → 16.08
+PASS E1 cut-out count is exactly 4x the original - all 13 at 4.00
+PASS E2 cut-out mask is the 2x2 expansion of the original (no opaque texel re-indexed to 255) - 0 mismatched texels over all 13
+PASS E3 no near-black/near-white fringe introduced at the cut-out - 0 introduced; worst fringe colour distance 44 (limit 48)
+PASS E3b scaled fringe texels are explained by the source art - worst v_handgr 4 vs limit 8 (2x2 of the source's 1)
+PASS E4 boundary brightness is not shifted by the upscale - worst v_handgr 11.1 levels, limit 20
+PASS B1 blockiness ratio below the bound (whole skin and pistol band) - worst whole 2.27, worst bottom 2.55
+PASS B2 pistol-bottom band is not an outlier - v_blast 2.31 vs worst other 2.55 (margin 0.5)
+PASS B3 blockiness metric detects a nearest-neighbour upscale - control ratios 5799702035 … 9857793669
+running tex-check: node scripts/tex-check.mjs --only models/
+running texture-pack: node scripts/texture-pack.mjs --dry-run --only models/
+running texture-audit: node scripts/texture-audit.mjs --select
+PASS P1 tex-check --only models/ exits 0 - exit 0
+PASS P2 texture-pack --dry-run --only models/ exits 0 - exit 0
+PASS P3 texture-audit --select exits 0 - exit 0
+PASS P4 texture-pack reports every picture identical - 125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed (identical 125 of 125)
+starting session clean
+PASS A1 boots demo1 at 1280x720 with the game in hand - keyDest=game canvas=1280x720
+PASS A2 console is closed and cl_gun is 1 - consoleOpen=false
+  retry "cl_gun" ran=false echo=false
+PASS A3 cl_gun is 1 - cl_gun="1"
+PASS A4 give all left the game running (console closed, keyDest=game) - keyDest=game consoleOpen=false
+clean weapon v_blast size 592x328 expect v_blast
+clean captured v_blast name=v_blast sizeDelta=33 gunPixels=58181 gunSat=0.775
+clean weapon v_shotg size 528x360 expect v_shotg
+clean captured v_shotg name=v_shotg sizeDelta=17 gunPixels=70718 gunSat=0.686
+clean weapon v_shotg2 size 592x388 expect v_hyperb/v_shotg2
+clean captured v_shotg2 name=v_hyperb/v_shotg2 sizeDelta=18 gunPixels=102800 gunSat=0.746
+clean weapon v_machn size 600x388 expect v_machn
+clean captured v_machn name=v_machn sizeDelta=17 gunPixels=48107 gunSat=0.775
+clean weapon v_chain size 528x328 expect v_chain
+clean captured v_chain name=v_chain sizeDelta=17 gunPixels=52475 gunSat=0.737
+clean weapon v_launch size 496x388 expect v_launch
+clean captured v_launch name=v_launch sizeDelta=18 gunPixels=72452 gunSat=0.777
+clean weapon v_rocket size 504x388 expect v_rocket
+clean captured v_rocket name=v_rocket sizeDelta=18 gunPixels=68377 gunSat=0.774
+clean weapon v_rail size 616x362 expect v_rail
+clean captured v_rail name=v_rail sizeDelta=16 gunPixels=120273 gunSat=0.890
+clean weapon v_hyperb size 592x388 expect v_hyperb/v_shotg2
+clean captured v_hyperb name=v_hyperb/v_shotg2 sizeDelta=17 gunPixels=93094 gunSat=0.761
+clean weapon v_bfg size 432x390 expect v_bfg/v_disint
+clean captured v_bfg name=v_bfg/v_disint sizeDelta=16 gunPixels=137025 gunSat=0.736
+starting session original
+  retry "sv_cheats 1" ran=false echo=false
+original weapon v_blast size 296x164 expect v_blast
+original captured v_blast name=v_blast sizeDelta=35 gunPixels=43487 gunSat=0.755
+original weapon v_shotg size 264x180 expect v_shotg
+original captured v_shotg name=v_shotg sizeDelta=16 gunPixels=67946 gunSat=0.647
+original weapon v_shotg2 size 296x194 expect v_hyperb/v_shotg2
+original captured v_shotg2 name=v_hyperb/v_shotg2 sizeDelta=18 gunPixels=87020 gunSat=0.722
+original weapon v_machn size 300x194 expect v_machn
+original captured v_machn name=v_machn sizeDelta=17 gunPixels=47701 gunSat=0.759
+original weapon v_chain size 264x164 expect v_chain
+original captured v_chain name=v_chain sizeDelta=17 gunPixels=47184 gunSat=0.723
+original weapon v_launch size 248x194 expect v_launch
+original captured v_launch name=v_launch sizeDelta=16 gunPixels=59592 gunSat=0.774
+original weapon v_rocket size 252x194 expect v_rocket
+original captured v_rocket name=v_rocket sizeDelta=19 gunPixels=63527 gunSat=0.763
+original weapon v_rail size 308x181 expect v_rail
+original captured v_rail name=v_rail sizeDelta=16 gunPixels=104837 gunSat=0.896
+original weapon v_hyperb size 296x194 expect v_hyperb/v_shotg2
+original captured v_hyperb name=v_hyperb/v_shotg2 sizeDelta=16 gunPixels=83688 gunSat=0.727
+original weapon v_bfg size 216x195 expect v_bfg/v_disint
+original captured v_bfg name=v_bfg/v_disint sizeDelta=17 gunPixels=129004 gunSat=0.713
+PASS O-v_blast v_blast baseline frame reports its own 1x skin and a gun - name=v_blast (expected v_blast) sizeΔ=35 gunPixels=43487 sceneNoise=86
+PASS O-v_shotg v_shotg baseline frame reports its own 1x skin and a gun - name=v_shotg (expected v_shotg) sizeΔ=16 gunPixels=67946 sceneNoise=0
+PASS O-v_shotg2 v_shotg2 baseline frame reports its own 1x skin and a gun - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) sizeΔ=18 gunPixels=87020 sceneNoise=63
+PASS O-v_machn v_machn baseline frame reports its own 1x skin and a gun - name=v_machn (expected v_machn) sizeΔ=17 gunPixels=47701 sceneNoise=0
+PASS O-v_chain v_chain baseline frame reports its own 1x skin and a gun - name=v_chain (expected v_chain) sizeΔ=17 gunPixels=47184 sceneNoise=56
+PASS O-v_launch v_launch baseline frame reports its own 1x skin and a gun - name=v_launch (expected v_launch) sizeΔ=16 gunPixels=59592 sceneNoise=20
+PASS O-v_rocket v_rocket baseline frame reports its own 1x skin and a gun - name=v_rocket (expected v_rocket) sizeΔ=19 gunPixels=63527 sceneNoise=0
+PASS O-v_rail v_rail baseline frame reports its own 1x skin and a gun - name=v_rail (expected v_rail) sizeΔ=16 gunPixels=104837 sceneNoise=0
+PASS O-v_hyperb v_hyperb baseline frame reports its own 1x skin and a gun - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) sizeΔ=16 gunPixels=83688 sceneNoise=0
+PASS O-v_bfg v_bfg baseline frame reports its own 1x skin and a gun - name=v_bfg/v_disint (expected v_bfg/v_disint) sizeΔ=17 gunPixels=129004 sceneNoise=3
+starting session extras
+  retry "sv_cheats 1" ran=false echo=false
+extras weapon v_flareg size 624x338 expect v_blast/v_flareg
+extras captured v_flareg name=v_blast/v_flareg sizeDelta=33 gunPixels=92916 gunSat=0.739
+extras weapon v_disint size 432x390 expect v_bfg/v_disint/v_shotg
+extras captured v_disint name=v_bfg/v_disint/v_shotg sizeDelta=16 gunPixels=140928 gunSat=0.731
+extras weapon v_handgr size 616x390 expect v_handgr/v_machn
+extras gun hide not applied to v_handgr attempt 1 gunPixels=539 sceneNoise=54
+extras gun hide not applied to v_handgr attempt 2 gunPixels=539 sceneNoise=54
+extras gun hide not applied to v_handgr attempt 3 gunPixels=0 sceneNoise=54
+extras gun hide not applied to v_handgr attempt 4 gunPixels=0 sceneNoise=54
+extras weapon pair not settled for v_handgr - recapturing gunPixels=0 textureDelta=16
+extras captured v_handgr name=v_handgr/v_machn sizeDelta=58 gunPixels=16424 gunSat=0.820
+PASS G-v_blast v_blast reports its own skin draw and is not blank - name=v_blast (expected v_blast) skinΔ=33 lastΔ=0 weaponΔ=33 neutralΔ=33 gunPixels=58181 sceneNoise=0 frame=1280x720
+PASS G-v_shotg v_shotg reports its own skin draw and is not blank - name=v_shotg (expected v_shotg) skinΔ=17 lastΔ=0 weaponΔ=35 neutralΔ=35 gunPixels=70718 sceneNoise=39 frame=1280x720
+PASS G-v_shotg2 v_shotg2 reports its own skin draw and is not blank - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=18 lastΔ=0 weaponΔ=37 neutralΔ=37 gunPixels=102800 sceneNoise=0 frame=1280x720
+PASS G-v_machn v_machn reports its own skin draw and is not blank - name=v_machn (expected v_machn) skinΔ=17 lastΔ=0 weaponΔ=37 neutralΔ=37 gunPixels=48107 sceneNoise=0 frame=1280x720
+PASS G-v_chain v_chain reports its own skin draw and is not blank - name=v_chain (expected v_chain) skinΔ=17 lastΔ=0 weaponΔ=37 neutralΔ=37 gunPixels=52475 sceneNoise=0 frame=1280x720
+PASS G-v_launch v_launch reports its own skin draw and is not blank - name=v_launch (expected v_launch) skinΔ=18 lastΔ=0 weaponΔ=36 neutralΔ=36 gunPixels=72452 sceneNoise=0 frame=1280x720
+PASS G-v_rocket v_rocket reports its own skin draw and is not blank - name=v_rocket (expected v_rocket) skinΔ=18 lastΔ=0 weaponΔ=38 neutralΔ=38 gunPixels=68377 sceneNoise=46 frame=1280x720
+PASS G-v_rail v_rail reports its own skin draw and is not blank - name=v_rail (expected v_rail) skinΔ=16 lastΔ=0 weaponΔ=36 neutralΔ=36 gunPixels=120273 sceneNoise=65 frame=1280x720
+PASS G-v_hyperb v_hyperb reports its own skin draw and is not blank - name=v_hyperb/v_shotg2 (expected v_hyperb/v_shotg2) skinΔ=17 lastΔ=0 weaponΔ=37 neutralΔ=37 gunPixels=93094 sceneNoise=0 frame=1280x720
+PASS G-v_bfg v_bfg reports its own skin draw and is not blank - name=v_bfg/v_disint (expected v_bfg/v_disint) skinΔ=16 lastΔ=0 weaponΔ=36 neutralΔ=36 gunPixels=137025 sceneNoise=70 frame=1280x720
+PASS G-v_flareg v_flareg reports its own skin draw and is not blank - name=v_blast/v_flareg (expected v_blast/v_flareg) skinΔ=33 lastΔ=0 weaponΔ=33 neutralΔ=33 gunPixels=92916 sceneNoise=0 frame=1280x720
+PASS G-v_disint v_disint reports its own skin draw and is not blank - name=v_bfg/v_disint/v_shotg (expected v_bfg/v_disint/v_shotg) skinΔ=16 lastΔ=0 weaponΔ=42 neutralΔ=42 gunPixels=140928 sceneNoise=0 frame=1280x720
+PASS G-v_handgr v_handgr reports its own skin draw and is not blank - name=v_handgr/v_machn (expected v_handgr/v_machn) skinΔ=58 lastΔ=0 weaponΔ=77 neutralΔ=77 gunPixels=16424 sceneNoise=0 frame=1280x720
+PASS D-v_shotg2-v_hyperb v_shotg2 and v_hyperb draw different frames - 130107 changed pixels (limit 1000)
+PASS D-v_bfg-v_disint v_bfg and v_disint draw different frames - 163322 changed pixels (limit 1000)
+PASS D-v_flareg-v_blast v_flareg and v_blast draw different frames - 116088 changed pixels (limit 1000)
+PASS D-v_disint-v_shotg v_disint and v_shotg draw different frames - 152001 changed pixels (limit 1000)
+PASS D-v_handgr-v_machn v_handgr and v_machn draw different frames - 64059 changed pixels (limit 1000)
+PASS X-v_flareg v_flareg replaced the slot's original art - slot v_blast clean size 592x328 is not the drawn size 624x338 (skin draws Δ 33)
+PASS X-v_disint v_disint replaced the slot's original art - slot v_shotg clean size 528x360 is not the drawn size 432x390 (skin draws Δ 16)
+PASS X-v_handgr v_handgr replaced the slot's original art - slot v_machn clean size 600x388 is not the drawn size 616x390 (skin draws Δ 58)
+PASS G-I in-game gun pixels are at least as saturated as the original-art baseline - 2x 0.770 vs 1x 0.751 (+0.019) over 823502/733986 gun pixels
