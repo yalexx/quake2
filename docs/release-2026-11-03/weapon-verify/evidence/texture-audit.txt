@@ -1,0 +1,1205 @@
+$ node scripts/texture-audit.mjs --select
+
+
+== Select the most-drawn textures
+  313 texinfo wals across demo1, demo2, demo3; 20 entries with pak9 art and a drawable world face
+   1  e1u1/support1_1          rank  1  faces  1911  (demo1 226, demo2 1396, demo3 289)  -> demo2
+   2  e1u1/flat1_2             rank  2  faces  1902  (demo1 611, demo2 316, demo3 975)  -> demo3
+   3  e1u1/metal3_3            rank  3  faces  1157  (demo1 0, demo2 920, demo3 237)  -> demo2
+   4  e1u1/ggrat4_4            rank  4  faces  1032  (demo1 192, demo2 523, demo3 317)  -> demo2
+   5  e1u1/metal2_1            rank  5  faces   977  (demo1 588, demo2 132, demo3 257)  -> demo1
+   6  e1u1/rocks19_1           rank  6  faces   943  (demo1 471, demo2 114, demo3 358)  -> demo1
+   7  e1u1/floor3_1            rank  7  faces   708  (demo1 312, demo2 142, demo3 254)  -> demo1
+   8  e1u1/metal3_5            rank  8  faces   700  (demo1 357, demo2 68, demo3 275)  -> demo1
+   9  e1u1/grnx2_9             rank  9  faces   696  (demo1 342, demo2 287, demo3 67)  -> demo1
+  10  e1u1/grate1_4            rank 10  faces   690  (demo1 184, demo2 68, demo3 438)  -> demo3
+  11  e1u1/wgrate1_4           rank 11  faces   677  (demo1 0, demo2 507, demo3 170)  -> demo2
+  12  e1u2/basic1_7            rank 12  faces   584  (demo1 146, demo2 258, demo3 180)  -> demo1  [most uses are in demo2, which draws it only on inline brush-entity models; captured in demo1]
+  13  e1u1/metal3_2            rank 14  faces   508  (demo1 114, demo2 186, demo3 208)  -> demo3
+  14  e1u1/metal1_8            rank 16  faces   415  (demo1 89, demo2 162, demo3 164)  -> demo3
+  15  e1u1/grate2_2            rank 17  faces   406  (demo1 260, demo2 12, demo3 134)  -> demo1
+  16  e1u1/sky1                rank 18  faces   404  (demo1 214, demo2 111, demo3 79)  -> demo1
+  17  e1u1/bluwter             rank 19  faces   387  (demo1 102, demo2 227, demo3 58)  -> demo2
+  18  e1u1/grate2_1            rank 20  faces   367  (demo1 116, demo2 0, demo3 251)  -> demo3
+  19  e1u1/grate2_5            rank 21  faces   327  (demo1 77, demo2 202, demo3 48)  -> demo2
+  20  e1u1/grate1_3            rank 22  faces   311  (demo1 96, demo2 123, demo3 92)  -> demo2
+  --  e1u1/FLAT1_2             rank 13  faces   508  SKIPPED: the pak holds no textures/e1u1/FLAT1_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/METAL1_5            rank 67  faces    74  SKIPPED: the pak holds no textures/e1u1/METAL1_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/GRATE1_4            rank 101  faces    37  SKIPPED: the pak holds no textures/e1u1/GRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/FLOOR3_1            rank 129  faces    22  SKIPPED: the pak holds no textures/e1u1/FLOOR3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/GGRATE9_2           rank 134  faces    17  SKIPPED: the pak holds no textures/e1u1/GGRATE9_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/GRATE2_5            rank 163  faces    10  SKIPPED: the pak holds no textures/e1u1/GRATE2_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/BOX3_1              rank 175  faces     8  SKIPPED: the pak holds no textures/e1u1/BOX3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/wGRATE1_4           rank 188  faces     7  SKIPPED: the pak holds no textures/e1u1/wGRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/BOX3_4              rank 230  faces     2  SKIPPED: the pak holds no textures/e1u1/BOX3_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/clip                rank 293  faces     0  SKIPPED: pak9 holds no textures/e1u1/clip.png
+  --  e1u1/clip_mon            rank 294  faces     0  SKIPPED: pak9 holds no textures/e1u1/clip_mon.png
+  --  e1u1/COLOR1_7            rank 295  faces     0  SKIPPED: the pak holds no textures/e1u1/COLOR1_7.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it
+  --  e1u1/hint                rank 303  faces     0  SKIPPED: pak9 holds no textures/e1u1/hint.png
+  --  e1u1/origin              rank 307  faces     0  SKIPPED: pak9 holds no textures/e1u1/origin.png
+  --  e1u3/clip                rank 312  faces     0  SKIPPED: pak9 holds no textures/e1u3/clip.png
+  --  e1u1/trigger             rank 15  faces   456  SKIPPED: not drawn on a world face in demo1/demo2/demo3 (its faces are on inline brush-entity models only -- trigger volumes and the like -- or it has none)
+
+== The face and the camera in the BSP
+  1  e1u1/support1_1          demo2  face #6248  12288 u^2  wall  eye (480 -1648 197)  yaw -90  pitch 0
+  2  e1u1/flat1_2             demo3  face #1175  13312 u^2  floor  eye (1452 1391 -792)  yaw 180  pitch 0
+  3  e1u1/metal3_3            demo2  face #6260  39424 u^2  ceiling  eye (680 -1783 -88)  yaw 180  pitch 0
+  4  e1u1/ggrat4_4            demo2  face #6231  4608 u^2  wall  eye (588 -1760 156)  yaw 0  pitch 0
+  5  e1u1/metal2_1            demo1  face #3428  51968 u^2  wall  eye (160 -608 12)  yaw 116.57  pitch 0
+  6  e1u1/rocks19_1           demo1  face #2844  24491 u^2  wall  eye (675 -379 81)  yaw -96.71  pitch -10.24
+  7  e1u1/floor3_1            demo1  face #5024  31616 u^2  floor  eye (-1956 1778 152)  yaw -90  pitch 0
+  8  e1u1/metal3_5            demo1  face #1552  36864 u^2  floor  eye (586 64 -136)  yaw 0  pitch 0
+  9  e1u1/grnx2_9             demo1  face #4512  7680 u^2  floor  eye (-1495 1530 24)  yaw 180  pitch 0
+  10  e1u1/grate1_4            demo3  face #6128  19791 u^2  wall  eye (320 -141 -466)  yaw 180  pitch -14.04
+  11  e1u1/wgrate1_4           demo2  face #6467  39424 u^2  wall  eye (176 -1312 104)  yaw 90  pitch 0
+  12  e1u2/basic1_7            demo1  face #1961  512 u^2  wall  eye (508 26 -147)  yaw 180  pitch 0
+  13  e1u1/metal3_2            demo3  face #2460  36864 u^2  floor  eye (1379 294 -8)  yaw 180  pitch 0
+  14  e1u1/metal1_8            demo3  face #594  40320 u^2  floor  eye (1776 1358 -512)  yaw 0  pitch 0
+  15  e1u1/grate2_2            demo1  face #2408  14848 u^2  ceiling  eye (249 -226 184)  yaw 180  pitch 0
+  16  e1u1/sky1                demo1  face #3548  125952 u^2  ceiling  eye (-58 1244 520)  yaw 180  pitch 0
+  17  e1u1/bluwter             demo2  face #5716  46592 u^2  floor  eye (582 -860 -108)  yaw 180  pitch 0
+  18  e1u1/grate2_1            demo3  face #5740  39936 u^2  ceiling  eye (405 -366 -312)  yaw 0  pitch 0
+  19  e1u1/grate2_5            demo2  face #204  14336 u^2  wall  eye (96 2496 160)  yaw 90  pitch 0
+  20  e1u1/grate1_3            demo2  face #101  44800 u^2  ceiling  eye (254 2524 200)  yaw 180  pitch 0
+
+{
+ "selection": {
+  "rule": "sum manifest maps[].textures[].uses per wal across demo1/demo2/demo3; ties by name; entries with no pak9 art skipped",
+  "considered": 313,
+  "entries": [
+   {
+    "index": 1,
+    "rank": 1,
+    "name": "e1u1/support1_1",
+    "wal": "textures/e1u1/support1_1.wal",
+    "uses": {
+     "demo1": 226,
+     "demo2": 1396,
+     "demo3": 289
+    },
+    "total": 1911,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 6248,
+     "area": 12288,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 1,
+      "z": 0
+     },
+     "centroid": {
+      "x": 480,
+      "y": -1776,
+      "z": 197.33
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 480,
+      "y": -1648,
+      "z": 197.33
+     },
+     "yaw": -90,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 2,
+    "rank": 2,
+    "name": "e1u1/flat1_2",
+    "wal": "textures/e1u1/flat1_2.wal",
+    "uses": {
+     "demo1": 611,
+     "demo2": 316,
+     "demo3": 975
+    },
+    "total": 1902,
+    "map": "demo3",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 8621,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 1175,
+     "area": 13312,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": 1332,
+      "y": 1390.67,
+      "z": -864
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 1452,
+      "y": 1390.67,
+      "z": -792
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 139.9
+    }
+   },
+   {
+    "index": 3,
+    "rank": 3,
+    "name": "e1u1/metal3_3",
+    "wal": "textures/e1u1/metal3_3.wal",
+    "uses": {
+     "demo1": 0,
+     "demo2": 920,
+     "demo3": 237
+    },
+    "total": 1157,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 6260,
+     "area": 39424,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+     },
+     "centroid": {
+      "x": 530.29,
+      "y": -1782.86,
+      "z": -32
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 680.29,
+      "y": -1782.86,
+      "z": -88
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "ceiling",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 4,
+    "rank": 4,
+    "name": "e1u1/ggrat4_4",
+    "wal": "textures/e1u1/ggrat4_4.wal",
+    "uses": {
+     "demo1": 192,
+     "demo2": 523,
+     "demo3": 317
+    },
+    "total": 1032,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 6231,
+     "area": 4608,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": -1,
+      "y": 0,
+      "z": 0
+     },
+     "centroid": {
+      "x": 716,
+      "y": -1760,
+      "z": 156
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 588,
+      "y": -1760,
+      "z": 156
+     },
+     "yaw": 0,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 5,
+    "rank": 5,
+    "name": "e1u1/metal2_1",
+    "wal": "textures/e1u1/metal2_1.wal",
+    "uses": {
+     "demo1": 588,
+     "demo2": 132,
+     "demo3": 257
+    },
+    "total": 977,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 3428,
+     "area": 51968,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": -1,
+      "z": 0
+     },
+     "centroid": {
+      "x": 112,
+      "y": -512,
+      "z": 12
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 160,
+      "y": -608,
+      "z": 12
+     },
+     "yaw": 116.57,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 107.3
+    }
+   },
+   {
+    "index": 6,
+    "rank": 6,
+    "name": "e1u1/rocks19_1",
+    "wal": "textures/e1u1/rocks19_1.wal",
+    "uses": {
+     "demo1": 471,
+     "demo2": 114,
+     "demo3": 358
+    },
+    "total": 943,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 2844,
+     "area": 24490.9,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0.11,
+      "y": 0.98,
+      "z": -0.18
+     },
+     "centroid": {
+      "x": 660,
+      "y": -504,
+      "z": 104
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 674.72,
+      "y": -378.9,
+      "z": 81.25
+     },
+     "yaw": -96.71,
+     "pitch": -10.24,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 7,
+    "rank": 7,
+    "name": "e1u1/floor3_1",
+    "wal": "textures/e1u1/floor3_1.wal",
+    "uses": {
+     "demo1": 312,
+     "demo2": 142,
+     "demo3": 254
+    },
+    "total": 708,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 5024,
+     "area": 31616,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": -1956.44,
+      "y": 1628.44,
+      "z": 96
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": -1956.44,
+      "y": 1778.44,
+      "z": 152
+     },
+     "yaw": -90,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 8,
+    "rank": 8,
+    "name": "e1u1/metal3_5",
+    "wal": "textures/e1u1/metal3_5.wal",
+    "uses": {
+     "demo1": 357,
+     "demo2": 68,
+     "demo3": 275
+    },
+    "total": 700,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 1552,
+     "area": 36864,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": 736,
+      "y": 64,
+      "z": -192
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 586,
+      "y": 64,
+      "z": -136
+     },
+     "yaw": 0,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 9,
+    "rank": 9,
+    "name": "e1u1/grnx2_9",
+    "wal": "textures/e1u1/grnx2_9.wal",
+    "uses": {
+     "demo1": 342,
+     "demo2": 287,
+     "demo3": 67
+    },
+    "total": 696,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 4512,
+     "area": 7680,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": -1644.8,
+      "y": 1529.6,
+      "z": -32
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": -1494.8,
+      "y": 1529.6,
+      "z": 24
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 10,
+    "rank": 10,
+    "name": "e1u1/grate1_4",
+    "wal": "textures/e1u1/grate1_4.wal",
+    "uses": {
+     "demo1": 184,
+     "demo2": 68,
+     "demo3": 438
+    },
+    "total": 690,
+    "map": "demo3",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 8621,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 6128,
+     "area": 19790.9,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0.97,
+      "y": 0,
+      "z": -0.24
+     },
+     "centroid": {
+      "x": 195.33,
+      "y": -141.33,
+      "z": -434.67
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 319.51,
+      "y": -141.33,
+      "z": -465.71
+     },
+     "yaw": 180,
+     "pitch": -14.04,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 11,
+    "rank": 11,
+    "name": "e1u1/wgrate1_4",
+    "wal": "textures/e1u1/wgrate1_4.wal",
+    "uses": {
+     "demo1": 0,
+     "demo2": 507,
+     "demo3": 170
+    },
+    "total": 677,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 6467,
+     "area": 39424,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": -1,
+      "z": 0
+     },
+     "centroid": {
+      "x": 176,
+      "y": -1184,
+      "z": 104
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 176,
+      "y": -1312,
+      "z": 104
+     },
+     "yaw": 90,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 12,
+    "rank": 12,
+    "name": "e1u2/basic1_7",
+    "wal": "textures/e1u2/basic1_7.wal",
+    "uses": {
+     "demo1": 146,
+     "demo2": 258,
+     "demo3": 180
+    },
+    "total": 584,
+    "map": "demo1",
+    "mapNote": "most uses are in demo2, which draws it only on inline brush-entity models; captured in demo1",
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 1961,
+     "area": 512,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 1,
+      "y": 0,
+      "z": 0
+     },
+     "centroid": {
+      "x": 412,
+      "y": 25.87,
+      "z": -147.2
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 508,
+      "y": 25.87,
+      "z": -147.2
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 96
+    }
+   },
+   {
+    "index": 13,
+    "rank": 14,
+    "name": "e1u1/metal3_2",
+    "wal": "textures/e1u1/metal3_2.wal",
+    "uses": {
+     "demo1": 114,
+     "demo2": 186,
+     "demo3": 208
+    },
+    "total": 508,
+    "map": "demo3",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 8621,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 2460,
+     "area": 36864,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": 1228.8,
+      "y": 294.4,
+      "z": -64
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 1378.8,
+      "y": 294.4,
+      "z": -8
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 14,
+    "rank": 16,
+    "name": "e1u1/metal1_8",
+    "wal": "textures/e1u1/metal1_8.wal",
+    "uses": {
+     "demo1": 89,
+     "demo2": 162,
+     "demo3": 164
+    },
+    "total": 415,
+    "map": "demo3",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 8621,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 594,
+     "area": 40320,
+     "flags": 0,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": 1926,
+      "y": 1358,
+      "z": -568
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 1776,
+      "y": 1358,
+      "z": -512
+     },
+     "yaw": 0,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 15,
+    "rank": 17,
+    "name": "e1u1/grate2_2",
+    "wal": "textures/e1u1/grate2_2.wal",
+    "uses": {
+     "demo1": 260,
+     "demo2": 12,
+     "demo3": 134
+    },
+    "total": 406,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 2408,
+     "area": 14848,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+     },
+     "centroid": {
+      "x": 99.05,
+      "y": -226.29,
+      "z": 240
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 249.05,
+      "y": -226.29,
+      "z": 184
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "ceiling",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 16,
+    "rank": 18,
+    "name": "e1u1/sky1",
+    "wal": "textures/e1u1/sky1.wal",
+    "uses": {
+     "demo1": 214,
+     "demo2": 111,
+     "demo3": 79
+    },
+    "total": 404,
+    "map": "demo1",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7393,
+     "matching": 40,
+     "isSky": true
+    },
+    "face": {
+     "index": 3548,
+     "area": 125952,
+     "flags": 5,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+     },
+     "centroid": {
+      "x": -208,
+      "y": 1244.33,
+      "z": 576
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": -58,
+      "y": 1244.33,
+      "z": 520
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "ceiling",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 17,
+    "rank": 19,
+    "name": "e1u1/bluwter",
+    "wal": "textures/e1u1/bluwter.wal",
+    "uses": {
+     "demo1": 102,
+     "demo2": 227,
+     "demo3": 58
+    },
+    "total": 387,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 5716,
+     "area": 46592,
+     "flags": 41,
+     "side": 0,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": 1
+     },
+     "centroid": {
+      "x": 432,
+      "y": -860.44,
+      "z": -164
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 582,
+      "y": -860.44,
+      "z": -108
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "floor",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 18,
+    "rank": 20,
+    "name": "e1u1/grate2_1",
+    "wal": "textures/e1u1/grate2_1.wal",
+    "uses": {
+     "demo1": 116,
+     "demo2": 0,
+     "demo3": 251
+    },
+    "total": 367,
+    "map": "demo3",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 8621,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 5740,
+     "area": 39936,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+     },
+     "centroid": {
+      "x": 555.43,
+      "y": -365.71,
+      "z": -256
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 405.43,
+      "y": -365.71,
+      "z": -312
+     },
+     "yaw": 0,
+     "pitch": 0,
+     "kind": "ceiling",
+     "distance": 160.1
+    }
+   },
+   {
+    "index": 19,
+    "rank": 21,
+    "name": "e1u1/grate2_5",
+    "wal": "textures/e1u1/grate2_5.wal",
+    "uses": {
+     "demo1": 77,
+     "demo2": 202,
+     "demo3": 48
+    },
+    "total": 327,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 204,
+     "area": 14336,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": -1,
+      "z": 0
+     },
+     "centroid": {
+      "x": 96,
+      "y": 2624,
+      "z": 160
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 96,
+      "y": 2496,
+      "z": 160
+     },
+     "yaw": 90,
+     "pitch": 0,
+     "kind": "wall",
+     "distance": 128
+    }
+   },
+   {
+    "index": 20,
+    "rank": 22,
+    "name": "e1u1/grate1_3",
+    "wal": "textures/e1u1/grate1_3.wal",
+    "uses": {
+     "demo1": 96,
+     "demo2": 123,
+     "demo3": 92
+    },
+    "total": 311,
+    "map": "demo2",
+    "mapNote": null,
+    "faceScan": {
+     "worldFaces": 7967,
+     "matching": 40,
+     "isSky": false
+    },
+    "face": {
+     "index": 101,
+     "area": 44800,
+     "flags": 0,
+     "side": 1,
+     "normal": {
+      "x": 0,
+      "y": 0,
+      "z": -1
+     },
+     "centroid": {
+      "x": 104,
+      "y": 2524,
+      "z": 256
+     }
+    },
+    "camera": {
+     "origin": {
+      "x": 254,
+      "y": 2524,
+      "z": 200
+     },
+     "yaw": 180,
+     "pitch": 0,
+     "kind": "ceiling",
+     "distance": 160.1
+    }
+   }
+  ],
+  "skipped": [
+   {
+    "name": "e1u1/FLAT1_2",
+    "wal": "textures/e1u1/FLAT1_2.wal",
+    "rank": 13,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 508
+    },
+    "total": 508,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/FLAT1_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/trigger",
+    "wal": "textures/e1u1/trigger.wal",
+    "rank": 15,
+    "uses": {
+     "demo1": 156,
+     "demo2": 154,
+     "demo3": 146
+    },
+    "total": 456,
+    "kind": "no-drawn-world-face",
+    "why": "not drawn on a world face in demo1/demo2/demo3 (its faces are on inline brush-entity models only -- trigger volumes and the like -- or it has none)"
+   },
+   {
+    "name": "e1u1/METAL1_5",
+    "wal": "textures/e1u1/METAL1_5.wal",
+    "rank": 67,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 74
+    },
+    "total": 74,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/METAL1_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/GRATE1_4",
+    "wal": "textures/e1u1/GRATE1_4.wal",
+    "rank": 101,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 37
+    },
+    "total": 37,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/GRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/FLOOR3_1",
+    "wal": "textures/e1u1/FLOOR3_1.wal",
+    "rank": 129,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 22
+    },
+    "total": 22,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/FLOOR3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/GGRATE9_2",
+    "wal": "textures/e1u1/GGRATE9_2.wal",
+    "rank": 134,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 17
+    },
+    "total": 17,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/GGRATE9_2.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/GRATE2_5",
+    "wal": "textures/e1u1/GRATE2_5.wal",
+    "rank": 163,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 10
+    },
+    "total": 10,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/GRATE2_5.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/BOX3_1",
+    "wal": "textures/e1u1/BOX3_1.wal",
+    "rank": 175,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 8
+    },
+    "total": 8,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/BOX3_1.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/wGRATE1_4",
+    "wal": "textures/e1u1/wGRATE1_4.wal",
+    "rank": 188,
+    "uses": {
+     "demo1": 0,
+     "demo2": 3,
+     "demo3": 4
+    },
+    "total": 7,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/wGRATE1_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/BOX3_4",
+    "wal": "textures/e1u1/BOX3_4.wal",
+    "rank": 230,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 2
+    },
+    "total": 2,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/BOX3_4.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/clip",
+    "wal": "textures/e1u1/clip.wal",
+    "rank": 293,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "pak9 holds no textures/e1u1/clip.png"
+   },
+   {
+    "name": "e1u1/clip_mon",
+    "wal": "textures/e1u1/clip_mon.wal",
+    "rank": 294,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "pak9 holds no textures/e1u1/clip_mon.png"
+   },
+   {
+    "name": "e1u1/COLOR1_7",
+    "wal": "textures/e1u1/COLOR1_7.wal",
+    "rank": 295,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "the pak holds no textures/e1u1/COLOR1_7.wal (a case-variant texinfo spelling), so the 4x pass drew no picture for it"
+   },
+   {
+    "name": "e1u1/hint",
+    "wal": "textures/e1u1/hint.wal",
+    "rank": 303,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "pak9 holds no textures/e1u1/hint.png"
+   },
+   {
+    "name": "e1u1/origin",
+    "wal": "textures/e1u1/origin.wal",
+    "rank": 307,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "pak9 holds no textures/e1u1/origin.png"
+   },
+   {
+    "name": "e1u3/clip",
+    "wal": "textures/e1u3/clip.wal",
+    "rank": 312,
+    "uses": {
+     "demo1": 0,
+     "demo2": 0,
+     "demo3": 0
+    },
+    "total": 0,
+    "kind": "no-pak9-art",
+    "why": "pak9 holds no textures/e1u3/clip.png"
+   }
+  ]
+ }
+}
+
+
+[exit 0, 387 ms]

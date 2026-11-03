@@ -1,0 +1,1367 @@
+{
+  "at": "2026-11-03T18:32:15.315Z",
+  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-t9js74ra",
+  "node": "v24.22.1",
+  "url": "http://127.0.0.1:4391/apps/quake2/",
+  "server": null,
+  "chrome": {
+    "path": "/usr/bin/google-chrome",
+    "debuggingPort": 36913,
+    "headless": true,
+    "profile": "/tmp/q2mobile-chrome-Iqu5KK"
+  },
+  "checks": [
+    {
+      "name": "served page answers 200",
+      "pass": true,
+      "detail": {
+        "status": 200,
+        "url": "http://127.0.0.1:4391/apps/quake2/index.html"
+      },
+      "at": "2026-11-03T18:32:15.508Z"
+    },
+    {
+      "name": "touch control layer present in the served page",
+      "pass": true,
+      "detail": "a #mobile-controls element; the pre-touch base has none",
+      "at": "2026-11-03T18:32:15.509Z"
+    },
+    {
+      "name": "touch control script is loaded",
+      "pass": true,
+      "detail": "a <script src=mobile-controls.js>",
+      "at": "2026-11-03T18:32:15.509Z"
+    },
+    {
+      "name": "large FIRE control present",
+      "pass": true,
+      "detail": "a #mc-fire element",
+      "at": "2026-11-03T18:32:15.509Z"
+    },
+    {
+      "name": "portrait rotate guide present",
+      "pass": true,
+      "detail": "a #rotate-overlay element",
+      "at": "2026-11-03T18:32:15.509Z"
+    },
+    {
+      "name": "landscape guide has an action",
+      "pass": true,
+      "detail": "a #rotate-action button",
+      "at": "2026-11-03T18:32:15.509Z"
+    },
+    {
+      "name": "first-show hint appears with the touch layer",
+      "pass": true,
+      "detail": "Left stick moves · drag the right side to look · FIRE shoots · JUMP & USE beside it",
+      "at": "2026-11-03T18:32:24.457Z"
+    },
+    {
+      "name": "first-show hint names look and fire",
+      "pass": true,
+      "detail": "Left stick moves · drag the right side to look · FIRE shoots · JUMP & USE beside it",
+      "at": "2026-11-03T18:32:24.458Z"
+    },
+    {
+      "name": "no settings control floats over the play layer",
+      "pass": true,
+      "detail": "no chip and no visible lighting control over the game",
+      "at": "2026-11-03T18:32:24.522Z"
+    },
+    {
+      "name": "the touch layer is live over the running game",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:45.556Z"
+    },
+    {
+      "name": "touch presentation is active on a coarse-pointer phone",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:46.107Z"
+    },
+    {
+      "name": "no page scroll and no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 844,
+          "h": 390
+        },
+        "inner": {
+          "w": 844,
+          "h": 390
+        }
+      },
+      "at": "2026-11-03T18:32:46.107Z"
+    },
+    {
+      "name": "canvas fills the usable viewport (letterboxed to the engine aspect)",
+      "pass": true,
+      "detail": {
+        "x": 75.15625,
+        "y": 0,
+        "w": 693.671875,
+        "h": 390,
+        "right": 768.828125,
+        "bottom": 390
+      },
+      "at": "2026-11-03T18:32:46.107Z"
+    },
+    {
+      "name": "the pointer-lock prompt is hidden on touch",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:46.107Z"
+    },
+    {
+      "name": "the portrait guide is not shown in landscape",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:46.107Z"
+    },
+    {
+      "name": "the top row carries PAD, MENU and Full screen at 844x390",
+      "pass": true,
+      "detail": [
+        {
+          "id": "PAD",
+          "left": 10,
+          "right": 62,
+          "top": 8,
+          "bottom": 52,
+          "w": 52,
+          "h": 44
+        },
+        {
+          "id": "☰MENU",
+          "left": 70,
+          "right": 116,
+          "top": 8,
+          "bottom": 52,
+          "w": 46,
+          "h": 44
+        },
+        {
+          "id": "⛶Full screen",
+          "left": 125,
+          "right": 231.2,
+          "top": 8,
+          "bottom": 52,
+          "w": 106.15625,
+          "h": 44
+        }
+      ],
+      "at": "2026-11-03T18:32:54.583Z"
+    },
+    {
+      "name": "PAD, MENU, Full screen, the weapon pair and the hint do not overlap",
+      "pass": true,
+      "detail": "no pair of the six control boxes intersects",
+      "at": "2026-11-03T18:32:54.584Z"
+    },
+    {
+      "name": "the first-show hint sits below the top control row",
+      "pass": true,
+      "detail": {
+        "hintTop": 64,
+        "rowBottom": 52
+      },
+      "at": "2026-11-03T18:32:54.584Z"
+    },
+    {
+      "name": "FIRE is the large primary action (>= 72 px)",
+      "pass": true,
+      "detail": {
+        "w": 78,
+        "h": 78
+      },
+      "at": "2026-11-03T18:32:54.585Z"
+    },
+    {
+      "name": "FIRE is larger than every secondary control",
+      "pass": true,
+      "detail": [
+        78,
+        58,
+        58,
+        46,
+        46,
+        46,
+        52
+      ],
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "every touch target is at least 44 px",
+      "pass": true,
+      "detail": [
+        {
+          "id": "◎FIRE",
+          "w": 78,
+          "h": 78
+        },
+        {
+          "id": "↑JUMP",
+          "w": 58,
+          "h": 58
+        },
+        {
+          "id": "◫USE",
+          "w": 58,
+          "h": 58
+        },
+        {
+          "id": "‹WPN",
+          "w": 46,
+          "h": 46
+        },
+        {
+          "id": "›WPN",
+          "w": 46,
+          "h": 46
+        },
+        {
+          "id": "☰MENU",
+          "w": 46,
+          "h": 44
+        },
+        {
+          "id": "PAD",
+          "w": 52,
+          "h": 44
+        }
+      ],
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "JUMP and USE sit inside FIRE's thumb arc",
+      "pass": true,
+      "detail": {
+        "jump": 81,
+        "use": 81
+      },
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "weapon cycle is small and above the firing arc",
+      "pass": true,
+      "detail": {
+        "prev": {
+          "x": 732,
+          "y": 128,
+          "left": 732,
+          "top": 128,
+          "right": 778,
+          "bottom": 174,
+          "w": 46,
+          "h": 46,
+          "display": "flex",
+          "text": "‹WPN",
+          "aria": "Previous weapon"
+        },
+        "next": {
+          "x": 784,
+          "y": 128,
+          "left": 784,
+          "top": 128,
+          "right": 830,
+          "bottom": 174,
+          "w": 46,
+          "h": 46,
+          "display": "flex",
+          "text": "›WPN",
+          "aria": "Next weapon"
+        },
+        "useTop": 186
+      },
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "pause/menu is small and out of the aiming area",
+      "pass": true,
+      "detail": {
+        "w": 46,
+        "top": 8
+      },
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "all controls fit inside the viewport",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:54.586Z"
+    },
+    {
+      "name": "no control covers the engine status-bar band",
+      "pass": true,
+      "detail": {
+        "lowest": 334,
+        "viewportBottom": 390
+      },
+      "at": "2026-11-03T18:32:54.587Z"
+    },
+    {
+      "name": "the right side stays mostly free for dragging to look",
+      "pass": true,
+      "detail": {
+        "coverage": 0.123
+      },
+      "at": "2026-11-03T18:32:54.587Z"
+    },
+    {
+      "name": "the look area is not covered by a control",
+      "pass": true,
+      "detail": [
+        "canvas",
+        "touch-ui mc-live",
+        "HTML"
+      ],
+      "at": "2026-11-03T18:32:56.182Z"
+    },
+    {
+      "name": "every control carries a visible label and an accessible name",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:32:56.183Z"
+    },
+    {
+      "name": "the full-screen control is finger-sized and tappable",
+      "pass": true,
+      "detail": {
+        "box": {
+          "x": 125,
+          "y": 8,
+          "left": 125,
+          "top": 8,
+          "right": 231.15625,
+          "bottom": 52,
+          "w": 106.15625,
+          "h": 44,
+          "display": "flex",
+          "text": "⛶Full screen",
+          "aria": "Enter full screen"
+        },
+        "hit": {
+          "id": "fullscreen-button",
+          "display": "flex"
+        }
+      },
+      "at": "2026-11-03T18:32:56.241Z"
+    },
+    {
+      "name": "safe-area insets keep the controls off the notch and home indicator",
+      "pass": true,
+      "detail": {
+        "inner": {
+          "w": 844,
+          "h": 390
+        },
+        "stick": {
+          "x": 58,
+          "y": 176,
+          "left": 58,
+          "top": 176,
+          "right": 196,
+          "bottom": 314,
+          "w": 138,
+          "h": 138,
+          "display": "block",
+          "text": "",
+          "aria": "Movement thumbstick"
+        },
+        "fire": {
+          "x": 708,
+          "y": 236,
+          "left": 708,
+          "top": 236,
+          "right": 786,
+          "bottom": 314,
+          "w": 78,
+          "h": 78,
+          "display": "flex",
+          "text": "◎FIRE",
+          "aria": "Fire"
+        },
+        "canvas": {
+          "x": 114.28125,
+          "y": 24,
+          "w": 615.40625,
+          "h": 346,
+          "right": 729.6875,
+          "bottom": 370
+        }
+      },
+      "at": "2026-11-03T18:33:02.554Z"
+    },
+    {
+      "name": "the hint clears after the first control use",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:33:10.102Z"
+    },
+    {
+      "name": "the weapon buttons press the engine's weapon keys",
+      "pass": true,
+      "detail": [
+        {
+          "type": "down",
+          "key": "[",
+          "synthetic": true
+        },
+        {
+          "type": "up",
+          "key": "[",
+          "synthetic": true
+        },
+        {
+          "type": "down",
+          "key": "]",
+          "synthetic": true
+        },
+        {
+          "type": "up",
+          "key": "]",
+          "synthetic": true
+        }
+      ],
+      "at": "2026-11-03T18:33:23.299Z"
+    },
+    {
+      "name": "weapon switching leaves the game in control",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:33:23.965Z"
+    },
+    {
+      "name": "FIRE does not turn the view",
+      "pass": true,
+      "detail": {
+        "before": 135,
+        "after": 135
+      },
+      "at": "2026-11-03T18:33:34.173Z"
+    },
+    {
+      "name": "JUMP lifts the player and gravity returns it",
+      "pass": true,
+      "detail": {
+        "start": 46.1875,
+        "peak": 80.4375,
+        "landed": 46.1875
+      },
+      "at": "2026-11-03T18:33:49.011Z"
+    },
+    {
+      "name": "multi-touch: move, look and fire together",
+      "pass": true,
+      "detail": {
+        "moved": 208.1,
+        "yaw": 31.2,
+        "fired": [
+          160,
+          363
+        ],
+        "dead": false
+      },
+      "at": "2026-11-03T18:34:15.721Z"
+    },
+    {
+      "name": "FIRE produces an engine effect (a new game entity)",
+      "pass": true,
+      "detail": {
+        "singlePress": [],
+        "heldMultitouch": [
+          160,
+          363
+        ]
+      },
+      "at": "2026-11-03T18:34:15.722Z"
+    },
+    {
+      "name": "a touch drag on the right changes yaw",
+      "pass": true,
+      "detail": {
+        "from": 166.1517333984375,
+        "to": -141.844482421875
+      },
+      "at": "2026-11-03T18:34:38.700Z"
+    },
+    {
+      "name": "a vertical touch drag changes pitch",
+      "pass": true,
+      "detail": {
+        "from": 0,
+        "to": -31.2835693359375
+      },
+      "at": "2026-11-03T18:34:53.686Z"
+    },
+    {
+      "name": "the thumbstick moves the player",
+      "pass": true,
+      "detail": {
+        "from": {
+          "x": 128.0625,
+          "y": -319.9375,
+          "z": 46.1875
+        },
+        "to": {
+          "x": 72.1875,
+          "y": -264.0625,
+          "z": 47.345001220703125
+        }
+      },
+      "at": "2026-11-03T18:35:20.591Z"
+    },
+    {
+      "name": "the pause control opens the menu",
+      "pass": true,
+      "detail": {
+        "menuOpen": true,
+        "keyDest": 3
+      },
+      "at": "2026-11-03T18:35:41.042Z"
+    },
+    {
+      "name": "the touch pad is put away behind the menu",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:35:42.052Z"
+    },
+    {
+      "name": "no horizontal overflow with the menu open",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 844,
+          "h": 390
+        },
+        "inner": {
+          "w": 844,
+          "h": 390
+        }
+      },
+      "at": "2026-11-03T18:35:42.052Z"
+    },
+    {
+      "name": "the landscape menu panel fits inside the viewport",
+      "pass": true,
+      "detail": {
+        "x": 16,
+        "y": 10,
+        "left": 16,
+        "top": 10,
+        "right": 448,
+        "bottom": 380,
+        "w": 432,
+        "h": 370,
+        "display": "block",
+        "text": "QuakeII BaseQ2 · single player GAME› MULTIPLAYER› OPTIONS› VIDEO› QUIT› GAME easynew game mediumnew game hardnew game hard+new game load gameF9 save gameF6 credits› New Game starts demo1 at the chosen skill. The engine's load/save menus are slot lists this page cannot draw; F9 and F6 are the engine's own quick-load and quick-save keys. MULTIPLAYER join network server start network server player setup customize controls This box build is single player: its network menus are in the engine but networking is not part of this app. VIDEO renderer[OpenGL ES3] video mode1366x768 brightness1.6 field of view90 color intensity2.0 overbrights1.3 color lightyes ui scale1x (fixed) fullscreenno vertical syncno aniso filteringoff multisamplingoff texture filtertrilinear reset to default applyno changes game modeoff video mode is the engine's own r_mode list (its 33 modes, then auto and custom); applying restarts the level at that mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). The engine's custom ui scale and the 91–120° field-of-view range are not offered; see docs/presentation-fixes.md. game mode (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop it allows the Window Management API it also blacks out each additional display. Esc leaves full screen and the mode. It is not the engine's own fullscreen row above, which the engine applies on its next start. OPTIONS effects volume0.7 OGG volume0.7 OGG musicdisabled OGG shuffledefault sound backendsdl mouse speed6.0 always runyes invert mouseno lookstrafeno free lookyes crosshaircross pause on minimizedyes customize controls reset defaults go to consolehidden in this app LIGHTING Off Performance High Raster lighting · Performance · no ray tracing Off returns every light to the engine's original shading. The choice is kept for the next visit. applyno changes Applying restarts the level with the new values; the engine reads them from its own start-up line, not from a visible console. The engine's own menu applies each row immediately; this page needs the apply control because it has only the start-up line. The gamepad row is absent because no gamepad is connected (the engine hides it too). CREDITS Quake II · id Software, 1997 Programming: John Carmack, Michael Abrash, John Cash Design: Tim Willits, John Romero, Sandy Petersen Art: Adrian Carmack, Kevin Cloud, Paul Steed Music: Sonic Mayhem · Sound: Nine Inch Nails Engine: Yamagi Quake II (Qwasm2 WebAssembly build) ↑ ↓ selectEnter openEsc back Resume Back",
+        "aria": null
+      },
+      "at": "2026-11-03T18:35:43.015Z"
+    },
+    {
+      "name": "the VIDEO row is tappable (>= 44 px)",
+      "pass": true,
+      "detail": {
+        "h": 44
+      },
+      "at": "2026-11-03T18:35:44.032Z"
+    },
+    {
+      "name": "a VIDEO settings row is tappable (>= 44 px)",
+      "pass": true,
+      "detail": {
+        "value": "1.6",
+        "index": "15",
+        "h": 44,
+        "x": 232,
+        "y": 195
+      },
+      "at": "2026-11-03T18:35:53.812Z"
+    },
+    {
+      "name": "a VIDEO row changes a cvar by tap",
+      "pass": true,
+      "detail": {
+        "before": "1.6",
+        "after": "1.7",
+        "hint": "1 change"
+      },
+      "at": "2026-11-03T18:36:01.597Z"
+    },
+    {
+      "name": "the game-mode row is finger-sized and tappable",
+      "pass": true,
+      "detail": {
+        "h": 44,
+        "w": 390,
+        "x": 37,
+        "right": 427,
+        "top": 173,
+        "bottom": 217,
+        "action": "game-mode",
+        "inner": [
+          844,
+          390
+        ]
+      },
+      "at": "2026-11-03T18:36:02.738Z"
+    },
+    {
+      "name": "the settings menu carries the three lighting modes at 844x390",
+      "pass": true,
+      "detail": [
+        {
+          "id": "off",
+          "w": 128.7,
+          "h": 44
+        },
+        {
+          "id": "performance",
+          "w": 129.7,
+          "h": 44
+        },
+        {
+          "id": "high",
+          "w": 129.7,
+          "h": 44
+        }
+      ],
+      "at": "2026-11-03T18:36:22.977Z"
+    },
+    {
+      "name": "a lighting tap inside the menu changes the RTX status",
+      "pass": true,
+      "detail": {
+        "before": {
+          "text": "Raster lighting · Performance · no ray tracing",
+          "mode": 1
+        },
+        "after": {
+          "text": "Raster lighting · High · no ray tracing",
+          "mode": 2
+        }
+      },
+      "at": "2026-11-03T18:36:38.673Z"
+    },
+    {
+      "name": "the Off lighting mode is applied from the menu",
+      "pass": true,
+      "detail": {
+        "text": "Original lighting",
+        "mode": 0
+      },
+      "at": "2026-11-03T18:36:43.135Z"
+    },
+    {
+      "name": "an OPTIONS row cycles a cvar by tap",
+      "pass": true,
+      "detail": {
+        "before": "0.7",
+        "after": "0.8",
+        "hint": "3 changes"
+      },
+      "at": "2026-11-03T18:36:56.396Z"
+    },
+    {
+      "name": "the OPTIONS apply control is finger-sized",
+      "pass": true,
+      "detail": {
+        "x": 232,
+        "y": 194.65625,
+        "h": 44
+      },
+      "at": "2026-11-03T18:36:57.502Z"
+    },
+    {
+      "name": "Apply carries the changed cvar on the start-up line",
+      "pass": true,
+      "detail": {
+        "value": "0.8",
+        "search": "?+set&skill&1&+map&demo1&+set&vid_gamma&1.7&+set&s_volume&0.8&+set&ogg_enable&1"
+      },
+      "at": "2026-11-03T18:37:04.639Z"
+    },
+    {
+      "name": "the OPTIONS reset control is finger-sized",
+      "pass": true,
+      "detail": {
+        "x": 232,
+        "y": 195,
+        "h": 44
+      },
+      "at": "2026-11-03T18:37:29.811Z"
+    },
+    {
+      "name": "Reset defaults carries the default on the start-up line",
+      "pass": true,
+      "detail": {
+        "search": "?+set&skill&1&+map&demo1&+set&vid_gamma&1.7&+set&s_volume&0.7&+set&ogg_enable&0"
+      },
+      "at": "2026-11-03T18:37:34.101Z"
+    },
+    {
+      "name": "the pad can be hidden and the choice is stored",
+      "pass": true,
+      "detail": {
+        "actions": "none",
+        "stick": "none",
+        "toggle": "flex",
+        "stored": "off"
+      },
+      "at": "2026-11-03T18:37:50.871Z"
+    },
+    {
+      "name": "the hidden choice survives a reload",
+      "pass": true,
+      "detail": {
+        "actions": "none",
+        "toggle": "flex",
+        "stored": "off"
+      },
+      "at": "2026-11-03T18:38:04.559Z"
+    },
+    {
+      "name": "the pad comes back and the choice is stored",
+      "pass": true,
+      "detail": {
+        "actions": "block",
+        "stored": "on"
+      },
+      "at": "2026-11-03T18:38:08.220Z"
+    },
+    {
+      "name": "the pad is on for the remaining measurements",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:38:09.244Z"
+    },
+    {
+      "name": "932x430: the on-screen pad is available",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:38:18.116Z"
+    },
+    {
+      "name": "932x430: no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 932,
+          "h": 430
+        },
+        "inner": {
+          "w": 932,
+          "h": 430
+        }
+      },
+      "at": "2026-11-03T18:38:18.872Z"
+    },
+    {
+      "name": "932x430: the canvas fits the viewport",
+      "pass": true,
+      "detail": {
+        "x": 83.578125,
+        "y": 0,
+        "w": 764.8125,
+        "h": 430,
+        "right": 848.390625,
+        "bottom": 430
+      },
+      "at": "2026-11-03T18:38:18.872Z"
+    },
+    {
+      "name": "932x430: the touch pad is live in landscape",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:38:18.872Z"
+    },
+    {
+      "name": "932x430: FIRE stays large and inside the viewport",
+      "pass": true,
+      "detail": {
+        "x": 840,
+        "y": 296,
+        "left": 840,
+        "top": 296,
+        "right": 918,
+        "bottom": 374,
+        "w": 78,
+        "h": 78,
+        "display": "flex",
+        "text": "◎FIRE",
+        "aria": "Fire"
+      },
+      "at": "2026-11-03T18:38:19.026Z"
+    },
+    {
+      "name": "932x430: the lighting modes are finger-sized and fit the viewport",
+      "pass": true,
+      "detail": [
+        {
+          "id": "off",
+          "w": 128.7,
+          "h": 44
+        },
+        {
+          "id": "performance",
+          "w": 129.7,
+          "h": 44
+        },
+        {
+          "id": "high",
+          "w": 129.7,
+          "h": 44
+        }
+      ],
+      "at": "2026-11-03T18:38:33.517Z"
+    },
+    {
+      "name": "portrait: the rotate guide is shown",
+      "pass": true,
+      "detail": {
+        "portrait": true,
+        "display": "flex"
+      },
+      "at": "2026-11-03T18:38:46.339Z"
+    },
+    {
+      "name": "portrait: the guide says to rotate the device",
+      "pass": true,
+      "detail": "↻ Rotate your device Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls. Use landscape If the screen does not turn, use your device's rotation setting.",
+      "at": "2026-11-03T18:38:46.339Z"
+    },
+    {
+      "name": "portrait: the game pad is put away but pause stays reachable",
+      "pass": true,
+      "detail": {
+        "stick": "none",
+        "actions": "none",
+        "pause": "flex",
+        "toggle": "flex"
+      },
+      "at": "2026-11-03T18:38:46.407Z"
+    },
+    {
+      "name": "portrait: no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 390,
+          "h": 844
+        },
+        "inner": {
+          "w": 390,
+          "h": 844
+        }
+      },
+      "at": "2026-11-03T18:38:46.407Z"
+    },
+    {
+      "name": "portrait: the menu opens and the guide makes way",
+      "pass": true,
+      "detail": {
+        "menu": true,
+        "guide": "none"
+      },
+      "at": "2026-11-03T18:38:54.041Z"
+    },
+    {
+      "name": "portrait: the menu has no horizontal overflow",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 390,
+          "h": 844
+        },
+        "inner": {
+          "w": 390,
+          "h": 844
+        }
+      },
+      "at": "2026-11-03T18:38:54.041Z"
+    },
+    {
+      "name": "portrait: the menu panel fits inside the viewport",
+      "pass": true,
+      "detail": {
+        "x": 16,
+        "y": 206.5,
+        "left": 16,
+        "top": 206.5,
+        "right": 374,
+        "bottom": 637.5,
+        "w": 358,
+        "h": 431,
+        "display": "block",
+        "text": "QuakeII BaseQ2 · single player GAME› MULTIPLAYER› OPTIONS› VIDEO› QUIT› GAME easynew game mediumnew game hardnew game hard+new game load gameF9 save gameF6 credits› New Game starts demo1 at the chosen skill. The engine's load/save menus are slot lists this page cannot draw; F9 and F6 are the engine's own quick-load and quick-save keys. MULTIPLAYER join network server start network server player setup customize controls This box build is single player: its network menus are in the engine but networking is not part of this app. VIDEO renderer[OpenGL ES3] video mode1366x768 brightness1.7 field of view90 color intensity2.0 overbrights1.3 color lightyes ui scale1x (fixed) fullscreenno vertical syncno aniso filteringoff multisamplingoff texture filtertrilinear reset to default applyno changes game modeoff video mode is the engine's own r_mode list (its 33 modes, then auto and custom); applying restarts the level at that mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). The engine's custom ui scale and the 91–120° field-of-view range are not offered; see docs/presentation-fixes.md. game mode (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop it allows the Window Management API it also blacks out each additional display. Esc leaves full screen and the mode. It is not the engine's own fullscreen row above, which the engine applies on its next start. OPTIONS effects volume0.7 OGG volume0.7 OGG musicdisabled OGG shuffledefault sound backendsdl mouse speed6.0 always runyes invert mouseno lookstrafeno free lookyes crosshaircross pause on minimizedyes customize controls reset defaults go to consolehidden in this app LIGHTING Off Performance High Raster lighting · Performance · no ray tracing Off returns every light to the engine's original shading. The choice is kept for the next visit. applyno changes Applying restarts the level with the new values; the engine reads them from its own start-up line, not from a visible console. The engine's own menu applies each row immediately; this page needs the apply control because it has only the start-up line. The gamepad row is absent because no gamepad is connected (the engine hides it too). CREDITS Quake II · id Software, 1997 Programming: John Carmack, Michael Abrash, John Cash Design: Tim Willits, John Romero, Sandy Petersen Art: Adrian Carmack, Kevin Cloud, Paul Steed Music: Sonic Mayhem · Sound: Nine Inch Nails Engine: Yamagi Quake II (Qwasm2 WebAssembly build) ↑ ↓ selectEnter openEsc back Resume Back",
+        "aria": null
+      },
+      "at": "2026-11-03T18:38:54.546Z"
+    },
+    {
+      "name": "portrait: an OPTIONS row is tappable and changes a cvar",
+      "pass": true,
+      "detail": {
+        "before": {
+          "value": "0.7",
+          "index": "7",
+          "h": 44,
+          "x": 195,
+          "y": 145
+        },
+        "after": {
+          "value": "0.8",
+          "changed": true
+        }
+      },
+      "at": "2026-11-03T18:39:06.030Z"
+    },
+    {
+      "name": "portrait: the guide returns after the menu",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:39:10.542Z"
+    },
+    {
+      "name": "the landscape button runs the orientation-lock path and reports the outcome",
+      "pass": true,
+      "detail": "\"This browser cannot rotate the screen for you. Turn the device sideways.\"",
+      "at": "2026-11-03T18:39:17.005Z"
+    },
+    {
+      "name": "desktop: no touch layer is shown",
+      "pass": true,
+      "detail": {
+        "touchUi": false,
+        "display": "none",
+        "live": false
+      },
+      "at": "2026-11-03T18:39:37.775Z"
+    },
+    {
+      "name": "desktop: the portrait guide is absent",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:39:37.775Z"
+    },
+    {
+      "name": "desktop: the pointer-lock prompt is still offered",
+      "pass": true,
+      "detail": {
+        "hidden": false,
+        "text": "Click to capture the mouse"
+      },
+      "at": "2026-11-03T18:39:37.775Z"
+    },
+    {
+      "name": "desktop: canvas is letterboxed to the engine aspect at 1280x720",
+      "pass": true,
+      "detail": {
+        "x": 0,
+        "y": 0.171875,
+        "w": 1280,
+        "h": 719.640625,
+        "right": 1280,
+        "bottom": 719.8125
+      },
+      "at": "2026-11-03T18:39:37.775Z"
+    },
+    {
+      "name": "desktop: no page scroll or overflow",
+      "pass": true,
+      "detail": {
+        "scroll": {
+          "w": 1280,
+          "h": 720
+        },
+        "inner": {
+          "w": 1280,
+          "h": 720
+        }
+      },
+      "at": "2026-11-03T18:39:37.775Z"
+    },
+    {
+      "name": "desktop: menu, heading and full-screen geometry is unchanged, with no settings chip",
+      "pass": true,
+      "detail": {
+        "menuWidth": "392px",
+        "headingSize": "26px",
+        "chips": [],
+        "playLayerControls": [],
+        "lightingButtons": 3,
+        "fullscreenLeft": "12px",
+        "fullscreenBottom": "52px",
+        "fullscreenTop": "641.609px"
+      },
+      "at": "2026-11-03T18:39:38.257Z"
+    },
+    {
+      "name": "desktop: the keyboard still moves the player",
+      "pass": true,
+      "detail": {
+        "from": {
+          "x": 128.0625,
+          "y": -319.9375,
+          "z": 46.1875
+        },
+        "to": {
+          "x": 79.8125,
+          "y": -271.6875,
+          "z": 47.4375
+        }
+      },
+      "at": "2026-11-03T18:39:41.047Z"
+    },
+    {
+      "name": "a first real touch enables the layer on a fine-pointer device",
+      "pass": true,
+      "detail": {
+        "touchUi": true,
+        "display": "block",
+        "live": true
+      },
+      "at": "2026-11-03T18:39:52.790Z"
+    },
+    {
+      "name": "the on-screen pad is available before the USE test",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:40:19.070Z"
+    },
+    {
+      "name": "demo3 starts the player on the map",
+      "pass": true,
+      "detail": {
+        "x": 1688.0625,
+        "y": 1412.0625,
+        "z": -785.8125
+      },
+      "at": "2026-11-03T18:40:19.090Z"
+    },
+    {
+      "name": "the touch layer binds the engine's own +use key",
+      "pass": true,
+      "detail": {
+        "text": "// ClawBox touch controls (session only; not written back)\nbind e \"+use\"\nbind [ \"weapprev\"\nbind ] \"weapnext\"\n"
+      },
+      "at": "2026-11-03T18:40:19.551Z"
+    },
+    {
+      "name": "USE presses the engine's own +use key (synthetic e, down and up)",
+      "pass": true,
+      "detail": [
+        {
+          "type": "down",
+          "synthetic": true,
+          "vk": 69
+        },
+        {
+          "type": "up",
+          "synthetic": true,
+          "vk": 69
+        }
+      ],
+      "at": "2026-11-03T18:40:27.070Z"
+    },
+    {
+      "name": "USE leaves the keyboard with the game",
+      "pass": true,
+      "detail": {
+        "during": 0,
+        "after": 0
+      },
+      "at": "2026-11-03T18:40:27.070Z"
+    },
+    {
+      "name": "USE leaves the player alive and standing where it was",
+      "pass": true,
+      "detail": {
+        "before": {
+          "x": 1688.0625,
+          "y": 1412.0625,
+          "z": -785.8125
+        },
+        "after": {
+          "x": 1688.0625,
+          "y": 1412.0625,
+          "z": -785.8125
+        },
+        "dead": false
+      },
+      "at": "2026-11-03T18:40:27.070Z"
+    },
+    {
+      "name": "the touch pad is still on after USE",
+      "pass": true,
+      "detail": null,
+      "at": "2026-11-03T18:40:27.091Z"
+    },
+    {
+      "name": "touch key bindings were installed on the demo3 page",
+      "pass": true,
+      "detail": [
+        {
+          "text": "execing default.cfg.",
+          "stage": "use",
+          "at": "2026-11-03T18:40:01.383Z"
+        },
+        {
+          "text": "execing config.cfg.",
+          "stage": "use",
+          "at": "2026-11-03T18:40:01.387Z"
+        },
+        {
+          "text": "Map: demo3\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+          "stage": "use",
+          "at": "2026-11-03T18:40:08.541Z"
+        }
+      ],
+      "at": "2026-11-03T18:40:27.092Z"
+    },
+    {
+      "name": "no console errors",
+      "pass": true,
+      "detail": [],
+      "at": "2026-11-03T18:40:27.092Z"
+    },
+    {
+      "name": "no uncaught page exceptions",
+      "pass": true,
+      "detail": [],
+      "at": "2026-11-03T18:40:27.092Z"
+    }
+  ],
+  "screenshots": [
+    "shots/landscape-844x390-settings.png",
+    "shots/landscape-844x390.png",
+    "shots/landscape-932x430.png",
+    "shots/portrait-390x844-rotate.png",
+    "shots/portrait-390x844-menu.png",
+    "shots/desktop-1280x720.png"
+  ],
+  "consoleErrors": [],
+  "pageInfo": [
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo1 +exec q2touch.cfg",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:32:20.778Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:32:20.935Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:32:20.938Z"
+    },
+    {
+      "text": "Map: demo1\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:32:34.217Z"
+    },
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo1 +exec q2touch.cfg",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:34:56.365Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:34:56.507Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:34:56.509Z"
+    },
+    {
+      "text": "Map: demo1\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:35:06.115Z"
+    },
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo1 +set vid_gamma 1.7 +set s_volume 0.8 +set ogg_enable 1 +exec q2touch.cfg",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:06.290Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:06.421Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:06.421Z"
+    },
+    {
+      "text": "execing q2touch.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:13.102Z"
+    },
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo1 +set vid_gamma 1.7 +set s_volume 0.7 +set ogg_enable 0 +exec q2touch.cfg",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:35.300Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:35.388Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:35.388Z"
+    },
+    {
+      "text": "Map: demo1\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:37:41.017Z"
+    },
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo1 +set vid_gamma 1.7 +set s_volume 0.7 +set ogg_enable 0 +exec q2touch.cfg",
+      "stage": "toggle",
+      "at": "2026-11-03T18:37:53.288Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "toggle",
+      "at": "2026-11-03T18:37:53.383Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "toggle",
+      "at": "2026-11-03T18:37:53.385Z"
+    },
+    {
+      "text": "Map: demo1\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+      "stage": "toggle",
+      "at": "2026-11-03T18:37:58.799Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "desktop",
+      "at": "2026-11-03T18:39:25.469Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "desktop",
+      "at": "2026-11-03T18:39:25.472Z"
+    },
+    {
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set cl_gun 1 +set fov 90 +set crosshair 1 +set crosshair_scale 3 +set q2_crosshair_alpha 0.45 +set q2_crosshair_tint ddb589 +set skill 1 +map demo3 +exec q2touch.cfg",
+      "stage": "use",
+      "at": "2026-11-03T18:40:01.189Z"
+    },
+    {
+      "text": "execing default.cfg.",
+      "stage": "use",
+      "at": "2026-11-03T18:40:01.383Z"
+    },
+    {
+      "text": "execing config.cfg.",
+      "stage": "use",
+      "at": "2026-11-03T18:40:01.387Z"
+    },
+    {
+      "text": "Map: demo3\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.",
+      "stage": "use",
+      "at": "2026-11-03T18:40:08.541Z"
+    }
+  ],
+  "browserNotes": [
+    {
+      "text": "Ignored attempt to cancel a touchend event with cancelable=false, for example because scrolling is in progress and cannot be interrupted.",
+      "url": "http://127.0.0.1:4391/apps/quake2/engine/index.js",
+      "stage": "landscape-844",
+      "at": "2026-11-03T18:34:15.422Z"
+    },
+    {
+      "text": "touch tap timed out at 232,257; used a DOM click",
+      "stage": "landscape-menu",
+      "at": "2026-11-03T18:35:51.066Z"
+    },
+    {
+      "text": "touch tap timed out at 232,176; used a DOM click",
+      "stage": "menu-settings",
+      "at": "2026-11-03T18:36:20.176Z"
+    },
+    {
+      "text": "Ignored attempt to cancel a touchstart event with cancelable=false, for example because scrolling is in progress and cannot be interrupted.",
+      "url": "http://127.0.0.1:4391/apps/quake2/engine/index.js",
+      "stage": "desktop",
+      "at": "2026-11-03T18:39:50.166Z"
+    }
+  ],
+  "pageErrors": [],
+  "networkNotes": [
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak1.pak"
+    },
+    {
+      "text": "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "url": "http://127.0.0.1:4391/apps/quake2/baseq2/pak2.pak"
+    }
+  ],
+  "checks_": {
+    "checks": 95,
+    "failures": 0
+  },
+  "passed": true
+}

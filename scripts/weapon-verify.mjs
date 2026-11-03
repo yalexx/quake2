@@ -757,10 +757,40 @@ class Engine {
     }
     return this.session.state();
   }
+  // Stop a key the console typing may have left down. A command typed while
+  // the console is NOT open lands in the game as keystrokes, and one movement
+  // key left down walks the player for the rest of the run.
+  async stopWalking() {
+    try { await this.control.release(["w", "a", "s", "d", "Space", "ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"]); } catch { /* best effort */ }
+  }
   async run(text, tail = 40) {
     if (!this.control) await this.connect();
-    const state = await this.session.state();
+    let state = await this.session.state();
     this.control.consoleOpen = Boolean(state.consoleOpen);
+    if (!this.control.consoleOpen) {
+      // Open the console here and confirm it before typing. The bridge's own
+      // toggle is one key press with no confirmation; when that press is lost
+      // the command's characters go to the game instead, and a movement key
+      // left down walks the player away (measured 2026-11-03: the view moved
+      // 300,481 pixels between two captures, every weapon stayed the shotgun,
+      // and `use ...` came back ran=false). An attempt that cannot open the
+      // console says so instead of typing into the game.
+      await this.control.tap("`");
+      for (let i = 0; i < 10; i++) {
+        await sleep(250);
+        state = await this.session.state();
+        if (state.consoleOpen) break;
+      }
+      if (!state.consoleOpen) {
+        await this.stopWalking();
+        return {
+          commands: [String(text)], ran: false, echoFound: false, consoleOpen: false,
+          output: [], reason: "CONSOLE_NOT_OPEN",
+          message: "the engine's console did not open, so the command was not typed into the game",
+        };
+      }
+      this.control.consoleOpen = true;
+    }
     return this.control.command(text, { tail });
   }
   async runUntilEcho(text, attempts = 6, tail = 40) {
@@ -776,15 +806,27 @@ class Engine {
         last = error.message;
         log("  retry", JSON.stringify(text), "threw " + error.message);
       }
+      await this.stopWalking();
       await this.reconnect();
     }
     throw new Error("never echoed " + JSON.stringify(text) + ": " + JSON.stringify(last));
   }
   async cvar(name) {
-    const answer = await this.runUntilEcho(name, 6, 12);
-    const text = (answer.output || []).join("\n");
-    const match = new RegExp('"' + name + '" is "([^"]*)"', "i").exec(text);
-    return match ? match[1] : null;
+    const pattern = new RegExp('"' + name + '" is "([^"]*)"', "i");
+    for (let attempt = 0; attempt < 6; attempt++) {
+      const answer = await this.runUntilEcho(name, 6, 12);
+      const text = (answer.output || []).join("\n");
+      const match = pattern.exec(text);
+      if (match) return match[1];
+      // A read taken in the first second or two after the first frame echoes
+      // but carries no value: measured 2026-11-03, `]cl_gun` came back with
+      // `==== ShutdownGame ====` where the value line belongs, while the same
+      // read 4 s later answered `"cl_gun" is "1"`. Wait the engine out instead
+      // of reporting a null cvar as a failure.
+      log("  cvar", name, "answered with no value; retrying");
+      await sleep(1500);
+    }
+    return null;
   }
   async pollWeapon(expected, timeout = 25000) {
     const started = Date.now();

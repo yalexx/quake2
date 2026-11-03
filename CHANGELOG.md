@@ -1,5 +1,132 @@
 # Changelog
 
+## Settings in the menu, a quiet boot, and view weapons at 2x
+
+This pass finished the presentation work in four parts and then measured all
+of it on one checkout: LIGHTING and OPTIONS moved into the menu panel, the
+engine's console no longer greets the player on the first frame, full screen
+is asked for only by its button, and all 13 view weapons ship 2x art with a
+neutral albedo path. The twelve-command gate passed, and the Store tarball
+came to about 47.0 MiB — roughly 3.1 MB under the 50 MiB cap (the exact bytes
+are in `docs/release-2026-11-03/README.md`).
+
+### The play layer carries no settings control
+
+`LIGHTING` (Off / Performance / High, with the renderer's raster-lighting
+status line) used to float over the game as a chip. It is now the last group
+of the OPTIONS view inside `#menu`, beside the engine's own rows, and the
+top-right OPTIONS control is gone with it. The PAD toggle (`#mc-toggle`) and
+the Full screen button stay on the play layer; neither is ever shown while
+the menu is open. Measured in the mobile suite: no `#ui > button`, no visible
+`[data-lighting]` control over the game, three lighting buttons inside the
+panel, and the panel's LIGHTING group reachable from the MENU control. The
+desktop frame did not move: `#menu` 392 px wide, the 26 px heading, the
+full-screen button at left 12 / bottom 52, and the canvas letterboxed to the
+engine's aspect. On a phone at 844x390 and 932x430 the top row is PAD, MENU
+and Full screen at 44 px each, no pair of them — or of them with the weapon
+pair, FIRE, the stick or the hint — overlaps, and there is no horizontal
+overflow.
+
+### The first frame is the game's, and full screen has one door
+
+A `+set` chain on the engine's start-up line is a command *session* to an id
+Tech engine, and if one of those commands brings the console up the player
+lands on a wall of text with the game paused. The line is load-bearing (the
+page cannot type into the console), so the console is watched instead:
+`window.quake2BootFrame` records who owned the keyboard on the first frame
+the engine's surface was up. Measured on demo1: `keyDest` 0, `consoleOpen`
+false, at 3,103 ms, and still the game after 5 s; the boot never showed a
+console frame; every `+set` cvar was still on the line and the level started
+with 175 entities. If a console does appear during boot the app closes it
+with the engine's own Escape (one per quarter second) and records that it
+had to.
+
+Full screen is now only ever requested by its own button: `fullscreenElement`
+is null after load, still null three seconds after the first click on the
+canvas, and a second click does not take the screen either. The button enters
+full screen and Esc leaves it, and its `aria-pressed` follows both.
+
+### View weapons: 2x art, colour restored, the pistol collar fixed
+
+All 13 first-person weapon skins in `baseq2/pak10.pak` are exactly twice the
+pak0 picture (12,118,560 -> 13,770,565 bytes, +1,652,005): the palettes are
+byte-identical, the cut-out is exactly the 2x2 expansion, and mean saturation
+over opaque texels rises from 0.315 to 0.327 (every weapon rises). The added
+muzzle collar is bound to the barrel face it rides instead of a shared guessed
+atlas patch: worst material mismatch 20 (was 176), worst edge 68.3 (was 203),
+and 18 of the pistol's 20 added parts are bound to their own face — the light,
+fringed block the reference marked is gone. `rtx-renderer.js` draws view
+weapons through a neutral albedo path (`weaponNeutralDraws`), so a weapon
+reads as weapon steel instead of taking the room's colour and turning grey.
+The engine's HUD, status bar and digit reading are untouched, and the desktop
+1280x720 presentation is unchanged apart from the settings removal and the
+boot/full-screen behaviour above.
+
+### Verification — `docs/release-2026-11-03/`
+
+Run on this checkout, with its own server on port 4391 and its own headless
+Chromium on spare debugging ports (never 4231 or 18801). Every command exited
+0: `engine-state-test` 35/35, `route-test` 196/196, `control-api-test` PASS
+with every route exercised against a live game on this checkout's own server and browser (nothing in the kiosk was driven),
+`mcp-smoke-test` PASS, `mobile-controls-test` 95/95, `verify-presentation`
+248/248 checks, `boot-probe` 16/16, `weapon-verify` 51/51 checks,
+`tex-check --only models/` 125 pictures with 0 wrong size / 0 unreadable / 0
+unclaimed, `texture-pack --dry-run --only models/` 125 packed and 0 failed,
+`model-geometry --dry-run` 13 skins at 2x with 4,433 -> 18,034 vertices and
+7,991 -> 32,724 triangles and nothing written, `texture-audit --select` 20
+entries selected. Logs and reports are beside the note.
+
+### The Store package measured 1.1.0
+
+The tracked runtime files with `docs/`, `assets/` and `baseq2/pak9.pak` left
+out — 80 files — pack to **about 47.0 MiB** (49.32 MB) with `gzip -6`, about
+**3.1 MB (2.96 MiB) under** the 50 MiB cap of 52,428,800, and about 3.67 MB
+(+8.05 %) above the published 1.1.0 package of 45,650,125. The exact byte
+count of the committed tree is in `docs/release-2026-11-03/README.md`: this
+changelog is one of the files packed, so a byte-exact figure here would be
+measuring its own text. The pak10 delta is +1,652,005 bytes raw and +887,685
+bytes with `gzip -6` alone — the 13 added 2x PCX entries. Nothing had to be
+dropped. If the package ever needs to shrink, the two `design/` reference
+PNGs are 3,115,810 bytes no runtime path reads (about 46.2 MB without them);
+`pak9` is already out and would add 41,205,225 bytes back. `.gitignore` and
+the git index were not changed, and nothing was published or pushed.
+
+### Fixed (tests only; no app code changed)
+
+- **The acceptance runner waited for a skin the engine no longer binds.** It
+  read the view weapon's skin from `pak0` and required a 296x164 blaster draw,
+  but the engine mounts `pak10` after `pak0` and the 2x set makes that draw
+  592x328 — measured as "0 draws of the 296x164 blaster skin over 17 frames".
+  A model skin is now resolved from pak10 first (pak0 as fallback, `base.pcx`
+  included for v_flareg), the drawn size is checked unique among every model
+  skin in both archives, and the report says which archive supplied it.
+- **The mobile suite's USE check measured a scene that does not exist.** It
+  aimed at "func_button *7's model centre" at (1692,1408); the map's own
+  entity lump puts *7 at (640,253,-414), 1,606 units from the spawn. It then
+  counted *any* entity that moved as a door opening, which a wandering monster
+  satisfies and no button there can. Measured on this build: from 43 units in
+  front of demo2's func_button *43, with the aim swept from 10 to 50 degrees
+  down, a trusted E press, the engine's own `+use` command and the touch
+  button all left every entity in place. The check now proves what the control
+  does promise: the engine's own `q2touch.cfg`, read out of the engine's file
+  system, binds `e` to `+use`; the USE button presses exactly that key (a
+  synthetic down and up); and the game keeps the keyboard and the player.
+- **Two presentation checks retake instead of failing on a lost input.** The
+  first-show hint is measured while it is up (it hides itself after 9 s, which
+  a loaded box outlived); a dropped trigger press is pressed again (measured:
+  `fireLevel` 0.00 for 8 s on one press, 0.99 on the next); and a crosshair
+  on/off pair captured with the page menu up — two pictures of the menu, mean
+  luma 6.2 — is retaken with the menu closed.
+- **The weapon verifier typed commands into the game when its console toggle
+  was lost.** A command whose console never opened was typed into the game as
+  keystrokes; a movement key left down then walked the player for the rest of
+  the run (measured: the view moved 300,481 pixels between two captures, every
+  weapon stayed the shotgun, and `use …` came back `ran=false`). The console is
+  now opened and confirmed before typing, the movement keys are released
+  before a retry, and a cvar read that echoes with no value — measured as
+  `]cl_gun` followed by `==== ShutdownGame ====` in the second after the first
+  frame — is retried instead of reported as a null cvar.
+
 ## The game mode, measured; the aiming crosshair, finished
 
 This run picked up the stopped branch at `53c43e4` and finished its three

@@ -601,6 +601,10 @@ async function run() {
   await emulate(LANDSCAPE_844, true, MOBILE_UA, landscapeOrientation());
   await navigate(baseUrl, "demo1");
   const firstLive = await waitForFirstLive();
+  // Measure the hint while it is up: it is a first-show card with a 9 s
+  // lifetime, and on a loaded box the game-state wait below can outlive it,
+  // which left this check reading an element that had already hidden itself.
+  const firstHintBox = await rect("#mc-hint");
   check("first-show hint appears with the touch layer", firstLive.hintHidden === false, firstLive.hintText);
   check("first-show hint names look and fire", /look/i.test(firstLive.hintText || "") && /fire/i.test(firstLive.hintText || ""), firstLive.hintText);
   // The play layer carries no settings control: LIGHTING and OPTIONS moved
@@ -635,7 +639,6 @@ async function run() {
   const pauseBox = await rect("#mc-pause");
   const toggleBox = await rect("#mc-toggle");
   const fullscreenBox = await rect("#fullscreen-button");
-  const firstHintBox = await rect("#mc-hint");
   const stickBox = await rect("#mc-stick");
   const lookBox = await rect("#mc-look");
   const stickCentre = { x: stickBox.left + stickBox.w / 2, y: stickBox.top + stickBox.h / 2 };
@@ -1249,10 +1252,23 @@ async function run() {
   }
   await cdp.send("Emulation.setTouchEmulationEnabled", { enabled: false });
 
-  // Use: demo3 spawns a few units from a func_button. Turn to face it with
-  // touch look, then tap USE; a mover in the level must move.
+  // Use: the engine's own config binds no key to +use, so the touch layer
+  // installs `bind e "+use"` in q2touch.cfg and the USE button presses that key.
+  //
+  // This check used to aim at "func_button *7's model centre" at (1692,1408)
+  // and then count ANY entity that moved as a door opening. The map's own
+  // entity lump puts *7 at (640,253,-414) -- 1,606 units from the demo3 spawn
+  // -- so the aim was at the player's own feet, and the motion that could pass
+  // the old check was a wandering monster. Measured on this build: from 43
+  // units in front of demo2's func_button *43, with the aim swept from 10 to
+  // 50 degrees down, a trusted E press, the engine's own +use command and the
+  // touch button all left every entity in place, so no assertion about a door
+  // can be made good here. What the control does promise is checkable, and is
+  // checked: the engine's own config (read out of the engine's file system)
+  // binds e to +use, the touch button presses exactly that key, and the game
+  // keeps the keyboard and the player.
   stage = "use";
-  console.log("use / open on demo3");
+  console.log("use / the engine's own +use binding");
   await emulate(LANDSCAPE_844, true, MOBILE_UA, landscapeOrientation());
   await navigate(baseUrl, "demo3");
   await waitForGame("demo3");
@@ -1264,150 +1280,55 @@ async function run() {
   check("the on-screen pad is available before the USE test",
     (await evaluate("window.quake2Touch.isPadOn()")) === true);
   const useSpawn = await readEngine();
-  check("demo3 spawn is next to the button", useSpawn.position && Math.abs(useSpawn.position.x - 1688) < 40 && Math.abs(useSpawn.position.y - 1412) < 40, useSpawn.position);
-  // func_button *7's model centre in demo3. The bearing is computed from the
-  // live view position, not assumed: the spawn is close enough that a degree
-  // matters to the level's narrow use trace.
-  const buttonBearing = Math.atan2(1408 - useSpawn.position.y, 1692 - useSpawn.position.x) * 180 / Math.PI;
-  const buttonPitch = -Math.atan2(-784 - useSpawn.position.z,
-    Math.hypot(1692 - useSpawn.position.x, 1408 - useSpawn.position.y)) * 180 / Math.PI;
-  const entitiesNow = () => dumpJson(`(() => (window.quake2Engine.entities() || []).map((e) => ({ n: e.number, p: [e.position.x, e.position.y, e.position.z] })))()`);
-  // The engine's SDL keyboard path wants a focused, active page. The touch
-  // look and mouse fire work without it, so a long run can reach USE with the
-  // canvas DOM-focused but the window not active; this trusted click in the
-  // left letterbox (clear of every control) restores it without firing.
-  const focusGame = async () => {
-    await cdp.send("Page.bringToFront");
-    await evaluate("window.focus(); document.getElementById('canvas').focus(); 1");
-    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: 5, y: 200, button: "left", buttons: 1, clickCount: 1 });
-    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: 5, y: 200, button: "left", buttons: 0, clickCount: 1 });
-    await sleep(300);
-  };
-  const aimAtButton = async (targetYaw, targetPitch) => {
-    // Yaw and pitch both: the button is 1.8 px above the eye at 5.9 px range,
-    // and the use trace was observed to depend on where the view actually is.
-    const degreesPerPixel = 49.4 / 190;
-    for (let i = 0; i < 12; i++) {
-      const now = await readEngine();
-      const delta = ((targetYaw - now.angles.yaw + 540) % 360) - 180;
-      const pitchDelta = targetPitch - now.angles.pitch;
-      if (Math.abs(delta) < 0.25 && Math.abs(pitchDelta) < 0.7) break;
-      if (Math.abs(delta) >= 0.25) {
-        let pixels = Math.max(-200, Math.min(200, -delta / degreesPerPixel));
-        const from = pixels < 0 ? 650 : 550;
-        await drag(from, 180, from + pixels, 180, 8, 35);
-      }
-      if (Math.abs(pitchDelta) >= 0.7) {
-        const pixels = Math.max(-140, Math.min(140, pitchDelta / degreesPerPixel));
-        await drag(620, 200, 620, 200 + pixels, 8, 35);
-      }
-    }
-    return readEngine();
-  };
-  const movementBetween = (a, b, ignore) => {
-    const mapA = new Map(a.map((e) => [e.n, e.p]));
-    const found = [];
-    for (const e of b) {
-      if (e.n === 1 || ignore.has(e.n) || !mapA.has(e.n)) continue;
-      const p = mapA.get(e.n);
-      const distance = Math.hypot(p[0] - e.p[0], p[1] - e.p[1], p[2] - e.p[2]);
-      if (distance > 2) found.push({ n: e.n, from: p, to: e.p, distance });
-    }
-    return found;
-  };
-  const attemptUse = async () => {
-    // The spawn's door can still be moving when the first aim lands. Let the
-    // entities around the button settle first; only then is a 250 ms quiet
-    // window a fair ambient baseline.
-    const nearButton = (list) => list.filter((e) => e.n !== 1 && Math.hypot(e.p[0] - 1692, e.p[1] - 1408) < 220);
-    let still = 0;
-    let lastNear = nearButton(await entitiesNow());
-    for (let i = 0; i < 24 && still < 3; i++) {
-      await sleep(150);
-      const nowNear = nearButton(await entitiesNow());
-      still = movementBetween(lastNear, nowNear, new Set()).length ? 0 : still + 1;
-      lastNear = nowNear;
-    }
-    const quietA = await entitiesNow();
-    await sleep(250);
-    const quietB = await entitiesNow();
-    const ambient = new Set(movementBetween(quietA, quietB, new Set()).map((e) => e.n));
-    await evaluate(`(() => {
-      window.__touchUseKeys = [];
-      window.addEventListener("keydown", function (event) {
-        if (event.key === "e" || event.keyCode === 69) window.__touchUseKeys.push({ type: "down", synthetic: !!event.__q2synthetic, vk: event.keyCode });
-      }, true);
-      window.addEventListener("keyup", function (event) {
-        if (event.key === "e" || event.keyCode === 69) window.__touchUseKeys.push({ type: "up", synthetic: !!event.__q2synthetic, vk: event.keyCode });
-      }, true);
-      return 1;
-    })()`);
-    const before = await entitiesNow();
-    const id = nextTouchId();
-    const useBox = await rect("#mc-use");
-    await touchEvent("touchStart", [point(id, useBox.left + useBox.w / 2, useBox.top + useBox.h / 2)]);
-    await sleep(300);
-    const during = await dumpJson(`(() => ({
-      state: window.quake2Touch.state(),
-      angles: window.quake2Engine.read().angles,
-      position: window.quake2Engine.read().position,
-      dead: window.quake2Engine.read().dead,
-      focused: document.hasFocus(),
-      beforeCount: ${JSON.stringify(before.length)},
-      nearButton: ${JSON.stringify(before.filter((e) => Math.hypot(e.p[0] - 1692, e.p[1] - 1408) < 160).slice(0, 6))},
-      doorEntities: ${JSON.stringify(before.filter((e) => e.n === 411 || e.n === 412))}
-    }))()`);
-    await touchEvent("touchEnd", []);
-    let found = [];
-    let previous = before;
-    const started = Date.now();
-    while (Date.now() - started < 6000) {
-      await sleep(150);
-      const now = await entitiesNow();
-      // Any entity that moved since the press, or moved between two samples
-      // afterwards (a door that only entered the client's entity list once it
-      // started moving), is a level mover responding to USE.
-      found = found.concat(movementBetween(before, now, ambient)).concat(movementBetween(previous, now, ambient));
-      previous = now;
-      // The same entity must not be counted twice.
-      const unique = new Map(found.map((e) => [e.n, e]));
-      found = Array.from(unique.values());
-      if (found.length) break;
-    }
-    const keyEvents = await dumpJson("window.__touchUseKeys || []");
-    console.log("  use attempt: " + JSON.stringify({ during, keyEvents, moved: found.slice(0, 3) }));
-    return found;
-  };
-  await focusGame();
-  const facing = await aimAtButton(buttonBearing, buttonPitch);
-  const bearing = Math.abs((((buttonBearing - facing.angles.yaw + 540) % 360) - 180));
-  const pitchError = Math.abs(buttonPitch - facing.angles.pitch);
-  check("touch look turns the player toward the button", bearing <= 1.5 && pitchError <= 2,
-    { yaw: facing.angles.yaw, target: buttonBearing, bearing, pitch: facing.angles.pitch, targetPitch: buttonPitch, pitchError });
-  let moved = await attemptUse();
-  // The level's use trace is narrower than the button's model: if the computed
-  // bearing did not catch it, try the bearing the probe found works on this
-  // spawn (−45.626°), then the other side. Each pass starts from a reloaded
-  // level, so a door a failed pass moved is back where it began.
-  for (const target of [-45.626, -44.4]) {
-    if (moved.length) break;
-    console.log("  USE at " + buttonBearing.toFixed(2) + " did not move a mover; trying " + target + " on a fresh demo3");
-    await cdp.send("Page.reload", { ignoreCache: false });
-    await sleep(600);
-    await waitForGame("demo3 retry");
-    await sleep(500);
-    await focusGame();
-    const retryState = await aimAtButton(target);
-    check("retry at " + target + ": touch look turns the player toward the button",
-      Math.abs((((buttonBearing - retryState.angles.yaw + 540) % 360) - 180)) <= 2,
-      { yaw: retryState.angles.yaw, target: buttonBearing });
-    moved = await attemptUse();
-  }
+  check("demo3 starts the player on the map", useSpawn.position && Math.abs(useSpawn.position.x - 1688) < 40 && Math.abs(useSpawn.position.y - 1412) < 40, useSpawn.position);
+  // The engine's own file system holds the config it actually runs: the touch
+  // layer's q2touch.cfg must bind e to +use, or the USE button presses a key
+  // nothing is bound to.
+  const engineBind = await dumpJson(`(() => {
+    try { return { text: FS.readFile("/baseq2/q2touch.cfg", { encoding: "utf8" }) }; }
+    catch (error) { return { error: String((error && error.message) || error) }; }
+  })()`);
+  check("the touch layer binds the engine's own +use key",
+    engineBind && /bind\s+e\s+"\+use"/i.test(engineBind.text || ""), engineBind);
+  await evaluate(`(() => {
+    window.__touchUseKeys = [];
+    window.addEventListener("keydown", function (event) {
+      if (event.key === "e" || event.keyCode === 69) window.__touchUseKeys.push({ type: "down", synthetic: !!event.__q2synthetic, vk: event.keyCode });
+    }, true);
+    window.addEventListener("keyup", function (event) {
+      if (event.key === "e" || event.keyCode === 69) window.__touchUseKeys.push({ type: "up", synthetic: !!event.__q2synthetic, vk: event.keyCode });
+    }, true);
+    return 1;
+  })()`);
+  const beforeUse = await readEngine();
+  const useId = nextTouchId();
+  const useControlBox = await rect("#mc-use");
+  await touchEvent("touchStart", [point(useId, useControlBox.left + useControlBox.w / 2, useControlBox.top + useControlBox.h / 2)]);
+  await sleep(350);
+  const useDuring = await dumpJson(`(() => ({
+    state: window.quake2Touch.state(),
+    dead: window.quake2Engine.read().dead,
+    keyDest: window.quake2Engine.read().keyDest,
+    focused: document.hasFocus()
+  }))()`);
+  await touchEvent("touchEnd", []);
+  await sleep(250);
+  const useKeys = await dumpJson("window.__touchUseKeys || []");
+  const afterUse = await readEngine();
+  console.log("  use attempt: " + JSON.stringify({ useDuring, useKeys, before: beforeUse.position, after: afterUse.position }));
+  check("USE presses the engine's own +use key (synthetic e, down and up)",
+    useKeys.some((one) => one.type === "down" && one.vk === 69 && one.synthetic) &&
+    useKeys.some((one) => one.type === "up" && one.vk === 69 && one.synthetic),
+    useKeys);
+  check("USE leaves the keyboard with the game", afterUse.keyDest === 0 && useDuring.keyDest === 0, { during: useDuring.keyDest, after: afterUse.keyDest });
+  check("USE leaves the player alive and standing where it was",
+    afterUse.dead === false && beforeUse.position &&
+    Math.hypot(afterUse.position.x - beforeUse.position.x, afterUse.position.y - beforeUse.position.y) < 4,
+    { before: beforeUse.position, after: afterUse.position, dead: afterUse.dead });
+  check("the touch pad is still on after USE", (await evaluate("window.quake2Touch.isPadOn()")) === true);
   check("touch key bindings were installed on the demo3 page",
     report.pageInfo.some((entry) => entry.stage === "use" && /q2touch|execing/i.test(entry.text)),
     report.pageInfo.filter((entry) => entry.stage === "use").slice(-3));
-  check("USE produces an engine effect (a level mover opens)", moved.length > 0, moved.slice(0, 3));
-  check("USE leaves the keyboard with the game", (await readEngine()).keyDest === 0);
 
   // Console clean.
   check("no console errors", report.consoleErrors.length === 0, report.consoleErrors.slice(0, 4));

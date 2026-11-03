@@ -930,16 +930,29 @@ function classnames(text) {
 function buildCoverage() {
   const pak10 = readPakDirectory(path.join(ROOT, "baseq2", "pak10.pak"));
   const pak0 = readPakDirectory(path.join(ROOT, "baseq2", "pak0.pak"));
+  // The engine mounts pak10 after pak0 and a later PAK wins, so the skin a
+  // model actually binds is pak10's when pak10 carries that entry -- the 2x
+  // view-weapon set -- and pak0's otherwise. Reading pak0 alone here made the
+  // weapon-draw check wait for a 296x164 blaster draw the engine stopped
+  // making when the 2x skins shipped (it binds 592x328 now), and the check
+  // failed with "0 draws ... over 17 frames".
+  const skinAt = (entryName) => {
+    const later = pak10.entries.get(entryName);
+    if (later) return { ...pcxDimensions(pak10.buffer, later.offset), archive: "pak10" };
+    const original = pak0.entries.get(entryName);
+    if (original) return { ...pcxDimensions(pak0.buffer, original.offset), archive: "pak0" };
+    return null;
+  };
   const demo1Classes = classnames(bspEntities(pak0, "demo1"));
-  const blasterSkinEntry = pak0.entries.get("models/weapons/v_blast/skin.pcx");
-  const blasterSkin = blasterSkinEntry ? pcxDimensions(pak0.buffer, blasterSkinEntry.offset) : null;
-  // Every model skin in pak0, not just the weapons, so the blaster-skin size
-  // claim is checked against monsters and items too.
+  const blasterSkin = skinAt("models/weapons/v_blast/skin.pcx");
+  // Every model skin the engine can bind -- pak0's and pak10's, with pak10
+  // winning where both carry one -- so the blaster-skin size claim is checked
+  // against monsters and items too.
   const modelSkins = [];
-  for (const [entryName, entry] of pak0.entries) {
-    if (!/^models\/.*\/skin\.pcx$/.test(entryName)) continue;
-    const size = pcxDimensions(pak0.buffer, entry.offset);
-    modelSkins.push({ entry: entryName, width: size.width, height: size.height });
+  for (const entryName of new Map([...pak0.entries, ...pak10.entries]).keys()) {
+    if (!/^models\/.*\/(skin|base)\.pcx$/.test(entryName)) continue;
+    const size = skinAt(entryName);
+    if (size) modelSkins.push({ entry: entryName, width: size.width, height: size.height, archive: size.archive });
   }
   const blasterCollisions = blasterSkin
     ? modelSkins.filter((one) => one.width === blasterSkin.width && one.height === blasterSkin.height && one.entry !== "models/weapons/v_blast/skin.pcx")
@@ -952,12 +965,13 @@ function buildCoverage() {
     const known = WEAPON_NAMES[m[1]] || [m[1], null];
     const inHand = m[1] === "v_blast";
     const placed = Boolean(known[1] && demo1Classes.has(known[1]));
-    const skinEntry = pak0.entries.get("models/weapons/" + m[1] + "/skin.pcx");
-    const skin = skinEntry ? pcxDimensions(pak0.buffer, skinEntry.offset) : null;
-    if (skin) weaponSkins.push({ model: m[1], name: known[0], width: skin.width, height: skin.height });
+    // v_flareg draws from base.pcx; every other view weapon from skin.pcx.
+    const skin = skinAt("models/weapons/" + m[1] + "/skin.pcx") || skinAt("models/weapons/" + m[1] + "/base.pcx");
+    if (skin) weaponSkins.push({ model: m[1], name: known[0], width: skin.width, height: skin.height, archive: skin.archive });
     weapons.push({
       model: m[1], name: known[0], pickupClass: known[1],
       skinSize: skin ? skin.width + "x" + skin.height : null,
+      skinArchive: skin ? skin.archive : null,
       placedInDemo1: placed, inHand,
       covered: inHand || placed,
     });
@@ -996,10 +1010,10 @@ function buildCoverage() {
     "13 weapons, 7 enemies",
     weapons.length + " weapons, " + enemies.length + " enemies");
   const unique = Boolean(blasterSkin) && blasterCollisions.length === 0;
-  check("blaster skin size is unique among all pak0 model skins", unique,
-    "296x164 used only by models/weapons/v_blast/skin.pcx",
-    blasterSkin ? blasterSkin.width + "x" + blasterSkin.height + " checked against " + modelSkins.length +
-      " model skins; collisions " + JSON.stringify(blasterCollisions.map((one) => one.entry)) : "blaster skin unreadable");
+  check("blaster skin size is unique among every model skin the engine loads", unique,
+    (blasterSkin ? blasterSkin.width + "x" + blasterSkin.height : "296x164") + " used only by models/weapons/v_blast/skin.pcx",
+    blasterSkin ? blasterSkin.width + "x" + blasterSkin.height + " (" + blasterSkin.archive + ") checked against " + modelSkins.length +
+      " model skins from pak0 and pak10; collisions " + JSON.stringify(blasterCollisions.map((one) => one.entry)) : "blaster skin unreadable");
   if (!unique) fatal("the blaster skin size is not unique; a weapon draw cannot be named by skin size");
   return report.coverage;
 }
@@ -1222,13 +1236,14 @@ async function weaponDrawCheck(label) {
   await setLighting("performance");
 
   // The view weapon is an MD2 model. The renderer records every texture size
-  // bound by a model-shader draw. The blaster's skin is 296x164 and that size
-  // is checked unique among all pak0 model skins, so a model draw binding it is
-  // the v_blast view model — not a monster, item or wall texture.
+  // bound by a model-shader draw. The blaster's skin is 592x328 (pak10's 2x
+  // set; 296x164 in pak0) and that size is checked unique among every model
+  // skin pak0 and pak10 carry, so a model draw binding it is the v_blast view
+  // model — not a monster, item or wall texture.
   const skins = report.coverage.weaponSkins;
-  if (!skins.length) fatal("could not read any weapon skin from pak0");
+  if (!skins.length) fatal("could not read any weapon skin from pak10 or pak0");
   const blaster = report.coverage.blasterSkin;
-  if (!blaster) fatal("could not read the blaster skin from pak0");
+  if (!blaster) fatal("could not read the blaster skin from pak10 or pak0");
   const skinKey = blaster.width + "x" + blaster.height;
   const candidates = [...new Set(skins.filter((one) => one.width + "x" + one.height === skinKey).map((one) => one.name))];
   const before = await status();
@@ -1254,7 +1269,7 @@ async function weaponDrawCheck(label) {
     weaponSkinDrawsPerFrame: perFrame,
     modelTextureDraws: observed,
     lastModelSkinDraws: after.lastModelSkinDraws || {},
-    method: "counted model-shader draws binding the blaster's 296x164 skin (unique among all 96 pak0 model skins), with cl_gun 1",
+    method: "counted model-shader draws binding the blaster's " + skinKey + " skin (unique among every model skin pak0 and pak10 carry), with cl_gun 1",
   };
   report.weaponDraws.push(record);
   if (!report.weaponDraw) report.weaponDraw = record;
@@ -3026,8 +3041,21 @@ async function crosshairAimPair(name, meta) {
   const pairAlpha = (configured && configured.alpha) || 0.45;
   await crosshairAlpha(pairAlpha);
   await waitFrames(2);
-  for (let attempt = 0; attempt < 2; attempt++) {
+  // A pair taken with the page menu up is two pictures of the menu, not of the
+  // crosshair: measured 2026-11-03, the pair after the crosshair_scale-2 reload
+  // came back 0x0 with the QUAKE II panel over a black page (mean luma 6.2).
+  // The menu is closed here and checked again after the "on" frame, so a menu
+  // that arrives mid-pair costs a retake instead of the whole check.
+  if (!(await ensureGame(name + " crosshair pair"))) fatal(name + ": the game is not in game for the crosshair pair");
+  await sleep(500);
+  for (let attempt = 0; attempt < 3; attempt++) {
     on = await steadyScreenshot(name + " on capture");
+    if ((await state()).menuHidden === false) {
+      note(name + ": the page menu was up during the capture; closing it and retaking the pair");
+      await ensureGame(name + " pair retake");
+      await sleep(1200);
+      continue;
+    }
     onEntry = await captureBuffer(name + "-on.png", on, 1280, 720, { ...meta, crosshair: "on" });
     stateOn = await crosshairStateNow();
     await crosshairAlpha(0);
@@ -3044,6 +3072,10 @@ async function crosshairAimPair(name, meta) {
       "% of pixels outside the cross); retaking the pair");
     await sleep(1500);
   }
+  // Every attempt can end in the menu-up `continue` above, which leaves `off`
+  // unwritten; decodePng(null) would throw a TypeError out of the runner
+  // instead of its own failure report, so say what happened.
+  if (!on || !off) fatal(name + ": no crosshair on/off pair was captured (the page menu stayed up)");
   return { on: decodePng(on), off: decodePng(off), onEntry, offEntry, state: stateOn, drift };
 }
 
@@ -3115,16 +3147,32 @@ async function crosshairAimCheck(resolution) {
   await sleep(800);
   const restAgain = await crosshairStateNow();
   await freezeDemo(label, true);
-  const press = await consoleBridge.control.attackHold(true);
+  let press = await consoleBridge.control.attackHold(true);
   let firing = null;
-  try {
-    await waitFor(async () => {
-      const now = await crosshairStateNow();
-      firing = now;
-      return now && now.firing === true && now.fireLevel > 0.85;
-    }, 8000, 300, "the trigger to spread the crosshair");
-  } catch (error) {
-    note(label + ": the trigger did not register on the page: " + error.message);
+  // The trigger is a real mouse press on the game frame, and this headless
+  // page loses one now and then (the same lost-input reason the weapon keys
+  // above are re-sent by the console). Measured 2026-11-03: a press reported
+  // held with fireLevel 0.00 for 8 s; a second press spread the crosshair at
+  // once. Retrying keeps the assertion -- the state read still has to show a
+  // firing crosshair -- while not failing the run on a dropped click.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      note(label + ": the trigger did not register (fireLevel " +
+        (firing ? firing.fireLevel.toFixed(2) : "n/a") + "); pressing it again");
+      await consoleBridge.control.attackHold(false);
+      await sleep(500);
+      press = await consoleBridge.control.attackHold(true);
+    }
+    try {
+      await waitFor(async () => {
+        const now = await crosshairStateNow();
+        firing = now;
+        return now && now.firing === true && now.fireLevel > 0.85;
+      }, attempt === 0 ? 8000 : 6000, 300, "the trigger to spread the crosshair");
+      break;
+    } catch (error) {
+      if (attempt === 2) note(label + ": the trigger did not register on the page: " + error.message);
+    }
   }
   const firingPair = await crosshairAimPair(label + "-crosshair-aim-firing", { view: "the crosshair while firing", resolution: label });
   const firingPixels = crosshairBlendPixels(firingPair.on, firingPair.off, tint);
@@ -3259,9 +3307,19 @@ async function crosshairAimCheck(resolution) {
   await sleep(1500);
   const scaleTwo = await crosshairStateNow();
   await freezeDemo(label, true);
-  const scalePair = await crosshairAimPair(label + "-crosshair-aim-scale2", { view: "the crosshair at crosshair_scale 2", resolution: label });
+  let scalePair = await crosshairAimPair(label + "-crosshair-aim-scale2", { view: "the crosshair at crosshair_scale 2", resolution: label });
+  let scalePixels = crosshairBlendPixels(scalePair.on, scalePair.off, tint);
+  // A pair with no tinted pixel at all is two pictures of the same thing --
+  // the crosshair was not in the "on" frame (measured on this box: 0x0 on the
+  // first pair, a normal 13x13 cross on a retake). Retake the pair once rather
+  // than reading a dropped capture as a scale failure.
+  if (scalePixels.count === 0) {
+    note(label + ": the crosshair_scale-2 pair showed no tinted pixel; retaking the pair");
+    await sleep(1200);
+    scalePair = await crosshairAimPair(label + "-crosshair-aim-scale2", { view: "the crosshair at crosshair_scale 2", resolution: label });
+    scalePixels = crosshairBlendPixels(scalePair.on, scalePair.off, tint);
+  }
   await freezeDemo(label, false);
-  const scalePixels = crosshairBlendPixels(scalePair.on, scalePair.off, tint);
   check(label + ": crosshair_scale still sets the base size",
     scaleTwo && scaleTwo.baseScale === 2 && scaleTwo.quadPx === 16 && scaleTwo.quadPx < rest.quadPx &&
       scalePixels.width < restPixels.width && scalePixels.width >= 9,
