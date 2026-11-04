@@ -521,7 +521,12 @@ const CHECKS = [
       );
     }
     cases.push(["GET", "/apps/quake2/", 200], ["GET", "/no-such-file.txt", 404],
-      ["GET", "/apps/quake2/no-such-file.txt", 404], ["GET", "/.git/config", 403]);
+      ["GET", "/apps/quake2/no-such-file.txt", 404], ["GET", "/.git/config", 403],
+      // A Store install runs from a folder named after the listing slug, and the
+      // box proxies the page under /apps/<slug>/ — "quake-2" here — so both
+      // spellings of this app's own id must serve the page, and nobody else's may.
+      ["GET", "/apps/quake-2/", 200], ["GET", "/apps/quake-2/no-such-file.txt", 404],
+      ["GET", "/apps/not-this-app/", 404]);
     const wrong = [];
     for (const [method, urlPath, want, body] of cases) {
       const r = await request(method, urlPath, body === undefined ? {} : { body });

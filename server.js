@@ -35,7 +35,20 @@ const path = require("path");
 
 const ROOT = __dirname;
 const PORT = Number(process.env.PORT || 4231);
-const BASE = "/apps/quake2";
+// The box proxies this server at /apps/<id>/ with the prefix intact, and <id>
+// is not always "quake2": a Store install registers the app under the listing
+// slug ("quake-2") and runs it from a folder of that name, while a Coding Agent
+// project keeps its own folder name. Match any spelling of THIS app's id — the
+// folder it runs from, ignoring dashes, underscores and case — then strip it.
+const APP_ID = path.basename(ROOT);
+const appKey = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
+const APP_KEY = appKey(APP_ID);
+
+function stripAppBase(urlPath) {
+  const match = /^\/apps\/([^/]+)(\/.*)?$/.exec(urlPath);
+  if (match && appKey(match[1]) === APP_KEY) return match[2] || "/";
+  return urlPath;
+}
 const USERDATA = "/userdata";
 const DATA_DIR = path.resolve(process.env.QUAKE2_DATA_DIR || path.join(ROOT, "userdata"));
 const MAX_UPLOAD = 16 * 1024 * 1024; // far above any Quake 2 save file
@@ -312,8 +325,7 @@ const server = http.createServer((req, res) => {
     res.writeHead(400, { ...NO_STORE, "Content-Type": "text/plain" }).end("Bad request");
     return;
   }
-  if (urlPath === BASE) urlPath = "/";
-  else if (urlPath.startsWith(BASE + "/")) urlPath = urlPath.slice(BASE.length);
+  urlPath = stripAppBase(urlPath);
 
   if (urlPath === USERDATA || urlPath.startsWith(USERDATA + "/")) {
     const remove = url.searchParams.has("delete");
@@ -372,6 +384,6 @@ removeStaleUploads(DATA_DIR)
   }, (err) => console.error("userdata cleanup in " + DATA_DIR + ": " + err.message))
   .then(() => {
     server.listen(PORT, "127.0.0.1", () => {
-      console.log(`Quake 2 static server on http://127.0.0.1:${PORT}/ (also ${BASE}/), saves in ${DATA_DIR}`);
+      console.log(`Quake 2 static server on http://127.0.0.1:${PORT}/ (also /apps/${APP_ID}/), saves in ${DATA_DIR}`);
     });
   });
