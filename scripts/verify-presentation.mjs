@@ -3072,6 +3072,10 @@ async function crosshairAimPair(name, meta) {
       "% of pixels outside the cross); retaking the pair");
     await sleep(1500);
   }
+  // Every attempt can end in the menu-up `continue` above, which leaves `off`
+  // unwritten; decodePng(null) would throw a TypeError out of the runner
+  // instead of its own failure report, so say what happened.
+  if (!on || !off) fatal(name + ": no crosshair on/off pair was captured (the page menu stayed up)");
   return { on: decodePng(on), off: decodePng(off), onEntry, offEntry, state: stateOn, drift };
 }
 

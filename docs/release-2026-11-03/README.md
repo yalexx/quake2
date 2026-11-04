@@ -76,15 +76,15 @@ index were not changed; no publish was made and nothing was pushed.
 
 | | bytes |
 | --- | ---: |
-| tarball (80 files) | **49,324,080** (47.04 MiB) |
+| tarball (80 files) | **49,324,207** (47.04 MiB) |
 | cap (`PACKAGE_MAX_BYTES`, 50 MiB) | 52,428,800 |
-| **margin under the cap** | **3,104,720** (2.96 MiB), 5.92 % |
+| **margin under the cap** | **3,104,593** (2.96 MiB), 5.92 % |
 | published 1.1.0 | 45,650,125 |
-| difference vs 1.1.0 | +3,673,955 (+8.05 %) |
+| difference vs 1.1.0 | +3,674,082 (+8.05 %) |
 
 This is the measurement of the committed tree, and it reproduces exactly: the
 same list and `tar | gzip -6` give the same bytes, sha256
-`8fd76cb550f9dfc535ab10ddb2201407e5618d9fe3bc528190a0fb910510c06a`. This note
+`ee72ecc4b50599546da40e0dc609544e4f1158e5824ee8424d0b976fb7acb526`. This note
 and every other file under `docs/` are not in the package, so editing it does
 not move the number; `CHANGELOG.md` is in the package, which is why it states
 the size approximately.
@@ -96,7 +96,7 @@ the 13 added 2x view-weapon PCX entries.
 The package is 3.1 MB under the cap, so nothing had to be dropped. The levers,
 in order, if it ever needs to shrink: the two `design/` reference PNGs are
 3,115,810 bytes of already-compressed picture that no runtime path reads
-(without them the same tarball is 46,203,692 bytes); `pak9` is already out and
+(without them the same tarball is 46,203,820 bytes); `pak9` is already out and
 would add 41,205,225 bytes of nearly incompressible wall art if it came back;
 and every other runtime file together (scripts, control, mcp, README) is
 940,956 bytes compressed.
