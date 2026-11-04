@@ -70,6 +70,16 @@ Numeric checks run at 640x360 with `deviceScaleFactor: 1`; the desktop shot is
 always captured, and `--phone` switches the same checks to 844x390 and adds
 the phone screenshots of the visual states.
 
+## Screenshots
+
+`--phone` writes four 844x390 states to `shots/`: `phone-landscape.png` (pad
+live in the game), `phone-look-drag.png` (look drag captured mid-gesture with
+the finger still down), `phone-menu.png` (menu open, pad hidden) and
+`phone-portrait.png` (390x844 rotate guide). The desktop shot
+`desktop-1280x720.png` is written by every run. The current report in this
+folder is the 34/34 phone-mode run at 844x390; its desktop leg measured
+headful under Xvfb (`mode: headful-xvfb`).
+
 ## Fixture
 
 The gate starts `server.js` on a free port with a temporary

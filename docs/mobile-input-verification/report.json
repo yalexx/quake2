@@ -1,27 +1,27 @@
 {
   "gate": "scripts/mobile-input-gate.mjs",
-  "at": "2026-11-04T16:40:51.945Z",
-  "mode": "numeric",
-  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/t3-1",
+  "at": "2026-11-04T16:53:28.112Z",
+  "mode": "phone",
+  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1",
   "node": "v24.22.1",
-  "url": "http://127.0.0.1:43605/apps/quake2/",
+  "url": "http://127.0.0.1:37477/apps/quake2/",
   "partial": null,
   "server": {
-    "port": 43605,
-    "pid": 959701,
-    "dataDir": "/tmp/q2gate-data-8BT91u"
+    "port": 37477,
+    "pid": 966845,
+    "dataDir": "/tmp/q2gate-data-nUGIEE"
   },
   "chrome": {
     "path": "/opt/google/chrome/chrome",
-    "pid": 964832,
-    "debuggingPort": 37057,
+    "pid": 972294,
+    "debuggingPort": 36883,
     "headless": false,
-    "display": ":124",
-    "profile": "/tmp/q2gate-chrome-z6lBAF"
+    "display": ":96",
+    "profile": "/tmp/q2gate-chrome-ly8ZHX"
   },
   "viewport": {
-    "width": 640,
-    "height": 360,
+    "width": 844,
+    "height": 390,
     "deviceScaleFactor": 1
   },
   "fixture": {
@@ -49,7 +49,7 @@
         "mode": "deathmatch",
         "query": "+set&cheats&1&+set&deathmatch&1&+set&maxclients&1&+map&demo2",
         "spawn": "brief: +set&deathmatch&1&+set&maxclients&1&+map&demo2",
-        "bootMs": 8415,
+        "bootMs": 8217,
         "spawnPosition": {
           "x": -911.9375,
           "y": -71.9375,
@@ -60,7 +60,7 @@
         "dead": false,
         "forward": {
           "distance": 304,
-          "ms": 800,
+          "ms": 1200,
           "from": {
             "x": -911.9375,
             "y": -71.9375,
@@ -73,72 +73,72 @@
             "distance": 304,
             "forwardComponent": 304,
             "rightComponent": 0,
-            "ms": 800,
+            "ms": 1200,
             "startedUnitsFromSpawn": 0,
-            "returnDistance": 11,
+            "returnDistance": 9,
             "returnTimeout": false
           },
           "NE": {
-            "distance": 296,
-            "forwardComponent": 293,
+            "distance": 325,
+            "forwardComponent": 324,
             "rightComponent": 36,
-            "ms": 800,
-            "startedUnitsFromSpawn": 11,
-            "returnDistance": 15,
+            "ms": 1400,
+            "startedUnitsFromSpawn": 20,
+            "returnDistance": 26,
             "returnTimeout": false
           },
           "E": {
-            "distance": 40,
-            "forwardComponent": -4,
-            "rightComponent": 40,
-            "ms": 1800,
-            "startedUnitsFromSpawn": 26,
-            "returnDistance": 15,
+            "distance": 63,
+            "forwardComponent": -1,
+            "rightComponent": 63,
+            "ms": 2000,
+            "startedUnitsFromSpawn": 32,
+            "returnDistance": 21,
             "returnTimeout": false
           },
           "SE": {
-            "distance": 84,
-            "forwardComponent": -56,
+            "distance": 72,
+            "forwardComponent": -35,
             "rightComponent": 63,
-            "ms": 1800,
-            "startedUnitsFromSpawn": 28,
-            "returnDistance": 25,
+            "ms": 2200,
+            "startedUnitsFromSpawn": 32,
+            "returnDistance": 27,
             "returnTimeout": false
           },
           "S": {
             "distance": 34,
-            "forwardComponent": -33,
-            "rightComponent": 5,
+            "forwardComponent": -34,
+            "rightComponent": -5,
             "ms": 1800,
-            "startedUnitsFromSpawn": 31,
-            "returnDistance": 23,
+            "startedUnitsFromSpawn": 33,
+            "returnDistance": 21,
             "returnTimeout": false
           },
           "SW": {
-            "distance": 255,
-            "forwardComponent": -73,
-            "rightComponent": -244,
+            "distance": 303,
+            "forwardComponent": -72,
+            "rightComponent": -294,
             "ms": 2000,
-            "startedUnitsFromSpawn": 35,
-            "returnDistance": 6,
+            "startedUnitsFromSpawn": 32,
+            "returnDistance": 23,
             "returnTimeout": false
           },
           "W": {
-            "distance": 265,
-            "forwardComponent": 0,
-            "rightComponent": -265,
+            "distance": 244,
+            "forwardComponent": -1,
+            "rightComponent": -244,
             "ms": 1800,
-            "startedUnitsFromSpawn": 7,
-            "returnDistance": 8,
+            "startedUnitsFromSpawn": 31,
+            "returnDistance": 21,
             "returnTimeout": false
           },
           "NW": {
-            "distance": 332,
-            "forwardComponent": 254,
-            "rightComponent": -214,
+            "distance": 297,
+            "forwardComponent": 227,
+            "rightComponent": -191,
             "ms": 1600,
-            "startedUnitsFromSpawn": 5,
-            "returnDistance": 29,
+            "startedUnitsFromSpawn": 23,
+            "returnDistance": 25,
             "returnTimeout": false
           }
         },
@@ -146,8 +146,8 @@
         "minClearance": 34,
         "qualified": false,
         "pass": false,
-        "endedUnitsFromSpawn": 41,
-        "checksBootMs": 8948,
+        "endedUnitsFromSpawn": 35,
+        "checksBootMs": 9553,
         "checksSpawn": {
           "x": -911.9375,
           "y": -71.9375,
@@ -160,7 +160,7 @@
         "mode": "deathmatch",
         "query": "+set&cheats&1&+set&deathmatch&1&+set&maxclients&1&+map&demo3",
         "spawn": "brief fallback: demo3 in deathmatch mode",
-        "bootMs": 9970,
+        "bootMs": 9874,
         "spawnPosition": {
           "x": 152.0625,
           "y": -423.9375,
@@ -170,7 +170,7 @@
         "keyDest": 0,
         "dead": false,
         "forward": {
-          "distance": 290,
+          "distance": 321,
           "ms": 1800,
           "from": {
             "x": 152.0625,
@@ -181,38 +181,38 @@
         },
         "directions": {
           "N": {
-            "distance": 290,
-            "forwardComponent": 290,
+            "distance": 321,
+            "forwardComponent": 321,
             "rightComponent": 0,
             "ms": 1800,
             "startedUnitsFromSpawn": 0,
-            "returnDistance": 23,
+            "returnDistance": 7,
             "returnTimeout": false
           },
           "NE": {
-            "distance": 297,
-            "forwardComponent": 297,
+            "distance": 299,
+            "forwardComponent": 299,
             "rightComponent": 8,
             "ms": 2000,
-            "startedUnitsFromSpawn": 11,
-            "returnDistance": 24,
+            "startedUnitsFromSpawn": 5,
+            "returnDistance": 29,
             "returnTimeout": false
           },
           "E": {
-            "distance": 12,
-            "forwardComponent": -2,
-            "rightComponent": 12,
-            "ms": 1600,
-            "startedUnitsFromSpawn": 14,
-            "returnDistance": 14,
+            "distance": 3,
+            "forwardComponent": -1,
+            "rightComponent": 3,
+            "ms": 1200,
+            "startedUnitsFromSpawn": 25,
+            "returnDistance": 25,
             "returnTimeout": false
           },
           "SE": {
-            "distance": 19,
-            "forwardComponent": -19,
+            "distance": 31,
+            "forwardComponent": -31,
             "rightComponent": 0,
             "ms": 1400,
-            "startedUnitsFromSpawn": 14,
+            "startedUnitsFromSpawn": 25,
             "returnDistance": 11,
             "returnTimeout": false
           },
@@ -239,17 +239,17 @@
             "forwardComponent": 0,
             "rightComponent": -160,
             "ms": 2600,
-            "startedUnitsFromSpawn": 25,
-            "returnDistance": 13,
+            "startedUnitsFromSpawn": 26,
+            "returnDistance": 5,
             "returnTimeout": false
           },
           "NW": {
-            "distance": 272,
-            "forwardComponent": 226,
-            "rightComponent": -151,
+            "distance": 294,
+            "forwardComponent": 247,
+            "rightComponent": -159,
             "ms": 1600,
-            "startedUnitsFromSpawn": 1,
-            "returnDistance": 20,
+            "startedUnitsFromSpawn": 7,
+            "returnDistance": 16,
             "returnTimeout": false
           }
         },
@@ -257,7 +257,7 @@
         "minClearance": 0,
         "qualified": false,
         "pass": false,
-        "endedUnitsFromSpawn": 9
+        "endedUnitsFromSpawn": 6
       },
       {
         "id": "demo3-sp",
@@ -319,7 +319,7 @@
         }
       },
       "note": null,
-      "at": "2026-11-04T16:41:08.280Z"
+      "at": "2026-11-04T16:53:45.448Z"
     },
     {
       "id": "setup",
@@ -335,7 +335,7 @@
         }
       },
       "note": null,
-      "at": "2026-11-04T16:44:21.011Z"
+      "at": "2026-11-04T16:56:58.144Z"
     },
     {
       "id": "setup-arm",
@@ -347,7 +347,7 @@
         "keyDest": 0
       },
       "note": null,
-      "at": "2026-11-04T16:44:38.875Z"
+      "at": "2026-11-04T16:57:15.531Z"
     },
     {
       "id": "1",
@@ -356,8 +356,8 @@
       "numbers": [
         {
           "at": [
-            320,
-            65
+            422,
+            70
           ],
           "ammo": [
             200,
@@ -371,8 +371,8 @@
         },
         {
           "at": [
-            192,
-            90
+            253,
+            98
           ],
           "ammo": [
             200,
@@ -386,8 +386,8 @@
         },
         {
           "at": [
-            448,
-            79
+            591,
+            86
           ],
           "ammo": [
             200,
@@ -401,7 +401,7 @@
         }
       ],
       "note": null,
-      "at": "2026-11-04T16:44:53.879Z"
+      "at": "2026-11-04T16:57:32.318Z"
     },
     {
       "id": "2a",
@@ -425,7 +425,7 @@
         "mousedownEvents": 1
       },
       "note": null,
-      "at": "2026-11-04T16:45:05.202Z"
+      "at": "2026-11-04T16:57:43.423Z"
     },
     {
       "id": "2b",
@@ -438,7 +438,7 @@
         "fireHeld": false
       },
       "note": null,
-      "at": "2026-11-04T16:45:05.202Z"
+      "at": "2026-11-04T16:57:43.424Z"
     },
     {
       "id": "2c",
@@ -447,43 +447,43 @@
       "numbers": {
         "fireHeld": false,
         "ammo": [
-          183,
-          183
+          184,
+          184
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:45:11.992Z"
+      "at": "2026-11-04T16:57:49.815Z"
     },
     {
       "id": "3a",
       "name": "look drag left+up raises yaw and lowers pitch, without firing",
       "pass": true,
       "numbers": {
-        "yawDelta": 33.92,
-        "pitchDelta": -19.797,
+        "yawDelta": 31.152,
+        "pitchDelta": -18.215,
         "ammo": [
-          183,
-          183
+          184,
+          184
         ],
         "newEntities": 0
       },
       "note": null,
-      "at": "2026-11-04T16:45:22.129Z"
+      "at": "2026-11-04T16:58:03.546Z"
     },
     {
       "id": "3b",
       "name": "look drag right+down lowers yaw and raises pitch, without firing",
       "pass": true,
       "numbers": {
-        "yawDelta": -33.92,
-        "pitchDelta": 19.797,
+        "yawDelta": -31.152,
+        "pitchDelta": 18.215,
         "ammo": [
-          183,
-          183
+          184,
+          184
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:45:32.067Z"
+      "at": "2026-11-04T16:58:14.745Z"
     },
     {
       "id": "3c",
@@ -491,15 +491,15 @@
       "pass": true,
       "numbers": {
         "ammo": [
-          183,
-          183
+          184,
+          184
         ],
         "yawDelta": 0,
         "pitchDelta": 0,
         "mousedown": 0
       },
       "note": null,
-      "at": "2026-11-04T16:45:36.976Z"
+      "at": "2026-11-04T16:58:19.557Z"
     },
     {
       "id": "4a",
@@ -510,7 +510,7 @@
         "movedUnits": 0
       },
       "note": null,
-      "at": "2026-11-04T16:45:47.846Z"
+      "at": "2026-11-04T16:58:30.217Z"
     },
     {
       "id": "4b",
@@ -666,7 +666,7 @@
         }
       },
       "note": null,
-      "at": "2026-11-04T16:46:16.306Z"
+      "at": "2026-11-04T16:58:58.377Z"
     },
     {
       "id": "4c",
@@ -677,7 +677,7 @@
         "noclip": true
       },
       "note": null,
-      "at": "2026-11-04T16:46:18.033Z"
+      "at": "2026-11-04T16:59:00.011Z"
     },
     {
       "id": "5b",
@@ -685,14 +685,14 @@
       "pass": true,
       "numbers": {
         "zBefore": -105.8125,
-        "zMax": -72.4375,
+        "zMax": -72.5625,
         "zAfter": -105.8125,
-        "roseUnits": 33.38,
+        "roseUnits": 33.25,
         "rose": true,
         "landed": true
       },
       "note": null,
-      "at": "2026-11-04T16:46:51.055Z"
+      "at": "2026-11-04T16:59:32.442Z"
     },
     {
       "id": "5c",
@@ -722,7 +722,7 @@
         "note": "No door on demo2/demo3 is provable in this harness; the check proves the binding and the key the button presses instead."
       },
       "note": null,
-      "at": "2026-11-04T16:46:56.109Z"
+      "at": "2026-11-04T16:59:38.243Z"
     },
     {
       "id": "5d",
@@ -741,7 +741,7 @@
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:46:56.109Z"
+      "at": "2026-11-04T16:59:38.243Z"
     },
     {
       "id": "5e",
@@ -753,7 +753,7 @@
         "afterPrev": 105
       },
       "note": null,
-      "at": "2026-11-04T16:47:02.742Z"
+      "at": "2026-11-04T16:59:44.946Z"
     },
     {
       "id": "5f",
@@ -766,7 +766,7 @@
         "keyDestAfterResume": 0
       },
       "note": null,
-      "at": "2026-11-04T16:47:09.575Z"
+      "at": "2026-11-04T16:59:53.414Z"
     },
     {
       "id": "5g",
@@ -780,17 +780,17 @@
         "stickDisplayShown": "block"
       },
       "note": null,
-      "at": "2026-11-04T16:47:16.954Z"
+      "at": "2026-11-04T17:00:00.652Z"
     },
     {
       "id": "6a",
       "name": "two fingers: stick + FIRE move the player and fire in the same window",
       "pass": true,
       "numbers": {
-        "movedUnits": 180,
+        "movedUnits": 185.8,
         "ammo": [
           200,
-          192
+          191
         ],
         "keys": [
           "forward"
@@ -798,34 +798,34 @@
         "fireHeld": true
       },
       "note": null,
-      "at": "2026-11-04T16:47:24.062Z"
+      "at": "2026-11-04T17:00:07.858Z"
     },
     {
       "id": "6b",
       "name": "two fingers: look + FIRE turn the view and fire in the same window",
       "pass": true,
       "numbers": {
-        "yawDelta": 34.42,
-        "pitchDelta": -14.12,
+        "yawDelta": 30.9,
+        "pitchDelta": -13.06,
         "ammo": [
-          188,
-          170
+          187,
+          169
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:47:41.217Z"
+      "at": "2026-11-04T17:00:26.804Z"
     },
     {
       "id": "6c",
       "name": "two fingers: stick + look move the player and turn the view at once",
       "pass": true,
       "numbers": {
-        "movedUnits": 153,
-        "yawDelta": 22.44,
-        "pitchDelta": 0.5
+        "movedUnits": 54.2,
+        "yawDelta": 20.85,
+        "pitchDelta": 0.25
       },
       "note": null,
-      "at": "2026-11-04T16:47:47.471Z"
+      "at": "2026-11-04T17:00:34.118Z"
     },
     {
       "id": "7a",
@@ -835,41 +835,41 @@
         "fireHeldAfterCancel": false,
         "ammoStable": true,
         "ammo": [
-          167,
-          162,
-          162,
-          155
+          166,
+          160,
+          160,
+          154
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:48:12.863Z"
+      "at": "2026-11-04T17:00:59.489Z"
     },
     {
       "id": "7b",
       "name": "touchCancel on held stick releases it; the player stops; the next press moves",
       "pass": true,
       "numbers": {
-        "movedWhileHeld": 137.4,
+        "movedWhileHeld": 120,
         "keysAfterCancel": [],
-        "movedAfterCancel": 0,
+        "movedAfterCancel": 8.296,
         "floorDrift": 0,
-        "stopBar": 27.5,
+        "stopBar": 24,
         "cancelWindow": {
           "from": {
-            "x": -679.9375,
-            "y": 84.9375,
-            "z": -113.8125
+            "x": -600.0625,
+            "y": 119.6875,
+            "z": -113.0625
           },
           "to": {
-            "x": -679.9375,
-            "y": 84.9375,
-            "z": -113.8125
+            "x": -599.1875,
+            "y": 111.4375,
+            "z": -122.3125
           }
         },
-        "movedOnNextPress": 101.5
+        "movedOnNextPress": 124
       },
       "note": null,
-      "at": "2026-11-04T16:48:26.806Z"
+      "at": "2026-11-04T17:01:13.135Z"
     },
     {
       "id": "8a",
@@ -881,7 +881,7 @@
             "forward"
           ],
           "fireHeld": true,
-          "ammo": 148
+          "ammo": 147
         },
         "afterHide": {
           "keys": [],
@@ -891,8 +891,8 @@
         "wentHidden": true,
         "movedAfterHide": 0,
         "ammoAfterHide": [
-          148,
-          148
+          147,
+          147
         ],
         "events": [
           "blur",
@@ -901,7 +901,7 @@
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:48:42.453Z"
+      "at": "2026-11-04T17:01:27.695Z"
     },
     {
       "id": "8b",
@@ -912,13 +912,13 @@
         "keys": [],
         "fireHeld": false,
         "ammo": [
-          155,
-          148,
+          154,
+          147,
           138
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:48:49.572Z"
+      "at": "2026-11-04T17:01:34.365Z"
     },
     {
       "id": "9a",
@@ -933,7 +933,7 @@
         "pauseDisplay": "flex"
       },
       "note": null,
-      "at": "2026-11-04T16:49:07.709Z"
+      "at": "2026-11-04T17:01:52.842Z"
     },
     {
       "id": "9b",
@@ -952,7 +952,7 @@
         "fireHeld": false
       },
       "note": null,
-      "at": "2026-11-04T16:49:19.849Z"
+      "at": "2026-11-04T17:02:06.979Z"
     },
     {
       "id": "9c",
@@ -963,7 +963,7 @@
         "keyDestAfterResume": 0
       },
       "note": null,
-      "at": "2026-11-04T16:49:24.490Z"
+      "at": "2026-11-04T17:02:12.543Z"
     },
     {
       "id": "10a",
@@ -982,7 +982,7 @@
         }
       },
       "note": null,
-      "at": "2026-11-04T16:49:38.647Z"
+      "at": "2026-11-04T17:02:26.671Z"
     },
     {
       "id": "10b",
@@ -995,7 +995,7 @@
         "mode": "headful-xvfb"
       },
       "note": null,
-      "at": "2026-11-04T16:51:23.533Z"
+      "at": "2026-11-04T17:04:08.864Z"
     },
     {
       "id": "10c",
@@ -1009,7 +1009,7 @@
         "note": null
       },
       "note": null,
-      "at": "2026-11-04T16:51:23.533Z"
+      "at": "2026-11-04T17:04:08.864Z"
     },
     {
       "id": "10d",
@@ -1022,18 +1022,18 @@
         ]
       },
       "note": null,
-      "at": "2026-11-04T16:51:28.688Z"
+      "at": "2026-11-04T17:04:14.079Z"
     },
     {
       "id": "10e",
       "name": "desktop: the keyboard moves the player",
       "pass": true,
       "numbers": {
-        "movedUnits": 192,
+        "movedUnits": 231.9,
         "keyDest": 0
       },
       "note": null,
-      "at": "2026-11-04T16:51:32.378Z"
+      "at": "2026-11-04T17:04:18.164Z"
     }
   ],
   "numbers": {
@@ -1045,72 +1045,72 @@
           "distance": 304,
           "forwardComponent": 304,
           "rightComponent": 0,
-          "ms": 800,
+          "ms": 1200,
           "startedUnitsFromSpawn": 0,
-          "returnDistance": 11,
+          "returnDistance": 9,
           "returnTimeout": false
         },
         "NE": {
-          "distance": 296,
-          "forwardComponent": 293,
+          "distance": 325,
+          "forwardComponent": 324,
           "rightComponent": 36,
-          "ms": 800,
-          "startedUnitsFromSpawn": 11,
-          "returnDistance": 15,
+          "ms": 1400,
+          "startedUnitsFromSpawn": 20,
+          "returnDistance": 26,
           "returnTimeout": false
         },
         "E": {
-          "distance": 40,
-          "forwardComponent": -4,
-          "rightComponent": 40,
-          "ms": 1800,
-          "startedUnitsFromSpawn": 26,
-          "returnDistance": 15,
+          "distance": 63,
+          "forwardComponent": -1,
+          "rightComponent": 63,
+          "ms": 2000,
+          "startedUnitsFromSpawn": 32,
+          "returnDistance": 21,
           "returnTimeout": false
         },
         "SE": {
-          "distance": 84,
-          "forwardComponent": -56,
+          "distance": 72,
+          "forwardComponent": -35,
           "rightComponent": 63,
-          "ms": 1800,
-          "startedUnitsFromSpawn": 28,
-          "returnDistance": 25,
+          "ms": 2200,
+          "startedUnitsFromSpawn": 32,
+          "returnDistance": 27,
           "returnTimeout": false
         },
         "S": {
           "distance": 34,
-          "forwardComponent": -33,
-          "rightComponent": 5,
+          "forwardComponent": -34,
+          "rightComponent": -5,
           "ms": 1800,
-          "startedUnitsFromSpawn": 31,
-          "returnDistance": 23,
+          "startedUnitsFromSpawn": 33,
+          "returnDistance": 21,
           "returnTimeout": false
         },
         "SW": {
-          "distance": 255,
-          "forwardComponent": -73,
-          "rightComponent": -244,
+          "distance": 303,
+          "forwardComponent": -72,
+          "rightComponent": -294,
           "ms": 2000,
-          "startedUnitsFromSpawn": 35,
-          "returnDistance": 6,
+          "startedUnitsFromSpawn": 32,
+          "returnDistance": 23,
           "returnTimeout": false
         },
         "W": {
-          "distance": 265,
-          "forwardComponent": 0,
-          "rightComponent": -265,
+          "distance": 244,
+          "forwardComponent": -1,
+          "rightComponent": -244,
           "ms": 1800,
-          "startedUnitsFromSpawn": 7,
-          "returnDistance": 8,
+          "startedUnitsFromSpawn": 31,
+          "returnDistance": 21,
           "returnTimeout": false
         },
         "NW": {
-          "distance": 332,
-          "forwardComponent": 254,
-          "rightComponent": -214,
+          "distance": 297,
+          "forwardComponent": 227,
+          "rightComponent": -191,
           "ms": 1600,
-          "startedUnitsFromSpawn": 5,
-          "returnDistance": 29,
+          "startedUnitsFromSpawn": 23,
+          "returnDistance": 25,
           "returnTimeout": false
         }
       },
@@ -1207,8 +1207,28 @@
   },
   "screenshots": [
     {
+      "name": "phone-landscape",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1/docs/mobile-input-verification/shots/phone-landscape.png",
+      "note": "landscape 844x390, pad live in game"
+    },
+    {
+      "name": "phone-look-drag",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1/docs/mobile-input-verification/shots/phone-look-drag.png",
+      "note": "landscape 844x390, look drag mid-gesture (finger down)"
+    },
+    {
+      "name": "phone-menu",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1/docs/mobile-input-verification/shots/phone-menu.png",
+      "note": "landscape 844x390, menu open over the game"
+    },
+    {
+      "name": "phone-portrait",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1/docs/mobile-input-verification/shots/phone-portrait.png",
+      "note": "portrait 390x844 with the rotate guide"
+    },
+    {
       "name": "desktop-1280x720",
-      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t3-1/docs/mobile-input-verification/shots/desktop-1280x720.png",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/t4-1/docs/mobile-input-verification/shots/desktop-1280x720.png",
       "note": "desktop 1280x720, in game"
     }
   ],
@@ -1268,33 +1288,33 @@
     },
     {
       "kind": "desktop-fallback",
-      "text": "headless refused the pointer lock; the desktop leg was re-run headful under Xvfb"
+      "text": "headless reported the look moves as net-zero; the desktop leg was re-run headful under Xvfb"
     }
   ],
   "chromes": [
     {
       "path": "/opt/google/chrome/chrome",
-      "pid": 959713,
-      "debuggingPort": 37645,
+      "pid": 966871,
+      "debuggingPort": 38147,
       "headless": true,
       "display": null,
-      "profile": "/tmp/q2gate-chrome-7E63tO"
+      "profile": "/tmp/q2gate-chrome-GTzQZ0"
     },
     {
       "path": "/opt/google/chrome/chrome",
-      "pid": 963774,
-      "debuggingPort": 45037,
+      "pid": 971220,
+      "debuggingPort": 41615,
       "headless": true,
       "display": null,
-      "profile": "/tmp/q2gate-chrome-jlEYJz"
+      "profile": "/tmp/q2gate-chrome-E9LrmR"
     },
     {
       "path": "/opt/google/chrome/chrome",
-      "pid": 964832,
-      "debuggingPort": 37057,
+      "pid": 972294,
+      "debuggingPort": 36883,
       "headless": false,
-      "display": ":124",
-      "profile": "/tmp/q2gate-chrome-z6lBAF"
+      "display": ":96",
+      "profile": "/tmp/q2gate-chrome-ly8ZHX"
     }
   ],
   "desktop": {
@@ -1305,5 +1325,5 @@
   "passed": true,
   "consoleErrorCount": 0,
   "pageErrorCount": 0,
-  "finishedAt": "2026-11-04T16:51:34.659Z"
+  "finishedAt": "2026-11-04T17:04:21.090Z"
 }

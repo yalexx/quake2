@@ -1,5 +1,34 @@
 # Changelog
 
+## Mobile input: six bugs fixed, one command proves them
+
+The owner's phone report is fixed and measured: `< wpn` / `wpn >` switch the
+live weapon (`weaponIndex` 105 -> 82 -> 105), a tap on the picture fires
+nothing (ammo 200 -> 200, 0 new entities, 0 mousedown), JUMP raises z 33.25
+units and lands, the thumbstick moves all eight directions at 70 % of the ring
+(59.8–60.1 units each, 0 at centre), and a look drag turns yaw/pitch
+(±31.152° / ∓18.215°) without firing or taking pointer lock. The desktop path
+is unchanged: 1280x720, headful under Xvfb, pointer lock on `#canvas`, 5
+trusted moves of 30/10 px turn yaw -21.116° and pitch +6.998°, a left click
+fires (ammo 200 -> 194) and W moves 231.9 units.
+
+The one command is
+`CHROME_PATH=/opt/google/chrome/chrome node scripts/mobile-input-gate.mjs --phone`:
+34/34 checks, exit 0, every assertion a number from the live engine
+(`window.quake2Engine.read()`), every input a trusted CDP
+`Input.dispatchTouchEvent` / `Input.dispatchMouseEvent` /
+`Input.dispatchKeyEvent` — no page-side `dispatchEvent` drives a control. The
+report, four 844x390 phone screenshots (`phone-landscape`, `phone-look-drag`,
+`phone-menu`, `phone-portrait`) and the desktop shot are in
+`docs/mobile-input-verification/`; the before/after table is
+`docs/mobile-input-report.md`. The root cause was the engine's own canvas touch
+path, which fired on any tap and took pointer lock; `#mc-look` is now a
+full-picture capture surface, the touch page refuses pointer lock, and FIRE is
+the only attack. `quake2Engine.read()` gained `weaponIndex` and `ammo` so the
+gate can assert them. The slim Store tarball (pak0 + pak10 + engine + code,
+no `docs/`, `assets/` or `pak9`) measures inside the 50 MiB cap; nothing was
+published.
+
 ## Settings in the menu, a quiet boot, and view weapons at 2x
 
 This pass finished the presentation work in four parts and then measured all
