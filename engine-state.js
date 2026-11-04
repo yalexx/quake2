@@ -46,10 +46,53 @@
 //     is the menu, read off the engine rather than assumed, which is Quake 2's
 //     own keydest_t order. The bridge uses it to prove the console stayed shut.
 //
+//   the player's own stats (health, and the ammo the HUD draws)
+//     `cl.frame.playerstate.stats` is a 32-entry array sitting immediately
+//     after the player state's `fov` (90.0f) and `rdflags`, and on this build
+//     its entries are int16, not int: 32 * 2 bytes = 64, and the 32nd entry
+//     ends exactly where the next field of the structure starts. Five
+//     snapshots of the low image, one per weapon (spawn, Machinegun, Shotgun,
+//     Railgun, BFG10K), were diffed offline: exactly one 32-entry int16 window
+//     in the image changed with the weapon. Its entry 1 read 100 in every
+//     state, the number the HUD draws as health, and entry 3 read 200 / 100 /
+//     50 / 200 -- the ammo the HUD drew at the same moment. A second live run
+//     selected eight weapons with their own number-key binds and showed what
+//     entry 2 is: machinegun and chaingun (both bullets) share entry 2 = 14
+//     and ammo 200, shotgun and super shotgun (both shells) share entry 2 = 9
+//     and ammo 100, while railgun, BFG10K and rocket launcher each read their
+//     own icon and count. So entry 2 is the *ammo type's icon index*, not a
+//     weapon, and the array carries the ammo type and count but not the
+//     current weapon -- this is the classic Quake 2 stat layout (HEALTH_ICON
+//     0, HEALTH 1, AMMO_ICON 2, AMMO 3, ARMOR_ICON 4, ARMOR 5), and stock
+//     Quake 2 has no weapon entry in it. Firing confirmed the ammo entry: with
+//     `+attack` held it fell from 200 to 198 (and 200 to 197 in an earlier
+//     run) while the weapon word did not move, and the entries that identify
+//     the array stayed put. The screenshot HUD is not a witness while firing
+//     -- the digit reader misreads the ammo field just after a burst -- which
+//     is why the HUD cross-check is quoted only for the settled states.
+//
+//   the current weapon: `cl.frame.playerstate.gunindex`
+//     The player state's own weapon field is the model index of the
+//     first-person weapon model (`gunindex`), a 32-bit word immediately before
+//     `gunframe`, `blend[4]`, `fov` and `stats`. Eight weapons were selected
+//     with their own number-key binds and the word read 36 (Blaster), 64
+//     (Shotgun), 68 (Machinegun), 69 (Chaingun), 70 (Super Shotgun), 71
+//     (Railgun), 72 (BFG10K) and 73 (Rocket Launcher) -- distinct for every
+//     weapon, including the pairs that share an ammo type and therefore read
+//     identically in `stats`. It is a model index, not Quake 2's 1..10 weapon
+//     number: model indices are assigned in precache order, so the same weapon
+//     can read differently on another level. On one level it changes with the
+//     weapon and with nothing else, which is what a gate needs; a caller that
+//     wants a weapon number should not read it as one.
+//
 // What was NOT recovered, and is therefore reported as null rather than
-// guessed: health, armour, ammo, and the game DLL's own edict fields. This
+// guessed: health and armour, and the game DLL's own edict fields. This
 // build's game module (engine/game_baseq2.wasm) carries no name section either,
-// and no anchor for those fields survived this pass. See README.md.
+// and no anchor for those fields survived this pass. The documented edict base
+// (control/edicts.mjs) did not hold on this build -- the game heap moves
+// between boots -- and the edicts were not located in the time available, so
+// the checks above are against the HUD, the engine's own drawn output, rather
+// than against the game-side edict. See README.md.
 
 (function () {
   "use strict";
@@ -68,6 +111,45 @@
   var KEYDEST_GAME = 0;
   var KEYDEST_CONSOLE = 1;
   var KEYDEST_NAMES = { 0: "game", 1: "console", 3: "menu" };
+
+  // ---------------------------------------------------------------------
+  // The current weapon: `cl.frame.playerstate.gunindex`, int32
+  // ---------------------------------------------------------------------
+  // Provenance is the block at the top of this file. `gunindex` is the model
+  // index of the first-person weapon model, and it is the only field of the
+  // player state that identifies the weapon: the stats array next to it groups
+  // weapons by ammo type. It is published here as `weaponIndex` with that
+  // caveat spelled out for callers.
+  var GUNINDEX = 362544; // 0x058830  cl.frame.playerstate.gunindex, int32
+  var GUNFRAME = 362548; // 0x058834  cl.frame.playerstate.gunframe, int32
+  var MAX_GUNINDEX = 65535; // a model index, never negative or absurd
+
+  // A gunindex of 0 is real: it is "no weapon model", which is what the state
+  // reads before the level has handed the player anything. A gunindex outside
+  // the range above is not this field at all -- the memory has moved, or has
+  // not been laid out yet -- and is reported as unreadable rather than passed
+  // on.
+
+  // ---------------------------------------------------------------------
+  // The player's own stats: `cl.frame.playerstate.stats`, int16 x 32
+  // ---------------------------------------------------------------------
+  // Provenance is the block at the top of this file. The indexes below are
+  // measured, not assumed. HEALTH matched the health the HUD drew and stayed
+  // put across weapon switches; AMMO matched the HUD in the settled weapon
+  // states and fell when firing; AMMO_ICON is the ammo *type*, which is why
+  // machinegun and chaingun share it and cannot be told apart here. There is
+  // no weapon index in the array: the weapon is GUNINDEX above.
+  var STATS = 362576; // 0x058850  cl.frame.playerstate.stats, int16 x 32
+  var STATS_COUNT = 32;
+  var STAT_HEALTH = 1; // int16, 100 at spawn -- the health the HUD draws
+  var STAT_AMMO_ICON = 2; // int16, the ammo type's icon index (14=bull, 9=shell)
+  var STAT_AMMO = 3; // int16, the number the HUD draws, falls with firing
+
+  // A stats array that does not hold a plausible health is not this array --
+  // the memory has moved, or has not been laid out yet. Reporting that is
+  // better than publishing whatever two bytes happen to be there as ammo 0.
+  // Zero is allowed: a dead player's health stat is 0.
+  var MAX_STAT_HEALTH = 1000;
 
   // ---------------------------------------------------------------------
   // The live entity array: `cl_entities`
@@ -189,6 +271,44 @@
     return keyDestView[0];
   }
 
+  // The current weapon's model index, or { reason } when the word cannot be
+  // trusted. Built fresh every call for the same reason as `triple`: the
+  // engine can grow its heap. Called from `read()`, never from the frame loop.
+  function gunindex(buffer) {
+    if (!inRange(buffer, GUNINDEX, 4)) return { reason: "GUNINDEX_OUT_OF_RANGE" };
+    var value = new Int32Array(buffer, GUNINDEX, 1)[0];
+    if (!(value >= 0 && value <= MAX_GUNINDEX)) {
+      return { reason: "GUNINDEX_IMPLAUSIBLE", value: value };
+    }
+    return { value: value };
+  }
+
+  // The ammo count from the stats array, or { reason } when it cannot be
+  // trusted. The health entry is read only to check the array's identity: a
+  // window whose health is not a plausible health is not this array.
+  function stats(buffer) {
+    if (!inRange(buffer, STATS, STATS_COUNT * 2)) return { reason: "STATS_OUT_OF_RANGE" };
+    var view = new Int16Array(buffer, STATS, STATS_COUNT);
+    var health = view[STAT_HEALTH];
+    if (!(health >= 0 && health <= MAX_STAT_HEALTH)) return { reason: "STATS_IMPLAUSIBLE", health: health };
+    return { ammo: view[STAT_AMMO] };
+  }
+
+  // Each number a caller asked for, or null with its own reason. The two are
+  // read from different structures, so one being unreadable does not make the
+  // other a null. `health` is deliberately not forwarded here -- this pass did
+  // not recover it and the reading is only used to check the array's identity.
+  function statFields(weapon, reading) {
+    var weaponOk = !!weapon && weapon.reason === undefined;
+    var ammoOk = !!reading && reading.reason === undefined;
+    return {
+      weaponIndex: weaponOk ? weapon.value : null,
+      ammo: ammoOk ? reading.ammo : null,
+      weaponIndexReason: weaponOk ? null : (weapon && weapon.reason) || "GUNINDEX_UNREADABLE",
+      ammoReason: ammoOk ? null : (reading && reading.reason) || "STATS_UNREADABLE",
+    };
+  }
+
   // One reading of the engine, as JSON-serialisable data.
   //
   // `ok: false` and a `reason` mean the memory is not up yet, or the engine has
@@ -197,11 +317,23 @@
   function read() {
     var buffer = memory();
     if (!buffer) {
-      return { ok: false, reason: "ENGINE_NOT_LOADED", source: "wasm-memory", position: null, angles: null };
+      var unloaded = statFields({ reason: "ENGINE_NOT_LOADED" }, { reason: "ENGINE_NOT_LOADED" });
+      return {
+        ok: false,
+        reason: "ENGINE_NOT_LOADED",
+        source: "wasm-memory",
+        position: null,
+        angles: null,
+        weaponIndex: unloaded.weaponIndex,
+        ammo: unloaded.ammo,
+        weaponIndexReason: unloaded.weaponIndexReason,
+        ammoReason: unloaded.ammoReason,
+      };
     }
     var org = triple(buffer, VIEWORG);
     var ang = triple(buffer, VIEWANGLES);
     var dest = keyDest(buffer);
+    var statsFields = statFields(gunindex(buffer), stats(buffer));
     if (!org || !ang) {
       return {
         ok: false,
@@ -210,6 +342,10 @@
         position: null,
         angles: null,
         keyDest: dest,
+        weaponIndex: statsFields.weaponIndex,
+        ammo: statsFields.ammo,
+        weaponIndexReason: statsFields.weaponIndexReason,
+        ammoReason: statsFields.ammoReason,
       };
     }
     var dead = Math.abs(ang[2]) > ROLL_IS_DEATH;
@@ -234,7 +370,13 @@
       aliveSource: "view-roll-above-strafe-lean",
       health: null,
       armour: null,
-      ammo: null,
+      // The two numbers the input gate asserts on. Each is either an integer
+      // the engine itself wrote -- the weapon model index, and the ammo count
+      // from the stats array -- or null with its own reason.
+      weaponIndex: statsFields.weaponIndex,
+      ammo: statsFields.ammo,
+      weaponIndexReason: statsFields.weaponIndexReason,
+      ammoReason: statsFields.ammoReason,
       readAt: new Date().toISOString(),
     };
   }
@@ -437,6 +579,14 @@
       edicts: EDICTS,
       edictStride: EDICT_STRIDE,
       maxEdicts: MAX_EDICTS,
+      gunindex: GUNINDEX,
+      gunframe: GUNFRAME,
+      stats: STATS,
+      statsCount: STATS_COUNT,
+      statsEncoding: "int16",
+      statHealth: STAT_HEALTH,
+      statAmmoIcon: STAT_AMMO_ICON,
+      statAmmo: STAT_AMMO,
     },
     read: read,
     entities: entities,
