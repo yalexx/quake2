@@ -1022,6 +1022,8 @@ async function checksTouch(base, candidate) {
   }, 12000).catch(() => null);
   check("setup-arm", "give all armed the player: ammo is readable and above zero",
     Boolean(armed), { ammo: armed && armed.ammo, weaponIndex: armed && armed.weaponIndex, keyDest: armed && armed.keyDest });
+  // The pad live in the game, at the phone size the owner reported from.
+  if (options.phone) await capture("phone-landscape", "landscape 844x390, pad live in game");
 
   // ---- Check 1: an empty tap never fires.
   stage = "1";
@@ -1119,6 +1121,9 @@ async function checksTouch(base, candidate) {
     for (let i = 1; i <= 8; i++) {
       await touchEvent("touchMove", [point(id, x0 - 120 * i / 8, y0 - 70 * i / 8)]);
       await sleep(45);
+      // Capture the finger still down, halfway through the drag: the phone shot
+      // must show a live look gesture, not a released one.
+      if (options.phone && i === 4) await capture("phone-look-drag", "landscape 844x390, look drag mid-gesture (finger down)");
     }
     await touchEvent("touchEnd", []);
     await sleep(1500);
@@ -1351,6 +1356,7 @@ async function checksTouch(base, candidate) {
     // The app's poll turns keyDest 3 into the page menu about 120 ms later.
     await waitFor("the page menu to open", async () => dumpJson(`document.body.classList.contains("menu-open")`), 4000).catch(() => null);
     const padWhileMenu = await dumpJson(`(() => { const root = document.getElementById("mobile-controls"); return { display: root ? getComputedStyle(root).display : null, menuOpen: document.body.classList.contains("menu-open") }; })()`);
+    if (options.phone) await capture("phone-menu", "landscape 844x390, menu open over the game");
     let resume = await rect('[data-action="resume"]');
     let resumed = null;
     if (resume) {
