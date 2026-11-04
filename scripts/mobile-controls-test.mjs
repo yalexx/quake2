@@ -691,7 +691,12 @@ async function run() {
   check("the right side stays mostly free for dragging to look", coverage < 0.22, { coverage: Number(coverage.toFixed(3)) });
   const lookCentre = { x: lookBox.left + lookBox.w * 0.72, y: lookBox.top + lookBox.h * 0.5 };
   const stack = await elementStack(lookCentre.x, lookCentre.y);
-  check("the look area is not covered by a control", stack && stack[0] === "canvas", stack);
+  // The look drag is captured by #mc-look, not the canvas: a touch must never
+  // reach the engine's own canvas touch path (it fires and takes pointer
+  // lock). The canvas must still be right underneath, because the touch layer
+  // targets it with synthetic mouse events.
+  check("the look area is the touch look surface above the canvas",
+    stack && stack[0] === "mc-look" && stack.indexOf("canvas") > 0, stack);
   check("every control carries a visible label and an accessible name",
     [["#mc-fire", "FIRE"], ["#mc-jump", "JUMP"], ["#mc-use", "USE"], ["#mc-prev", "WPN"], ["#mc-next", "WPN"], ["#mc-pause", "MENU"]]
       .every(([selector, label]) => {

@@ -1376,6 +1376,13 @@ var Module;
   // running, ask the engine for its menu (that is the pause) and show the panel.
   document.addEventListener("pointerlockchange", function () {
     if (document.pointerLockElement === canvasElement) return;
+    // On a touch page pointer lock is never wanted: the touch layer takes over
+    // on the first finger and drops a lock a mouse had taken (mobile-controls.js
+    // refuses every later request). That drop is not the player pressing
+    // Escape. Treated as one it paused the game on the very first finger touch
+    // of a page whose mouse had locked (measured 2026-11-04: keyDest 0 -> 3
+    // inside the touch, the pad hidden behind the panel).
+    if (touchUiActive()) return;
     setTimeout(function () {
       if (document.pointerLockElement === canvasElement) return;
       if (gameModeActive()) return;

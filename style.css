@@ -789,9 +789,9 @@ body.is-game-mode #loading {
    PUBG Mobile, Fortnite, Apex Legends Mobile) settled on: a left thumbstick, a
    large low-right FIRE button, JUMP and USE inside the same thumb arc, and the
    small weapon-cycle pair above them along the right edge. The centre-right is
-   left free for the drag that turns the view; #mc-look itself is transparent
-   to touches, so that drag lands on the game canvas and uses the engine's own
-   native touch look. */
+   left free for the drag that turns the view; #mc-look is the capture surface
+   that takes that drag itself and feeds the engine the mouse path, so no touch
+   ever lands on the canvas (see the #mc-look rule below). */
 #mobile-controls {
   display: none;
   position: fixed;
@@ -823,19 +823,21 @@ body.is-game-mode #mobile-controls {
   display: none !important;
 }
 
-/* The right-hand look area. It deliberately takes no pointer events: a finger
-   here reaches the canvas underneath, which is the engine's own touch look
-   (yaw and pitch, no pointer lock). It stays above the status-bar band so the
-   engine's HUD is never covered. */
+/* The look surface: the whole game picture, and the only thing a finger can
+   land on there. It takes the touch itself (pointer-events: auto) so no touch
+   ever reaches the canvas. A touch on the canvas is the engine's own input
+   path and it is not safe on a phone: it fires the weapon, turns the camera
+   at a much higher gain than the mouse path, and takes pointer lock, after
+   which every pointer event in the page reports 0,0 and the rest of the pad
+   stops working. The stick and the action buttons sit above this (z-index 2)
+   and win their own touches. */
 #mc-look {
   position: absolute;
-  left: 44%;
-  right: 0;
-  top: 0;
-  bottom: var(--mc-bottom);
+  inset: 0;
   z-index: 1;
-  pointer-events: none;
+  pointer-events: auto;
   touch-action: none;
+  cursor: crosshair;
 }
 
 /* Left thumbstick. The ring is the target (136 px, far above the 44 px
@@ -1263,6 +1265,10 @@ body.touch-ui #fullscreen-button {
   top: max(8px, calc(env(safe-area-inset-top, 0px) + 8px));
   bottom: auto;
   left: calc(env(safe-area-inset-left, 0px) + 125px);
+  /* Above the pad (z-index 8): the look surface now covers the whole picture,
+     so this top-row control must sit above it or a finger could never reach
+     it. A tap here is a normal button tap and never reaches the canvas. */
+  z-index: 9;
   min-height: 44px;
   padding: 0 12px;
   opacity: 0.72;

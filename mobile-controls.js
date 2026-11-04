@@ -12,13 +12,31 @@
 //
 // Fire is mouse button 0, the button the engine's own config binds to +attack.
 //
-// Look is the engine's own touch input: the right-hand area is deliberately
-// transparent to touches (#mc-look has pointer-events: none), so a finger
-// dragging there lands on the game canvas, exactly as a finger dragging in the
-// picture does. That is the engine's native touch path, it needs no pointer
-// lock, and it produces both yaw and pitch. Nothing synthesizes mouse
-// movement: this build's SDL layer only reads relative mouse motion under a
-// real pointer lock, and a touch page must not take one.
+// Look is a drag on #mc-look, a transparent capture surface over the whole
+// game picture. The surface takes the touch itself (pointer-events: auto), so
+// no finger ever reaches the canvas: a touch on the canvas is the engine's own
+// touch path, which fires the weapon, turns the camera and -- the expensive
+// part -- takes pointer lock. While the engine holds the lock every pointer
+// event in the page reports clientX/clientY 0,0 and is retargeted to the
+// canvas, which leaves the thumbstick walking diagonally for ever and every
+// button dead. Measured on this build (2026-11-04): a single tap on the
+// picture took the lock; the next stick touch arrived at 0,0 and held
+// +forward +left; #mc-next and #mc-jump received no pointerdown at all.
+//
+// The drag handler turns the view with synthetic mousemove events on the
+// canvas. This build's SDL layer (engine/index.js, Browser.calculateMouseEvent)
+// reads pageX/pageY when document.pointerLockElement is null, so a move at an
+// advancing clientX/clientY is real relative look with no lock: measured
+// 0.264 deg per CSS pixel on both axes. The first gesture primes the canvas
+// with one move at its centre, which the engine takes as its reference point
+// without turning (measured 0.0 deg); later gestures continue from the last
+// cursor without moving it, so a new touch never jerks the view. The virtual
+// cursor is kept inside the canvas -- a move outside is ignored by the engine.
+//
+// The engine's own SDL glue still asks for pointer lock from inside the
+// canvas (screen touches, and this file's own fire press). On a touch page
+// that request is refused here: Element.prototype.requestPointerLock is
+// wrapped, so the lock can never be taken while the touch presentation is on.
 //
 // The engine's own config binds no key to +use and no key to weapprev, so the
 // touch layer installs a small cfg file through Module.preRun (before the
@@ -56,6 +74,7 @@
   var HINT_MS = 9000;
 
   var root = document.getElementById("mobile-controls");
+  var lookSurface = document.getElementById("mc-look");
   var stick = document.getElementById("mc-stick");
   var knob = document.getElementById("mc-stick-knob");
   var toggleButton = document.getElementById("mc-toggle");
@@ -163,26 +182,128 @@
     for (var action in keysHeld) holdKey(action, keysHeld[action].descriptor, false);
   }
 
+  function canvasBox() {
+    if (!canvas) return null;
+    var box = canvas.getBoundingClientRect();
+    if (!box || !(box.width > 0) || !(box.height > 0)) return null;
+    return box;
+  }
+
   function canvasCentre() {
-    var box = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 };
-    return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    var box = canvasBox();
+    return box ? { x: box.left + box.width / 2, y: box.top + box.height / 2 } : { x: 0, y: 0 };
+  }
+
+  // The engine reads the mouse position from the canvas's own event stream and
+  // turns by the difference between two events. The touch layer is the only
+  // source of those events on a phone, so it keeps a virtual cursor here, in
+  // page coordinates, and moves it by the finger's own delta.
+  var lookCursor = null; // { x, y } -- last position the canvas was told about
+  var lookPointer = null;
+  var lookLast = null;
+
+  function clampToCanvas(x, y) {
+    var box = canvasBox();
+    if (!box) return { x: x, y: y };
+    var inset = 2;
+    return {
+      x: Math.min(Math.max(x, box.left + inset), box.right - inset),
+      y: Math.min(Math.max(y, box.top + inset), box.bottom - inset),
+    };
+  }
+
+  function sendMouseMove(x, y) {
+    if (!canvas) return;
+    canvas.dispatchEvent(new MouseEvent("mousemove", {
+      bubbles: true,
+      cancelable: true,
+      clientX: x,
+      clientY: y,
+      pageX: x,
+      pageY: y,
+      movementX: 0,
+      movementY: 0,
+    }));
+  }
+
+  // Put the engine's reference point where the touch layer wants it without
+  // turning the view. Measured on this build: a move to the canvas centre from
+  // an unknown prior position (fresh page, or after a gesture elsewhere) is
+  // taken as the new reference and produces 0.0 deg of yaw and pitch; the next
+  // move turns by exactly its delta.
+  function primeLook(x, y) {
+    var p = clampToCanvas(x, y);
+    lookCursor = p;
+    sendMouseMove(p.x, p.y);
+    return p;
+  }
+
+  function lookDown(event) {
+    if (!live || !canvas) return;
+    if (lookPointer !== null) return;
+    if (event.pointerType && event.pointerType !== "touch" && event.pointerType !== "pen") return;
+    event.preventDefault();
+    event.stopPropagation();
+    hideHint();
+    lookPointer = event.pointerId;
+    lookLast = { x: event.clientX, y: event.clientY };
+    if (lookSurface) {
+      try { lookSurface.setPointerCapture(event.pointerId); } catch (error) { /* no capture */ }
+      lookSurface.classList.add("is-looking");
+    }
+    // Prime the canvas with a cursor position only once. The engine keeps the
+    // last mouse position, so a later gesture must continue from it: priming
+    // every gesture at the centre moves the view by the distance between the
+    // last drag's end and the centre (measured: -3.56 deg for a 14 px offset).
+    if (!lookCursor) primeLook(canvasCentre().x, canvasCentre().y);
+  }
+
+  function lookMove(event) {
+    if (event.pointerId !== lookPointer) return;
+    event.preventDefault();
+    var dx = event.clientX - lookLast.x;
+    var dy = event.clientY - lookLast.y;
+    lookLast = { x: event.clientX, y: event.clientY };
+    if (!dx && !dy) return;
+    var cursor = lookCursor || primeLook(canvasCentre().x, canvasCentre().y);
+    var next = clampToCanvas(cursor.x + dx, cursor.y + dy);
+    lookCursor = next;
+    sendMouseMove(next.x, next.y);
+  }
+
+  function lookUp(event) {
+    if (event && event.pointerId !== undefined && event.pointerId !== lookPointer) return;
+    if (lookPointer === null) return;
+    lookPointer = null;
+    lookLast = null;
+    if (lookSurface) {
+      lookSurface.classList.remove("is-looking");
+      if (event && lookSurface.hasPointerCapture && lookSurface.hasPointerCapture(event.pointerId)) {
+        try { lookSurface.releasePointerCapture(event.pointerId); } catch (error) { /* gone */ }
+      }
+    }
   }
 
   // Fire is mouse button 0, the engine's +attack. movementX/Y stay 0, and the
-  // press is at the canvas centre every time: the press can never turn the
-  // view, whether or not a look drag came before it.
+  // press is sent at the look cursor: the engine's reference point is already
+  // there (the cursor moves by every look event), so the press moves the view
+  // by zero. Measured: a press at the cursor after a drag turned 0.0 deg and
+  // still fired; a press at the canvas centre without the priming move turned
+  // the view by hundreds of degrees.
   function fire(down) {
     if (down === fireHeld) return;
     fireHeld = down;
     if (!canvas) return;
-    var centre = canvasCentre();
+    var at = lookCursor || primeLook(canvasCentre().x, canvasCentre().y);
     canvas.dispatchEvent(new MouseEvent(down ? "mousedown" : "mouseup", {
       bubbles: true,
       cancelable: true,
       button: 0,
       buttons: down ? 1 : 0,
-      clientX: centre.x,
-      clientY: centre.y,
+      clientX: at.x,
+      clientY: at.y,
+      pageX: at.x,
+      pageY: at.y,
       movementX: 0,
       movementY: 0,
     }));
@@ -215,6 +336,9 @@
     stickPointer = null;
     if (knob) knob.style.transform = "translate(0px, 0px)";
     if (stick) stick.classList.remove("is-active");
+    lookPointer = null;
+    lookLast = null;
+    if (lookSurface) lookSurface.classList.remove("is-looking");
     // A lost touchend must not leave a button believing it still owns a
     // pointer: the next press would then be ignored for the rest of the
     // session, which is exactly how a FIRE that works once stops working.
@@ -227,10 +351,24 @@
   var stickPointer = null;
 
   function stickVector(event) {
+    if (!stick) return null;
     var box = stick.getBoundingClientRect();
     var radius = box.width * STICK_RADIUS_FRACTION;
-    var dx = event.clientX - (box.left + box.width / 2);
-    var dy = event.clientY - (box.top + box.height / 2);
+    var clientX = event.clientX;
+    var clientY = event.clientY;
+    // A pointer event with no usable coordinates is not a direction. The
+    // known cause is a locked pointer: every event then reports 0,0, which
+    // this ring (never at the top-left of the page) turns into "up-left for
+    // ever" -- measured before the lock was refused: a centre press held
+    // +forward and +left and the player walked diagonally with no finger
+    // movement at all.
+    if (typeof clientX !== "number" || typeof clientY !== "number" ||
+        !isFinite(clientX) || !isFinite(clientY)) {
+      return null;
+    }
+    if (clientX === 0 && clientY === 0 && (box.left > 1 || box.top > 1)) return null;
+    var dx = clientX - (box.left + box.width / 2);
+    var dy = clientY - (box.top + box.height / 2);
     var length = Math.hypot(dx, dy);
     if (length > radius) {
       dx = dx / length * radius;
@@ -241,6 +379,15 @@
 
   function setStick(event) {
     var vector = stickVector(event);
+    if (!vector) {
+      // No reading: hold nothing and leave the knob centred.
+      if (knob) knob.style.transform = "translate(0px, 0px)";
+      holdKey("forward", MOVEMENT.forward, false);
+      holdKey("back", MOVEMENT.back, false);
+      holdKey("left", MOVEMENT.left, false);
+      holdKey("right", MOVEMENT.right, false);
+      return;
+    }
     if (knob) knob.style.transform = "translate(" + vector.dx.toFixed(1) + "px, " + vector.dy.toFixed(1) + "px)";
     var nx = vector.dx / vector.radius;
     var ny = vector.dy / vector.radius;
@@ -448,6 +595,39 @@
     applyPadVisibility();
     syncOrientation();
     syncLive();
+    refusePointerLock();
+  }
+
+  // ---- Pointer lock -------------------------------------------------------
+  // The engine's SDL glue asks the canvas for pointer lock from inside a
+  // canvas event (engine/index.js, Browser.init). On a touch page that is
+  // poison: once the lock is held, every pointer event in the page reports
+  // clientX/clientY 0,0 and is delivered to the canvas, so the stick can only
+  // read "up-left" and the buttons stop receiving touches -- measured on this
+  // build (2026-11-04): after one tap on the picture, a stick press at its
+  // centre held +forward and +left and #mc-jump received no pointerdown.
+  // The touch presentation never wants a locked pointer, so its request is
+  // refused here. A desktop session (uiEnabled false) is passed through to
+  // whatever app.js installed, unchanged.
+
+  function refusePointerLock() {
+    if (!uiEnabled) return;
+    try {
+      if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock();
+    } catch (error) { /* no lock to release */ }
+  }
+
+  function guardPointerLock() {
+    var proto = window.Element && Element.prototype;
+    if (!proto || typeof proto.requestPointerLock !== "function" || proto.__q2touchGuard) return;
+    var nativeRequest = proto.requestPointerLock;
+    var guarded = function requestPointerLock() {
+      if (!uiEnabled) return nativeRequest.apply(this, arguments);
+      refusePointerLock();
+      return Promise.resolve();
+    };
+    proto.requestPointerLock = guarded;
+    try { proto.__q2touchGuard = true; } catch (error) { /* frozen prototype */ }
   }
 
   // ---- Engine bindings ----------------------------------------------------
@@ -510,7 +690,17 @@
   if (!root) return;
 
   installEngineBindings();
+  guardPointerLock();
   bindActionButtons();
+
+  if (lookSurface) {
+    lookSurface.addEventListener("pointerdown", lookDown);
+    lookSurface.addEventListener("pointermove", lookMove);
+    lookSurface.addEventListener("pointerup", lookUp);
+    lookSurface.addEventListener("pointercancel", lookUp);
+    lookSurface.addEventListener("lostpointercapture", lookUp);
+    lookSurface.addEventListener("contextmenu", function (event) { event.preventDefault(); });
+  }
 
   stick.addEventListener("pointerdown", stickDown);
   stick.addEventListener("pointermove", stickMove);
@@ -574,6 +764,9 @@
         uiEnabled: uiEnabled, padOn: padOn, live: live, bindingsInstalled: bindingsInstalled,
         portrait: uiEnabled && isPortrait(), hintSeen: hintSeen,
         fireHeld: fireHeld, buttons: Object.keys(buttonPointers), keys: Object.keys(keysHeld),
+        lookActive: lookPointer !== null,
+        lookCursor: lookCursor ? { x: lookCursor.x, y: lookCursor.y } : null,
+        pointerLock: !!document.pointerLockElement,
       };
     },
   };
