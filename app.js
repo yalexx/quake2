@@ -49,6 +49,14 @@ var Module;
   const USERDATA_URL = "userdata/";
   // Yamagi lists and loads a save slot only while its server.ssv exists.
   const SLOT_FILE = "server.ssv";
+  // A save slot the page can offer. The engine's own slot names are save0,
+  // save1, …, quick and current; a console `save <name>` can add others, and a
+  // name with a space, slash or quote would break both the +load command line
+  // and the store's path rules, so only these characters are ever offered.
+  const SLOT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  // The config.cfg the engine writes on quit, and the one the page patches
+  // when a setting is applied.
+  const CONFIG_PATH = "baseq2/config.cfg";
   // Startup downloads: tries per file, and the first pause between them.
   const RESTORE_TRIES = 4;
   const RESTORE_RETRY_MS = 500;
@@ -72,6 +80,7 @@ var Module;
 
   let pakDict = {};
   let userStore = null; // what the server keeps, from boot until the engine restores it
+  let configText = ""; // the restored baseq2/config.cfg, for the settings menu
   let userRoot = null; // the engine's IDBFS mount point (/qwasm2)
   let serverFiles = {}; // relPath -> fingerprint of the copy the server holds
   let keptFiles = new Set(); // on the server but never downloaded: never deleted there
@@ -171,30 +180,53 @@ var Module;
     // 1280x720: 7x7 at scale 1, 14x14 at scale 2, 21x21 at scale 3, and no
     // larger above 3), so at the box's 2560x1440 display it disappears against
     // the scene. Scale 3 is the engine's own maximum and makes it a visible
-    // 21x21 cross at both sizes. `crosshair 1` is set explicitly because a
-    // restored userdata/config.cfg can carry `crosshair 0`, which would leave
-    // no crosshair at all whatever the scale. A URL can still override either
-    // value, as it can every default here.
+    // 21x21 cross at both sizes. The shape itself is the engine's default
+    // cross: a saved none/cross/dot/angle from the OPTIONS row arrives through
+    // config.cfg, so the line does not force one.
+    //
     // The crosshair's colour and opacity are presentation, not engine state:
-    // rtx-renderer.js reads these two values off this start-up line and applies
-    // them in the 2D shader that draws the engine's 8x8 crosshair picture. The
-    // defaults are a little under half opacity (0.45: the cross reads over both
-    // the dark base and the lit floor without covering the target, and it
-    // measured ~0.45 against the palette tint) and the game palette's rusted
-    // amber blended with its bone (#ddb589; palette entries 52 and 251 in
-    // pics/colormap.pcx). A URL can still override either, as it can every
-    // default here. The colour and opacity are unchanged by the crosshair's
-    // weapon/fire/crouch spread: only its size follows the aim.
+    // rtx-renderer.js's own defaults are the values used here (0.45 opacity,
+    // the palette's rusted amber blended with its bone #ddb589), and the
+    // renderer reads `q2_crosshair_alpha`/`q2_crosshair_tint` from a URL query
+    // when one supplies them. They are deliberately not start-up pairs: every
+    // argument on the line counts against the engine's ~48-argument limit
+    // (measured: 47 booted, 50 failed with argc > MAX_NUM_ARGVS), and the
+    // presentation runner's own boots add several.
+    // HD by default: r_mode 14 is 1280x720. The engine's own default depends
+    // on the build (a fresh profile measured 1366x768), so a first visit would
+    // otherwise boot at whatever the engine happened to pick. The value is the
+    // player's own saved r_mode when config.cfg carries one. It goes on the
+    // line as well as in the config because the video init needs the cvar set
+    // by the time it runs; carrying it here is what makes a saved resolution
+    // survive a visit to the bare URL without depending on the config's own
+    // exec timing.
+    const saved = configSettings(configText);
+    const savedMode = String(saved.r_mode === undefined ? "" : saved.r_mode).trim();
+    const videoMode = /^-?\d+$/.test(savedMode) ? savedMode : "14";
+    // This build draws no view weapon above 90 degrees, whatever cl_gun says
+    // (measured), so a wider saved value is clamped rather than obeyed; the
+    // VIDEO menu stops at 90 for the same reason.
+    const savedFov = Number(saved.fov);
+    const fieldOfView = String(Number.isFinite(savedFov) && savedFov >= 60 && savedFov <= 90 ? savedFov : 90);
     let args = ["+set", "vid_renderer", "gles3", "+set", "r_retexturing", "1", "+set", "gl3_usefbo", "1",
-      "+set", "cl_gun", "1", "+set", "fov", "90", "+set", "crosshair", "1", "+set", "crosshair_scale", "3",
-      "+set", "q2_crosshair_alpha", "0.45", "+set", "q2_crosshair_tint", "ddb589"];
+      "+set", "r_mode", videoMode, "+set", "cl_gun", "1", "+set", "fov", fieldOfView,
+      "+set", "crosshair_scale", "3"];
     const extra = queryArguments();
     args = args.concat(extra);
     // Boot straight into the game, as the app is meant to: with no map on the
     // start-up line the engine sits in its attract-demo loop (and the engine's
     // own main menu is one key away). The query can still choose a map.
+    //
+    // A start-up `+load <slot>` is the load: the save carries its own level,
+    // and a `+map` on the same line starts a level load of its own. When a
+    // saved game was unloaded on the previous boot, the two must not both be
+    // present, or the map argument (executed after the load) wins and the
+    // player lands at that level instead of in their save. The engine runs the
+    // +load on its start-up line itself -- measured: `+load d3slot` alone boots
+    // into the saved level ("Loading game... Savegame: d3slot", Comm Center).
     const asksForMap = extra.some(function (arg) { return arg === "+map" || arg === "map"; });
-    if (!asksForMap) args = args.concat(["+map", "demo1"]);
+    const asksForLoad = extra.some(function (arg) { return arg === "+load" || arg === "load"; });
+    if (!asksForMap && !asksForLoad) args = args.concat(["+map", "demo1"]);
     return args;
   }
 
@@ -516,7 +548,10 @@ var Module;
   // this from the page to prove the app's own defaults (crosshair 1, scale 3,
   // the palette tint and opacity) without a console visit; it is the same array
   // the engine receives.
-  const engineArguments = buildArguments();
+  // The provisional line (no saved config yet). boot() rebuilds it once the
+  // restored config.cfg is known -- the HD default is only carried when the
+  // player's config has no r_mode -- and only then does the engine get it.
+  let engineArguments = buildArguments();
   try { window.quake2StartupArguments = engineArguments.slice(); } catch (error) { /* optional */ }
 
   Module = {
@@ -728,7 +763,8 @@ var Module;
       Module._canLockPointer = true;
     },
 
-    arguments: engineArguments,
+    // Filled in by boot(), after the restored config.cfg is known.
+    arguments: [],
 
     // The engine resolves index.wasm and the ref_*/game_*.wasm libraries
     // against its own script directory, but the file packager asks for
@@ -740,19 +776,22 @@ var Module;
   };
 
   // ---- Interface ---------------------------------------------------------
-  // The engine's menu is replaced by this panel, entry for entry: its main
-  // menu is GAME, MULTIPLAYER, OPTIONS, VIDEO, QUIT; GAME opens easy, medium,
-  // hard+, load game, save game, credits; OPTIONS and VIDEO are the engine's
-  // own settings menus, row for row. The engine still runs its menu state --
-  // that is what pauses a single-player game -- but rtx-renderer.js drops its
-  // pixels while the keyboard is away from the game, so the old menu can never
-  // be seen on Escape, on a pause or at boot.
+  // The engine's menu is replaced by this panel: GAME (easy, medium, hard,
+  // hard+, load game, save game, credits), OPTIONS (the working controls and
+  // audio settings) and VIDEO (the working graphics settings, game mode and
+  // the resolution). The engine still runs its own menu state -- that is what
+  // pauses a single-player game -- but rtx-renderer.js drops its pixels while
+  // the keyboard is away from the game, so the old menu can never be seen on
+  // Escape, on a pause or at boot. The engine's MULTIPLAYER menu and the
+  // note-only rows this page used to mirror are gone: this build is single
+  // player, and a control that only printed an explanation was not a control.
   //
   // Nothing here types into the engine's console: synthetic DOM keys reach the
   // engine's key bindings but not its console text (measured), so a command is
   // either a start-up argument on a reload or one of the engine's own bound
-  // keys. That is also why a New Game reloads the page with `+map` on the
-  // start-up line instead of typing `map` at a console nobody can read.
+  // keys. That is what makes Load Game a page-drawn slot list whose choice is
+  // carried to the next boot as `+load <slot>`, and New Game a reload with
+  // `+map demo1`.
 
   const menuLayer = document.getElementById("menu-layer");
   const menuPanel = document.getElementById("menu");
@@ -774,11 +813,10 @@ var Module;
   };
 
   const ESCAPE_KEY = { key: "Escape", code: "Escape", vk: 27, ch: 27 };
-  // The engine's own quick save/load keys: F6 is bound to "Quick Saving…;
-  // save quick" and F9 to the load in the shipped config. A keydown reaches the
-  // engine's bindings (a synthetic Escape opens its menu), unlike console text.
+  // The engine's own quick save key: F6 is bound to "Quick Saving…; save
+  // quick" in the shipped config. A keydown reaches the engine's bindings (a
+  // synthetic Escape opens its menu), unlike console text.
   const QUICK_SAVE_KEY = { key: "F6", code: "F6", vk: 117 };
-  const QUICK_LOAD_KEY = { key: "F9", code: "F9", vk: 120 };
 
   function sleep(ms) {
     return new Promise(function (resolve) { setTimeout(resolve, ms); });
@@ -828,7 +866,7 @@ var Module;
     Object.defineProperty(event, "charCode", { get: function () { return type === "keypress" ? descriptor.ch || 0 : 0; } });
     // The panel's own key handler owns the keyboard while it is up, and an
     // event dispatched on window reaches it first. These are the app's own
-    // keys for the engine (Resume's Escape, F6/F9), so they are marked and the
+    // keys for the engine (Resume's Escape, Save game's F6), so they are marked and the
     // panel lets them through -- otherwise every tap the app makes while the
     // panel is open was swallowed and never reached the engine.
     Object.defineProperty(event, "__q2synthetic", { value: true });
@@ -849,35 +887,82 @@ var Module;
 
   function reloadWith(commands) {
     const parts = window.location.search.replace(/^\?/, "").split("&").filter(Boolean);
-    const next = parts.concat(commands);
+    // Settings do not ride on the URL any more: they live in the engine's own
+    // config.cfg, which the page writes before it reloads and which
+    // buildArguments reads for the values the video init needs. Keeping every
+    // applied +set pair in the query grew the start-up line without bound, and
+    // this engine refuses a line over ~48 arguments: measured, 47 booted and
+    // 50 answered "argc > MAX_NUM_ARGVS" before the first frame. So a reload
+    // carries the page's own defaults (rebuilt from the config) plus only the
+    // commands this action needs: New Game's skill and +map, Load Game's
+    // +load. Anything else in the query that is not a +set pair -- a map or a
+    // load a player came in with -- stays.
+    // `skill` is the one pair kept: New Game chooses it for the running game,
+    // and a settings Apply in that game must not quietly start the reload at
+    // whatever skill the config happened to hold.
+    const kept = [];
+    for (let i = 0; i < parts.length; i++) {
+      const token = parts[i];
+      if (token === "+set" || token === "set") {
+        const cvar = String(parts[i + 1] || "").toLowerCase();
+        if (cvar === "skill" && parts[i + 2] !== undefined) kept.push(token, parts[i + 1], parts[i + 2]);
+        i += 2;
+        continue;
+      }
+      kept.push(token);
+    }
+    const next = kept.concat(commands);
     // The engine refuses a start-up line with too many arguments -- a second
     // Reset appending a pair per setting printed "argc > MAX_NUM_ARGVS" and
     // stopped the engine before it drew a frame. It scans the line in order
-    // and the last +set of a cvar (and the last +map) is the one that wins,
-    // so each group collapses to its final value before the page reloads.
-    const merged = [];
+    // and the last +set of a cvar (and the last +map or +load) is the one that
+    // wins, so each group collapses to its final value before the page reloads.
+    //
+    // +map and +load are exclusive: both start a level, and a +map after a
+    // +load wins the race (measured: `+map demo1 +load d3slot` boots demo1).
+    // Whichever kind this reload asks for removes the other from the line, so
+    // Load Game never carries a stale +map and New Game never carries a stale
+    // +load.
+    // `commands` is built by this page, always with the engine's "+" form; the
+    // URL parts may carry either form, so only the new commands decide.
+    const asksForMap = commands.indexOf("+map") !== -1;
+    const asksForLoad = commands.indexOf("+load") !== -1;
+    // Every +set goes BEFORE the level command. The engine processes the line
+    // in order, and `map` starts a level as soon as it runs: a line of
+    // `+map demo1 +set skill 0` (the URL's map kept ahead of New Game's skill
+    // pair) loaded the level at the old skill and applied 0 only to the next
+    // one. Sets first also means a saved `+load` runs with the chosen values.
+    const setGroups = [];
     const setAt = Object.create(null);
-    let mapAt = -1;
+    const others = [];
+    let levelGroup = null;
     for (let i = 0; i < next.length; i++) {
       const token = next[i];
       if ((token === "+set" || token === "set") && i + 2 < next.length) {
         const cvar = next[i + 1];
         const group = [token, cvar, next[i + 2]];
-        if (setAt[cvar] !== undefined) merged[setAt[cvar]] = group;
-        else { setAt[cvar] = merged.length; merged.push(group); }
+        if (setAt[cvar] !== undefined) setGroups[setAt[cvar]] = group;
+        else { setAt[cvar] = setGroups.length; setGroups.push(group); }
         i += 2;
         continue;
       }
-      if (token === "+map" && i + 1 < next.length) {
-        const group = [token, next[i + 1]];
-        if (mapAt >= 0) merged[mapAt] = group;
-        else { mapAt = merged.length; merged.push(group); }
+      if ((token === "+map" || token === "map") && i + 1 < next.length) {
+        if (!asksForLoad) levelGroup = [token, next[i + 1]];
         i += 1;
         continue;
       }
-      merged.push(token);
+      if ((token === "+load" || token === "load") && i + 1 < next.length) {
+        if (!asksForMap) levelGroup = [token, next[i + 1]];
+        i += 1;
+        continue;
+      }
+      others.push(token);
     }
-    window.location.search = "?" + merged.flat().join("&");
+    const merged = [];
+    for (const group of setGroups) merged.push(...group);
+    for (const token of others) merged.push(token);
+    if (levelGroup) merged.push(...levelGroup);
+    window.location.search = "?" + merged.join("&");
   }
 
   // ---- Menu presentation -------------------------------------------------
@@ -906,10 +991,121 @@ var Module;
     // The main view opens with Resume focused, not GAME. The panel also comes
     // up when the engine's own menu opens by itself (a console command, a lost
     // pointer lock), and a stray Enter must not start a new game from there;
-    // Enter on Resume puts the game back exactly where it was.
+    // Enter on Resume puts the game back exactly where it was. The load view
+    // has no rows until its listing arrives: Back holds the focus until the
+    // first slot is drawn (refreshLoadSlots moves it there).
     const resume = view === "main" ? menuPanel.querySelector('[data-action="resume"]') : null;
-    const first = resume || visibleButtons()[0];
+    const back = view === "load" ? menuPanel.querySelector('[data-action="back"]') : null;
+    const first = resume || back || visibleButtons()[0];
     if (first) first.focus({ preventScroll: true });
+    if (view === "load") refreshLoadSlots();
+  }
+
+  // ---- Load game ---------------------------------------------------------
+  // The save slots live on server.js under userdata/baseq2/save/<slot>/, one
+  // folder per slot, and Yamagi lists and loads a slot only while its
+  // server.ssv exists. The engine's own load menu is one of the 2D draws
+  // rtx-renderer.js drops while cls.key_dest != 0, so the page draws the list
+  // itself and restores a slot with the engine's own `load` command on the
+  // next boot's start-up line.
+  const loadSlotsElement = document.getElementById("load-slots");
+  const loadEmptyElement = document.getElementById("load-empty");
+  const loadErrorElement = document.getElementById("load-error");
+  let loadListToken = 0;
+
+  // The engine's own slot names first, in the order the engine's load menu
+  // lists them (the autosave slots, then the quicksave, then the running
+  // game), then any named slot from the console, alphabetically.
+  function slotSortKey(slot) {
+    if (/^save\d+$/.test(slot)) return [0, Number(slot.slice(4)), slot];
+    if (slot === "quick") return [1, 0, slot];
+    if (slot === "current") return [2, 0, slot];
+    return [3, 0, slot];
+  }
+  function compareSlots(a, b) {
+    const ka = slotSortKey(a), kb = slotSortKey(b);
+    if (ka[0] !== kb[0]) return ka[0] - kb[0];
+    if (ka[1] !== kb[1]) return ka[1] - kb[1];
+    return ka[2] < kb[2] ? -1 : ka[2] > kb[2] ? 1 : 0;
+  }
+
+  function renderLoadSlots(slots) {
+    if (!loadSlotsElement) return;
+    loadSlotsElement.textContent = "";
+    for (const slot of slots) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.dataset.action = "loadslot";
+      button.dataset.slot = slot;
+      const label = document.createElement("span");
+      label.className = "label";
+      label.textContent = slot;
+      const hint = document.createElement("span");
+      hint.className = "hint";
+      hint.textContent = "load";
+      button.appendChild(label);
+      button.appendChild(hint);
+      loadSlotsElement.appendChild(button);
+    }
+    if (loadEmptyElement) loadEmptyElement.hidden = slots.length > 0;
+    if (loadErrorElement) loadErrorElement.hidden = true;
+  }
+
+  // Rebuilt on every open: the store is read from disk on each request, so a
+  // save made in this tab or another is in the next listing, and a stale list
+  // is never shown. `loadListToken` drops a listing whose view has been left.
+  async function refreshLoadSlots() {
+    const token = ++loadListToken;
+    if (loadSlotsElement) loadSlotsElement.textContent = "";
+    if (loadEmptyElement) loadEmptyElement.hidden = true;
+    if (loadErrorElement) loadErrorElement.hidden = true;
+    let listing = null;
+    try {
+      const answer = await fetchWithRetry(USERDATA_URL);
+      if (answer.body) {
+        const parsed = JSON.parse(new TextDecoder().decode(answer.body));
+        if (Array.isArray(parsed.files)) listing = parsed.files;
+      }
+    } catch (error) {
+      console.warn("Load game: could not read the save list (" + error.message + ").");
+    }
+    if (token !== loadListToken) return;
+    if (!listing) {
+      if (loadErrorElement) loadErrorElement.hidden = false;
+      return;
+    }
+    const slots = new Set();
+    for (const entry of listing) {
+      const relPath = entry && entry.path;
+      if (typeof relPath !== "string") continue;
+      const match = /^baseq2\/save\/([^/]+)\/server\.ssv$/.exec(relPath);
+      if (match && SLOT_NAME_RE.test(match[1])) slots.add(match[1]);
+    }
+    const ordered = Array.from(slots).sort(compareSlots);
+    renderLoadSlots(ordered);
+    if (ui.open && ui.view === "load" && ordered.length) {
+      const first = loadSlotsElement && loadSlotsElement.querySelector("button");
+      // Back held the focus while the list was empty; hand it to the first
+      // slot, unless the player has already moved somewhere else.
+      if (first && menuPanel.contains(document.activeElement) &&
+          !loadSlotsElement.contains(document.activeElement)) {
+        first.focus({ preventScroll: true });
+      }
+    }
+  }
+
+  function loadSlot(slot) {
+    if (!SLOT_NAME_RE.test(String(slot))) {
+      showPanelNote("That save slot name cannot be loaded.");
+      return;
+    }
+    // The banner belongs to the game layer and the panel's scrim paints over
+    // it, so the panel goes first and the reload waits a frame for the banner
+    // to be drawn. The new boot restores the store, then the engine's start-up
+    // line runs `+load <slot>` with no +map of its own.
+    hideMenu();
+    showBanner("Loading " + slot + "…", 8000);
+    setTimeout(function () { reloadWith(["+load", slot]); }, 150);
   }
 
   function gameModeActive() {
@@ -965,6 +1161,12 @@ var Module;
     if (!menuNoteElement) { showBanner(text, 4200); return; }
     menuNoteElement.textContent = text || "";
     menuNoteElement.hidden = !text;
+    // The panel scrolls, and the answer sits after the views: an answer below
+    // the fold is a click that looks like it did nothing. Bring it into the
+    // panel's own visible box whenever it is shown.
+    if (text && ui.open) {
+      try { menuNoteElement.scrollIntoView({ block: "nearest", inline: "nearest" }); } catch (error) { /* older engines */ }
+    }
   }
 
   function resumeGame() {
@@ -999,10 +1201,11 @@ var Module;
   }
 
   // ---- Settings -----------------------------------------------------------
-  // Each row cycles through the values the engine accepts; `apply` reloads with
-  // the changed cvars on the start-up line, which is the one command channel
-  // this page has. The engine reads its own config.cfg first, so a value set
-  // here is a start-up override, not a rewrite of the player's config.
+  // Each row cycles through the values the engine accepts. `apply` writes the
+  // chosen values into the engine's own config.cfg (which the engine executes
+  // at boot) and reloads with them on the start-up line as well: both command
+  // channels this page has, so the value holds whichever one the engine reads
+  // last. This is the same persistence the engine's own menu has.
 
   function settingButton(button) {
     return button.classList && button.classList.contains("setting");
@@ -1058,15 +1261,26 @@ var Module;
     refreshApply();
   }
 
-  // The values this page was started with, from its own query (`+set cvar
-  // value` pairs). Applying a setting reloads with the pair on the start-up
-  // line, and the menu then opens showing the value that is actually running
-  // rather than the build's default again.
-  function appliedSettings() {
-    const args = queryArguments();
+  // The values the engine was actually started with: the app's own defaults
+  // followed by the query's `+set cvar value` pairs, exactly as buildArguments
+  // composed them (the last value of a cvar is the one on the line). These
+  // beat config.cfg where both name a cvar -- measured with cl_gun, crosshair
+  // and r_mode: a stale config said 0 and the line said 1, and the game ran 1.
+  function startupLineSettings() {
     const values = {};
+    const args = Array.isArray(engineArguments) ? engineArguments : [];
     for (let i = 0; i + 2 < args.length; i++) {
       if ((args[i] === "+set" || args[i] === "set") && args[i + 1] !== undefined) values[args[i + 1].toLowerCase()] = args[i + 2];
+    }
+    return values;
+  }
+
+  // `seta cvar "value"` lines from the engine's own config.cfg.
+  function configSettings(text) {
+    const values = {};
+    for (const line of String(text || "").split(/\r?\n/)) {
+      const match = /^\s*seta?\s+([^\s"]+)\s+(?:"([^"]*)"|(\S+))\s*$/i.exec(line);
+      if (match) values[match[1].toLowerCase()] = match[2] !== undefined ? match[2] : match[3];
     }
     return values;
   }
@@ -1079,13 +1293,20 @@ var Module;
     }
   }
 
-  function syncSettingsFromUrl() {
-    const applied = appliedSettings();
+  // The menu must show what is running, not the build's default: a config.cfg
+  // restored from the store is executed at boot, and the start-up line is
+  // applied on top of it. The start-up line wins for a cvar it names; a cvar
+  // only config.cfg names is shown from the config; anything else is the
+  // build's default.
+  function syncSettings() {
+    const onLine = startupLineSettings();
+    const inConfig = configSettings(configText);
     for (const button of menuPanel.querySelectorAll(".setting[data-cvar], .setting[data-cvars]")) {
       const cvar = rowCvars(button)[0];
       if (!cvar) continue;
-      const value = applied[cvar.toLowerCase()];
-      if (value === undefined) continue;
+      const key = cvar.toLowerCase();
+      const value = onLine[key] !== undefined ? onLine[key] : inConfig[key];
+      if (value === undefined) { showSetting(button); continue; }
       const values = (button.dataset.values || "").split(",");
       const index = values.findIndex(function (one) { return one === value || Number(one) === Number(value); });
       if (index >= 0) {
@@ -1095,6 +1316,90 @@ var Module;
       showSetting(button);
     }
     refreshApply();
+  }
+
+  // The config.cfg on the server, as text, or null when there is none yet.
+  async function fetchUserText(relPath) {
+    const answer = await fetchWithRetry(userDataUrl(relPath));
+    if (!answer.body) return null;
+    return new TextDecoder().decode(answer.body);
+  }
+
+  // `text` with every wanted cvar set, keeping the file's other lines. The
+  // command is `set`, exactly as the engine's own config writes it (measured:
+  // the engine's config.cfg on quit has 175 `set` lines and no `seta`). In
+  // this build `seta` is a *player* command -- the console answers
+  // "Player: seta sensitivity 7.5" and the local cvar does not change -- so a
+  // patched `seta` line was a setting that silently did nothing.
+  function configWithValues(text, pairs) {
+    const wanted = new Map();
+    for (const [cvar, value] of pairs) wanted.set(String(cvar).toLowerCase(), String(value));
+    const seen = new Set();
+    const out = [];
+    const source = String(text || "");
+    for (const line of source.split(/\r?\n/)) {
+      const match = /^\s*seta?\s+([^\s"]+)\s+(?:"([^"]*)"|(\S+))\s*$/i.exec(line);
+      if (!match || !wanted.has(match[1].toLowerCase())) {
+        if (line.trim() !== "") out.push(line);
+        continue;
+      }
+      const key = match[1].toLowerCase();
+      seen.add(key);
+      out.push('set ' + match[1] + ' "' + wanted.get(key).replace(/"/g, "") + '"');
+    }
+    for (const [key, value] of wanted) {
+      if (!seen.has(key)) out.push('set ' + key + ' "' + value.replace(/"/g, "") + '"');
+    }
+    // A config.cfg restored into /qwasm2/baseq2 SHADOWS the packaged
+    // /baseq2/config.cfg, which is what executes the Qwasm2 defaults
+    // (wasm.cfg: WASD binds, r_hudscale 1, vid_gamma 1.6, sensitivity 6, ...).
+    // A minimal patch would therefore silently lose the key bindings and set
+    // r_hudscale to the engine's -1 (auto), which is exactly what happened
+    // before this line: the page's own status-bar reader stopped recognising
+    // the digits because the HUD was no longer 15x23 cells. A config that has
+    // no bind lines is a patch, not an engine-written config, so it starts by
+    // executing the packaged defaults; the applied `set` lines above follow
+    // and win. The engine's own config (written on quit) carries every cvar
+    // and every bind, so it needs no exec.
+    if (!/^\s*bind\s/m.test(source) && !/^\s*exec\s+"?wasm\.cfg"?/m.test(source)) {
+      out.unshift('exec "wasm.cfg"');
+    }
+    return out.join("\n") + "\n";
+  }
+
+  // Writes the applied values into the engine's own config.cfg in the store,
+  // so they are the player's settings from the next boot on whichever of the
+  // config and the start-up line the engine reads last. The page's own sync is
+  // not told about the write: the engine's in-memory config still holds the
+  // old text and a push must not put it back (an unchanged local file is never
+  // uploaded, so the patched copy stays).
+  async function patchEngineConfig(pairs) {
+    if (!pairs.length) return true;
+    let current = null;
+    try {
+      current = await fetchUserText(CONFIG_PATH);
+    } catch (error) {
+      console.warn("Settings: could not read the saved config (" + error.message + ").");
+    }
+    const next = configWithValues(current || "", pairs);
+    const data = new TextEncoder().encode(next);
+    for (let attempt = 1; ; attempt++) {
+      try {
+        const status = await sendUserData(CONFIG_PATH, data);
+        if (isRefusal(status)) {
+          console.warn("Settings: the server refused config.cfg (HTTP " + status + "); this boot still uses the start-up line.");
+          return false;
+        }
+        configText = next;
+        return true;
+      } catch (error) {
+        if (attempt >= RESTORE_TRIES) {
+          console.warn("Settings: could not save config.cfg (" + error.message + "); this boot still uses the start-up line.");
+          return false;
+        }
+        await wait(RESTORE_RETRY_MS * 2 ** (attempt - 1));
+      }
+    }
   }
 
   function changedSettings() {
@@ -1113,38 +1418,61 @@ var Module;
     for (const hint of menuPanel.querySelectorAll("#apply-hint, #apply-hint-options")) hint.textContent = text;
   }
 
-  function applySettings() {
+  // The engine has no console on this page, so a change reaches it twice: the
+  // start-up line of the next boot (+set) and the engine's own config.cfg in
+  // the store, which the engine executes at boot. Writing both makes the
+  // value stick whichever of the two the engine reads last; measured, a stale
+  // config used to win for some cvars, and the settings menu showed a value
+  // that was not running, which is what made those rows look dead.
+  async function applySettings() {
     const changed = changedSettings();
     if (!changed.length) { showPanelNote("Nothing to apply"); return; }
     const commands = [];
+    const pairs = [];
     for (const [cvar, value] of changed) {
-      // The engine's "fullscreen window" mode also switches r_mode to auto
-      // (video mode -2), exactly as its own video menu does.
       commands.push("+set", cvar, value);
-      if (cvar === "vid_fullscreen" && value === "2") commands.push("+set", "r_mode", "-2");
+      pairs.push([cvar, value]);
+    }
+    // With the config written, the next boot reads the values from it. Only a
+    // failed write falls back to the start-up line, and only while that stays
+    // under the engine's argument limit (about four pairs beside the app's own);
+    // a larger set is refused loudly rather than half-applied.
+    const saved = await patchEngineConfig(pairs);
+    if (!saved && pairs.length > 4) {
+      showPanelNote("The server could not save these settings, and the engine's start-up line has no room for them all. Nothing was changed.");
+      return;
     }
     showBanner("Restarting the level with " + changed.length + " change" + (changed.length === 1 ? "" : "s") + "…", 6000);
-    reloadWith(commands);
+    reloadWith(saved ? [] : commands);
   }
 
-  function resetSettings(view) {
+  async function resetSettings(view) {
     const commands = [];
+    const pairs = [];
     for (const button of menuPanel.querySelectorAll('.menu-view[data-view="' + view + '"] .setting[data-cvar], .menu-view[data-view="' + view + '"] .setting[data-cvars]')) {
       if (button.dataset.default === undefined) continue;
       // A row already showing its default needs no command: the engine keeps
-      // it, and a pair per row (there are eleven in OPTIONS) is exactly the
-      // length of start-up line the engine refused as argc > MAX_NUM_ARGVS.
+      // it, and a pair per row would lengthen the start-up line toward the
+      // argc > MAX_NUM_ARGVS the engine refused once already.
       const read = readValue(button);
       const differs = read && String(read.value) !== String(button.dataset.default);
       button.dataset.index = String(defaultIndex(button));
       showSetting(button);
       if (!differs) continue;
-      for (const cvar of rowCvars(button)) commands.push("+set", cvar, button.dataset.default);
+      for (const cvar of rowCvars(button)) {
+        commands.push("+set", cvar, button.dataset.default);
+        pairs.push([cvar, button.dataset.default]);
+      }
     }
     refreshApply();
     if (!commands.length) { showPanelNote("The defaults are already in place"); return; }
+    const saved = await patchEngineConfig(pairs);
+    if (!saved && pairs.length > 4) {
+      showPanelNote("The server could not save these settings, and the engine's start-up line has no room for them all. The defaults were not restored.");
+      return;
+    }
     showBanner("Restoring the defaults…", 5000);
-    reloadWith(commands);
+    reloadWith(saved ? [] : commands);
   }
 
   // ---- Actions ------------------------------------------------------------
@@ -1157,11 +1485,6 @@ var Module;
   function quickSave() {
     showBanner("Quick saving…", 2500);
     pauseForKey(QUICK_SAVE_KEY);
-  }
-
-  function quickLoad() {
-    showBanner("Quick loading…", 2500);
-    pauseForKey(QUICK_LOAD_KEY);
   }
 
   function quitGame() {
@@ -1180,12 +1503,12 @@ var Module;
     if (action === "resume") resumeGame();
     else if (action === "back") setView("main");
     else if (action === "game") setView("game");
-    else if (action === "multiplayer") setView("multiplayer");
     else if (action === "options") setView("options");
     else if (action === "video") setView("video");
     else if (action === "credits") setView("credits");
     else if (action === "newgame" && button) startNewGame(button.dataset.skill || "1");
-    else if (action === "loadgame") quickLoad();
+    else if (action === "loadgame") setView("load");
+    else if (action === "loadslot" && button) loadSlot(button.dataset.slot);
     else if (action === "savegame") quickSave();
     else if (action === "apply") applySettings();
     else if (action === "reset-video") resetSettings("video");
@@ -1198,7 +1521,6 @@ var Module;
       resumeGame();
       if (window.quake2GameMode) void window.quake2GameMode.enter("menu");
     }
-    else if (action === "note") showPanelNote(button && button.dataset.note ? button.dataset.note : "That is not part of this box build.");
   }
 
   // The game-mode shortcut (game-mode.js) runs on Alt+Enter before this file's
@@ -1216,7 +1538,7 @@ var Module;
   };
 
   initializeSettings();
-  syncSettingsFromUrl();
+  syncSettings();
 
   // Roving focus: the item under the pointer becomes the focused item, so mouse
   // hover and keyboard selection are always the same single highlight.
@@ -1248,7 +1570,7 @@ var Module;
   // scroll underneath it, and pointer lock must not be requested behind it.
   window.addEventListener("keydown", function (event) {
     if (!ui.open) return;
-    // The app's own engine taps (Resume, F6, F9): the panel must not eat
+    // The app's own engine taps (Resume, F6): the panel must not eat
     // them. It still owns every real key.
     if (event.__q2synthetic) return;
     // Alt+Enter is the game-mode shortcut, handled by game-mode.js after this
@@ -1607,6 +1929,32 @@ var Module;
     }
     Module.setStatus("Loading saved games...");
     userStore = await downloadUserData();
+    // The settings menu shows what this boot will run: the restored
+    // config.cfg plus the start-up line built above.
+    const savedConfig = userStore && userStore.files ? userStore.files[CONFIG_PATH] : null;
+    if (savedConfig) {
+      try { configText = new TextDecoder().decode(savedConfig); } catch (error) { configText = ""; }
+    }
+    // gl3_colorlight 0 is a repair, not a preference: this build's own fragment
+    // shader fails to compile with it ("assign: cannot convert from 'const
+    // int' to 'mediump float'"), after which ref_gles3 fails to load and the
+    // page is black. The row was removed from VIDEO for that reason. The fix
+    // is written into the config the engine is about to restore, not onto the
+    // start-up line: the line has an argument budget, and the config is
+    // executed before the shader is compiled.
+    if (userStore && userStore.files && configSettings(configText).gl3_colorlight === "0") {
+      configText = configWithValues(configText, [["gl3_colorlight", "1"]]);
+      userStore.files[CONFIG_PATH] = new TextEncoder().encode(configText);
+      console.info("Settings: repaired gl3_colorlight 0 in config.cfg (this build's shader does not compile with it).");
+    }
+    // Rebuild the line now that the config is known (the video-init values --
+    // r_mode, fov, crosshair_scale -- come from it, with HD as the r_mode
+    // default), then hand it to the engine. The arguments are read when
+    // engine/index.js runs, which is after this.
+    engineArguments = buildArguments();
+    Module.arguments = engineArguments;
+    try { window.quake2StartupArguments = engineArguments.slice(); } catch (error) { /* optional */ }
+    syncSettings();
     startEngine();
   }
 

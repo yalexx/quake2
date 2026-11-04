@@ -101,19 +101,20 @@ The mode asks for full screen on the display the game is on, which is what
 removes the browser chrome.
 
 - **What it costs.** The mode removes the page's own per-frame work: the
-  status-bar read-back (a synchronous framebuffer read plus digit recognition,
-  measured at about a second per read on a loaded box; the page runs it every
-  1.2 s), the interface poll, and every page layer. On one page, one frozen
-  scene and the same full-screen state, the main thread spends **7-8% less task
-  time per drawn frame** in game mode: three interleaved page/game pairs
-  measured ratios of 0.923, 0.925 and 0.917 of the page's time per frame, and
-  the game presentation drew 8-10% more frames in the same ten seconds. The
-  acceptance check asserts that saving (at least 2% per frame in most adjacent
-  pairs) and keeps the wall-clock requirement that the mode adds no frame time.
-  In the headless software renderer the wall-clock frame is GPU-bound, so its
-  difference is smaller than the main-thread one and is not claimed as a frame
-  rate; the compositor share on the box's GPU is not measured here. The engine,
-  the scene, the renderer and the resolution are untouched.
+  interface poll and every page layer. It also removes the status-bar
+  read-back when a control harness has asked for it (`window.quake2Hud.read()`
+  or `start()`); the shipped page has no consumer for that reader and now runs
+  none of it (the automatic 1.2 s cadence used to cost a synchronous
+  framebuffer read every 1.2 s, measured at 180-300 ms at 1280x720). With the
+  reader active — the acceptance runner's own state polls enable it — the main
+  thread spends **7-8% less task time per drawn frame** in game mode on one
+  page, one frozen scene and the same full-screen state; with the reader off,
+  the remaining saving is the interface poll and the page layers. The
+  acceptance check asserts no added frame time either way. In the headless
+  software renderer the wall-clock frame is GPU-bound, so its difference is
+  smaller than the main-thread one and is not claimed as a frame rate; the
+  compositor share on the box's GPU is not measured here. The engine, the
+  scene, the renderer and the resolution are untouched.
 - **Other displays, stated honestly.** A web page cannot paint a monitor it has
   no window on. Where the Window Management API exists and the owner allows it,
   game mode opens one opaque black window on every additional display and
@@ -320,6 +321,74 @@ The engine restores the mount with `FS.syncfs(true)` at startup. It calls
 `FS.syncfs(false)` after `save` and on quit, logging `Saving data...` and then
 `Data saved.` or `Failed to save data: …` to the browser console. It never
 syncs after the level-change autosave.
+
+### The Load Game view
+
+GAME > **load game** opens a page-drawn **LOAD GAME** view. The engine's own
+load menu is a 2D draw, and `rtx-renderer.js` drops every 2D draw while
+`cls.key_dest != 0` (that is what keeps the old engine menu from showing
+through the page panel), so the engine's list could never be seen or clicked.
+The page draws it instead:
+
+- Each open re-reads `GET userdata/`; a slot is listed only while
+  `baseq2/save/<slot>/server.ssv` exists (Yamagi's own rule). The store is read
+  from disk on every request, so a save made in this tab or another appears
+  the next time the view opens -- no reload needed.
+- Slots are ordered `save0, save1, …`, then `quick`, then `current`, then any
+  named slot from the console, alphabetically. Each row shows the slot name
+  with a `load` hint and joins the panel's roving focus ring, so Up/Down +
+  Enter work as well as a click.
+- Choosing a slot shows `Loading <slot>…` over the game and reloads with
+  `+load <slot>` on the engine's start-up line -- and **no** `+map`. The
+  engine runs the start-up `+load` itself (measured: it prints
+  `Loading game... / Savegame: <slot>` and boots into the saved level, e.g.
+  demo3's Comm Center), and a `+map` after it would win the race and start
+  that level instead. New Game removes a stale `+load` the same way.
+- With no saved games the view says `No saved games yet — save with F6 or Save
+  game.`; a listing that cannot be read says so and offers no rows.
+
+`Save game` writes the engine's quick slot (the same as F6). `scripts/load-menu-test.mjs`
+is the end-to-end proof: it makes a save on demo3, reloads the page, clicks the
+slot (and presses Enter on a focused one), and reads demo3 back from the engine.
+
+### Settings live in the engine's config.cfg
+
+The OPTIONS and VIDEO rows are real engine cvars. **Apply** writes the changed
+values into `userdata/baseq2/config.cfg` as `set <cvar> "<value>"` lines and
+reloads; the engine executes that file at boot. The page also rebuilds a few
+values from the config onto the start-up line where the video init needs them
+(`r_mode`, `fov`, `crosshair_scale`), so a saved resolution survives a visit to the
+bare URL.
+
+Three measured pitfalls shaped this:
+
+- **`seta` is not `set` in this build.** The engine's own config uses 175
+  `set` lines and no `seta`. Typing `seta sensitivity 7.5` answers
+  `Player: seta sensitivity 7.5` and changes no local cvar, so a patched
+  `seta` line was a setting that silently did nothing. `configWithValues()`
+  writes `set`.
+- **A minimal config shadows the packaged Qwasm2 defaults.** The restored
+  `config.cfg` in `/qwasm2/baseq2` takes the packaged `/baseq2/config.cfg`'s
+  place, and that file is what executes `wasm.cfg` (WASD binds, `r_hudscale 1`,
+  `vid_gamma 1.6`, `sensitivity 6`). A config with no `bind` lines is written
+  with `exec "wasm.cfg"` first, then the applied `set` lines; the engine's own
+  config, written on quit, carries every cvar and bind and needs no exec.
+  Without this, an Apply silently lost the key bindings and left `r_hudscale`
+  at `-1` (auto), which also stopped the page's status-bar reader.
+- **The start-up line has a hard argument limit.** Measured: 47 arguments
+  booted and 50 answered `argc > MAX_NUM_ARGVS` before the first frame, so
+  settings must not accumulate in the URL. A reload now drops the query's
+  `+set` pairs; the config carries the settings, and the line carries only the
+  page's own defaults plus the one command the action needs (`+set skill N`,
+  `+map`, `+load`). The line measures 23 arguments at boot and 26 after New
+  Game.
+
+The shipped defaults are part of the same file: with no saved `r_mode` the
+page starts at HD (`r_mode 14`, 1280x720), and RTX is on at Performance (the
+preset built for this device's frame budget; High adds the wide light halo).
+The lighting choice is stored under a new key, so a profile that once had it
+off -- the owner's report -- starts on again; a choice made from now on is
+kept.
 
 ### Why server.js keeps them
 
@@ -3804,11 +3873,29 @@ node scripts/mcp-smoke-test.mjs   # the MCP handshake: exit 0 pass, 1 fail
 node scripts/goto-test.mjs        # the navigation loop, live: exit 0 pass, 1 fail
 node scripts/route-test.mjs       # the route planner, off the archive: exit 0 pass, 1 fail
 node scripts/engine-state-test.mjs # what the reader makes of the memory: exit 0 pass, 1 fail
+node scripts/load-menu-test.mjs   # Load Game end to end, own server+browser: exit 0 pass, 1 fail
+node scripts/menu-audit-test.mjs  # every remaining control does something: exit 0 pass, 1 fail
+node scripts/perf-check.mjs       # the measured frame and menu numbers: exit 0 pass, 1 fail
 node scripts/tex-lib-test.mjs     # the texture checker's own rules: exit 0 pass, 1 fail
 node scripts/texture-pack-test.mjs # what the packer refuses: exit 0 pass, 1 fail
 node scripts/map-art-test.mjs     # which surfaces the map art draws: exit 0 pass, 1 fail
 ./scripts/quake-control-test.sh  # the live game over CDP: exit 0 pass, 1 fail
 ```
+
+**`scripts/load-menu-test.mjs`**, **`scripts/menu-audit-test.mjs`** and
+**`scripts/perf-check.mjs`** share `scripts/app-harness.mjs`: each starts its own
+`server.js` on a free port with a fresh `QUAKE2_DATA_DIR`, a proxy that adds the
+box's CSP sandbox header, and headless Chromium on a free debugging port. They
+never touch the live app on 4231 or the kiosk browser on 18801, and stop only
+the processes they started. `load-menu-test` is the Load Game proof (empty
+state, slot list, click and Enter, the saved level restored after a page
+reload, New Game dropping `+load`); `menu-audit-test` walks every menu button
+and every settings row, proving each action's effect and each cvar's value in
+the config the engine itself writes on quit; `perf-check` measures the frame
+time, the menu open latency and the menu's frame rate against the game's, the
+on-demand status-bar read and the idle page's zero reads, and asserts that the
+menu no longer costs frame rate or main-thread time (the blur did) and that the
+start-up line stays under the engine's argument limit.
 
 **`scripts/tex-lib-test.mjs`** needs no archive and no browser either: it pins the
 two rules `scripts/tex-check.mjs` turns on -- that the folders `scripts/texture-lib.mjs`

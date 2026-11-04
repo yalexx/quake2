@@ -5,8 +5,15 @@
   const canvas = document.getElementById('canvas');
   const status = document.getElementById('rtx-status');
   const lightingButtons = Array.from(document.querySelectorAll('[data-lighting]'));
+  // The stored choice moved to a new key when the default became "on": a
+  // kiosk that had an old `enabled:false` from an earlier acceptance run kept
+  // booting with the effect off, which is what the owner saw. The old key is
+  // not read, so every profile now starts from the default (on, Performance --
+  // the preset built to hold this device's frame budget); a choice made from
+  // now on is still kept.
+  const LOOK_KEY = 'quake2-raster-look-v2';
   let saved = {};
-  try { saved = JSON.parse(localStorage.getItem('quake2-raster-look') || '{}'); } catch (_) { /* opaque iframe */ }
+  try { saved = JSON.parse(localStorage.getItem(LOOK_KEY) || '{}'); } catch (_) { /* opaque iframe */ }
   const params = new URLSearchParams(location.hash.slice(1));
   let enabled = params.has('rtx') ? params.get('rtx') !== 'off' : saved.enabled !== false;
   let preset = params.get('quality') || saved.quality || 'performance';
@@ -269,14 +276,14 @@
     return report.failures.length ? 'Original renderer · effect unavailable' :
       !report.supported ? 'Requires the GLES3 renderer' :
       !enabled ? 'Original lighting' :
-      preset === 'high' ? 'Raster lighting · High · no ray tracing' : 'Raster lighting · Performance · no ray tracing';
+      preset === 'high' ? 'RTX look · High' : 'RTX look · Performance';
   }
   function update() {
     dirty = true;
     const active = enabled ? preset : 'off';
     for (const button of lightingButtons) button.setAttribute('aria-pressed', String(button.dataset.lighting === active));
     if (status) status.textContent = statusText();
-    try { localStorage.setItem('quake2-raster-look', JSON.stringify({ enabled, quality: preset })); } catch (_) { /* optional persistence */ }
+    try { localStorage.setItem(LOOK_KEY, JSON.stringify({ enabled, quality: preset })); } catch (_) { /* optional persistence */ }
   }
   function mode() { return enabled && report.supported && !report.failures.length ? (preset === 'high' ? 2 : 1) : 0; }
   for (const button of lightingButtons) {
@@ -287,6 +294,10 @@
       update();
     });
   }
+  // Whether the automatic status-bar read-back is running. Off until a
+  // consumer asks (see the HUD reader below): the shipped page has none, so an
+  // idle page performs no synchronous framebuffer read.
+  let hudAutoRead = false;
   window.quake2RTX = {
     set(on, level = preset) { enabled = !!on; preset = level === 'high' ? 'high' : 'performance'; update(); return this.status(); },
     // Live crosshair presentation: { alpha, tint } where alpha is 0..1 and tint
@@ -357,6 +368,9 @@
       crosshair: { alpha: crosshair.alpha, tint: crosshair.tint.slice(), tintHex: hexTint(crosshair.tint) },
       crosshairWeapon: crosshairWeapon, crosshairDynamic: aim.dynamic, gameMode: gameModeActive,
       hudReads: hud.reads, hudAttempts: hud.attempts, hudMisses: hud.misses,
+      // False until a consumer asks for the reader: the shipped page runs no
+      // status-bar read-back on a timer.
+      hudAutoRead: hudAutoRead,
       hudFamilies: Boolean(hud.families),
       hudReadIntervalMs: Math.round(hudReadInterval),
       hudReadCostMs: hudReadCost === null ? null : Math.round(hudReadCost),
@@ -693,16 +707,6 @@
     return lum;
   }
 
-  // One cached field, read from a slice just wide enough for its digits.
-  function readCachedField(field, family) {
-    const width = gl.drawingBufferWidth, rows = Math.min(30, gl.drawingBufferHeight);
-    const cellWidth = HUD_CELL.width;
-    const sliceWidth = Math.min(width, cellWidth * 6 + 8);
-    const x0 = Math.max(0, Math.min(width - sliceWidth, field.right - sliceWidth + 4));
-    const lum = readLuminance(x0, sliceWidth, rows);
-    return readField(lum, sliceWidth, rows, field.right - x0, family);
-  }
-
   function readStatusBar() {
     if (!gl || !hud.families) return null;
     if (typeof document !== 'undefined' && document.hidden) return null;
@@ -719,11 +723,30 @@
     const discover = !hud.fields || hud.attempts % 16 === 0;
     let numbers = [];
     if (!discover) {
+      // One readPixels for every known field, not one per field. Each read is
+      // a synchronous wait for the frame's GPU work; three of them in a row
+      // cost more than the whole band they sample (measured at 1366x768:
+      // 257 ms for the three-field cadence). The slice spans from the
+      // leftmost field's widest reading window to four pixels past the
+      // rightmost one, and each field is read at its own offset in it.
+      let left = width, right = 0;
       for (const key of ['health', 'armour', 'ammo']) {
         const field = hud.fields[key];
         if (!field) continue;
-        const read = readCachedField(field, key === 'health' ? 'num' : 'anum');
-        if (read) numbers.push({ key, ...read });
+        left = Math.min(left, field.right - HUD_CELL.width * 6 - 4);
+        right = Math.max(right, field.right + 4);
+      }
+      if (right > left) {
+        left = Math.max(0, Math.min(left, width - 1));
+        right = Math.max(left + 1, Math.min(width, right));
+        const sliceWidth = right - left;
+        const lum = readLuminance(left, sliceWidth, rows);
+        for (const key of ['health', 'armour', 'ammo']) {
+          const field = hud.fields[key];
+          if (!field) continue;
+          const read = readField(lum, sliceWidth, rows, field.right - left, key === 'health' ? 'num' : 'anum');
+          if (read) numbers.push({ key, ...read });
+        }
       }
     }
     if (!numbers.length || discover) {
@@ -776,6 +799,15 @@
   // buffer away -- the same window control/hud.mjs uses for its screenshots.
   let hudReadPending = false;
   let hudLastRead = 0;
+  // Nothing on the page shows a status-bar number: the read-back is the
+  // control harness's reader (its callers ask for it through `window.quake2Hud`).
+  // Running it on a timer in the shipped app therefore cost every player a
+  // synchronous framebuffer read -- measured 257 ms at 1366x768 and 180-267 ms
+  // at 1280x720 -- for a value nobody drew. Automatic reads now start only
+  // when a consumer asks for one (the first `read()` call, or `start()`), so
+  // the player's frame loop has none of that stall while a harness still gets
+  // exactly the reader it had. `hudAutoRead` is declared above, beside the
+  // public API that reads it.
   // The read is a synchronous `gl.readPixels`: it blocks the main thread until
   // the frame's GPU work has finished. The page displays none of it -- this is
   // the control harness's reader -- so when one read costs a large fraction of
@@ -802,7 +834,7 @@
     // nothing to schedule up front: reads are armed by drawn frames
   }
   function armHudRead() {
-    if (!hud.families || gameModeActive) return;
+    if (!hudAutoRead || !hud.families || gameModeActive) return;
     const now = performance.now();
     if (hudReadPending || now - hudLastRead < hudReadInterval) return;
     hudReadPending = true;
@@ -850,8 +882,16 @@
       if (hud.families) scheduleHudReads();
       return Boolean(hud.families);
     },
-    read() { return { ...hud.last, fields: hud.fields, reads: hud.reads, misses: hud.misses, error: hud.lastError, ready: Boolean(hud.families),
+    // Reading is what asks for the automatic reader: a consumer that polls
+    // `read()` (the presentation runner) gets the same 1.2 s cadence as
+    // before, while a page nobody reads never pays for a framebuffer read.
+    read() { hudAutoRead = true; return { ...hud.last, fields: hud.fields, reads: hud.reads, misses: hud.misses,
+      error: hud.lastError, ready: Boolean(hud.families), autoRead: hudAutoRead,
       intervalMs: Math.round(hudReadInterval), costMs: hudReadCost === null ? null : Math.round(hudReadCost) }; },
+    // Explicit on/off for a harness that wants the cadence without polling
+    // `read()` first (or that wants to stop paying for it again).
+    start() { hudAutoRead = true; return hudAutoRead; },
+    stop() { hudAutoRead = false; return hudAutoRead; },
     readNow() { try { return readStatusBar(); } catch (error) { hud.lastError = String(error); return null; } },
     // Forget the bar's fields so the next read finds every number from
     // scratch. The HUD does this on its own every sixteenth read; this is for

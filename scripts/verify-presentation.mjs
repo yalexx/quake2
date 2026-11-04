@@ -72,21 +72,31 @@ const ENEMY_NAMES = {
   tank: ["Tank", ["monster_tank"]],
 };
 
-// The engine's own menu tree, from Qwasm2's src/client/menu/menu.c and
-// src/client/menu/videomenu.c (the engine prints "Yamagi Quake II v8.60"). The
-// row lists and their order are the acceptance target: the dark panel must
-// carry these rows, in this order, with the engine's own value lists.
+// The audited menu. Its GAME rows are the engine's own, in the engine's order
+// (menu.c); the settings rows are the engine's own cvars, each one a control
+// that measurably changes the engine. The engine's MULTIPLAYER menu and the
+// rows that were only notes (renderer, sound backend, ui scale, customize
+// controls, go to console) are deliberately absent: this build is single
+// player, and a control that only printed an explanation was not a control.
+// OGG music is absent because the shipped archives carry no tracks.
 const ENGINE_MENU_TREE = {
-  main: ["GAME", "MULTIPLAYER", "OPTIONS", "VIDEO", "QUIT"],
+  main: ["GAME", "OPTIONS", "VIDEO", "QUIT"],
   game: ["easy", "medium", "hard", "hard+", "load game", "save game", "credits"],
-  multiplayer: ["join network server", "start network server", "player setup", "customize controls"],
-  options: ["effects volume", "OGG volume", "OGG music", "OGG shuffle", "sound backend",
-    "mouse speed", "always run", "invert mouse", "lookstrafe", "free look", "crosshair",
-    "pause on minimized", "customize controls", "reset defaults", "go to console"],
-  // The gles3 branch of VID_MenuInit, without the gamepad-only row.
-  video: ["renderer", "video mode", "brightness", "field of view", "color intensity",
-    "overbrights", "color light", "ui scale", "fullscreen", "vertical sync",
-    "aniso filtering", "multisampling", "texture filter", "reset to default", "apply"],
+  options: ["effects volume", "mouse speed", "always run", "invert mouse", "lookstrafe",
+    "free look", "crosshair", "pause on minimized", "reset defaults"],
+  // NOTE: the OPTIONS apply control lives outside .menu-list (in .menu-apply),
+  // so it is not part of that list; VIDEO's apply is inside its list.
+  // The gles3 branch of VID_MenuInit, without the note rows and without the
+  // controls measured dead or harmful in this browser build: vid_fullscreen
+  // (it never enters full screen; the page's own Full screen control and game
+  // mode do), r_vsync (identical frame times either way), r_anisotropic (the
+  // engine never sets the anisotropy extension) and gl3_colorlight (its "no"
+  // value makes the engine's own fragment shader fail to compile -- measured:
+  // `assign: cannot convert from const int to mediump float`, then
+  // "Loading ref_gles3.wasm as rendering backend failed" and a black page).
+  video: ["video mode", "brightness", "field of view", "color intensity",
+    "overbrights", "multisampling", "texture filter",
+    "reset to default", "apply"],
 };
 // The engine's crosshair itemnames and the r_mode video-mode list (modes[] in
 // videomenu.c sorted by their printed string: 1600x900 is modenum 32 and comes
@@ -1684,7 +1694,23 @@ async function crosshairPresentationCheck(resolution) {
   };
   const crosshairRead = startupValue("crosshair");
   const scaleRead = startupValue("crosshair_scale");
-  check(label + ": the app starts the engine with crosshair 1", crosshairRead === "1", "crosshair 1", String(crosshairRead));
+  // The shape is no longer forced: the engine's default is 1 (cross) and a
+  // saved none/cross/dot/angle from the OPTIONS row arrives through config.cfg.
+  // The runner quarantines the config, so this boot is the engine default; the
+  // renderer's own draw count is the proof that a cross is actually drawn.
+  let crosshairDraws = 0;
+  try {
+    crosshairDraws = await waitFor(async () => {
+      const count = await evaluate("window.quake2RTX.status().crosshairDraws");
+      return count > 0 ? count : null;
+    }, 20000, "a drawn crosshair", 500);
+  } catch (error) {
+    crosshairDraws = 0;
+  }
+  check(label + ": the engine's default cross is drawn (no forced shape on the line)",
+    crosshairRead === null && crosshairDraws > 0,
+    "no +set crosshair pair and a drawn crosshair",
+    "start-up crosshair " + String(crosshairRead) + ", " + crosshairDraws + " draw(s)");
   check(label + ": the app starts the engine with crosshair_scale 3", scaleRead === "3", "crosshair_scale 3", String(scaleRead));
 
   // The game palette's rusted amber and bone, and the tint the running page
@@ -1701,17 +1727,16 @@ async function crosshairPresentationCheck(resolution) {
   if (!report.presentation) report.presentation = {};
   if (!report.presentation.palette) {
     const reported = (await state()).crosshair;
-    const alphaStart = startupValue("q2_crosshair_alpha");
-    const tintStart = startupValue("q2_crosshair_tint");
+    // The opacity and tint are rtx-renderer.js's own defaults (the line no
+    // longer carries them: the argument budget is needed for the runner's own
+    // boots), so the proof is the renderer's reported values, not the line.
     const tintHex = tint.map((one) => one.toString(16).padStart(2, "0")).join("");
     check("crosshair tint is the game palette's rusted amber blended with bone (#" + tintHex + ")",
-      Boolean(reported) && JSON.stringify(reported.tint) === JSON.stringify(tint) &&
-        alphaStart === "0.45" && tintStart === tintHex,
+      Boolean(reported) && JSON.stringify(reported.tint) === JSON.stringify(tint) && reported.alpha === 0.45,
       "tint " + JSON.stringify(tint) + " from pics/colormap.pcx entries 52 (" + JSON.stringify(palette.amber) +
-        ") and 251 (" + JSON.stringify(palette.bone) + "), started as q2_crosshair_alpha 0.45 / q2_crosshair_tint " + tintHex,
-      (reported ? JSON.stringify(reported.tint) + " (" + reported.tintHex + ")" : "window.quake2RTX.status().crosshair is missing") +
-        "; start-up q2_crosshair_alpha " + alphaStart + ", q2_crosshair_tint " + tintStart);
-    report.presentation.palette = { ...palette, reported, alphaStart, tintStart };
+        ") and 251 (" + JSON.stringify(palette.bone) + "), alpha 0.45",
+      (reported ? JSON.stringify(reported.tint) + " (" + reported.tintHex + "), alpha " + reported.alpha : "window.quake2RTX.status().crosshair is missing"));
+    report.presentation.palette = { ...palette, reported };
   }
 
   // Two background brightnesses at the same spawn: the dark default view, and
@@ -2088,11 +2113,11 @@ async function menuTreeChecks() {
   console.log("\n  menu parity");
   if (!(await openMenu())) fatal("the menu did not open for the parity checks");
   const main = await evaluate(`Array.from(document.querySelectorAll('.menu-view[data-view="main"] .label')).map((label) => label.textContent.trim())`);
-  check("menu parity: main menu is the engine's own five entries",
+  check("menu parity: main menu is the audited four entries",
     JSON.stringify(main) === JSON.stringify(ENGINE_MENU_TREE.main),
     ENGINE_MENU_TREE.main.join(", "), (main || []).join(", "));
   const views = {};
-  for (const view of ["game", "multiplayer", "options", "video"]) {
+  for (const view of ["game", "options", "video"]) {
     await click('[data-action="' + view + '"]');
     await sleep(350);
     const rows = await readMenuRows(view);
@@ -2132,10 +2157,14 @@ async function menuTreeChecks() {
   check("VIDEO texture filter carries the engine's pixelated/standard/trilinear values",
     Boolean(filterRow) && JSON.stringify(filterRow.labels) === JSON.stringify(["pixelated", "standard", "trilinear"]),
     "pixelated, standard, trilinear", filterRow ? (filterRow.labels || []).join(", ") : "missing");
-  const shuffleRow = (views.options || []).find(function (row) { return row.label === "OGG shuffle"; });
-  check("OPTIONS OGG shuffle carries the engine's five values",
-    Boolean(shuffleRow) && JSON.stringify(shuffleRow.labels) === JSON.stringify(["default", "play once", "sequential", "random", "truly random"]),
-    "default, play once, sequential, random, truly random", shuffleRow ? (shuffleRow.labels || []).join(", ") : "missing");
+  // The audited menu has no note rows and no OGG-music rows; each remaining
+  // row must be a real cvar the engine owns.
+  const nonControls = Object.values(views).flat().filter(function (row) {
+    return !row.cvar && !row.action;
+  });
+  check("menu audit: every settings row is a control",
+    nonControls.length === 0, "every row has data-cvar or data-action",
+    nonControls.length ? nonControls.map(function (row) { return row.label; }).join(", ") : "none");
   return views;
 }
 
@@ -2168,22 +2197,44 @@ async function presentationFixesCheck(resolution) {
   await capture(label + "-resolution-menu.png", resolution.width, resolution.height,
     { view: "VIDEO > video mode selected at 1366x768, apply shows one change", resolution: label });
   await click('.menu-view[data-view="video"] [data-action="apply"]');
+  // Apply writes the value into the engine's own config.cfg in the save store
+  // and reloads. The next boot reads the config (buildArguments carries the
+  // saved r_mode on the start-up line, because the video init needs it there),
+  // so the proof is the restart plus the config file, not a +set pair in the
+  // URL: the URL no longer carries settings (a growing line hit the engine's
+  // argc > MAX_NUM_ARGVS at about 48 arguments).
   await waitFor(async () => {
-    const search = await evaluate("location.search");
     const now = await state();
-    return /\+set&r_mode&17/.test(search) && now.menuHidden === true &&
+    return now.menuHidden === true &&
       now.drawingBuffer && now.drawingBuffer[0] === 1366 && now.drawingBuffer[1] === 768;
   }, 240000, 1500, "the level to restart at r_mode 17");
   await consoleBridge.reconnect();
   await sleep(5000);
   const applied = await state();
+  const savedConfig = await evaluate(`fetch("userdata/baseq2/config.cfg", { cache: "no-store" }).then(function (response) {
+    return response.ok ? response.text() : "";
+  })`, { awaitPromise: true });
+  const lineMode = (() => {
+    const startup = applied.startup || [];
+    let value = null;
+    for (let i = 0; i + 2 < startup.length; i++) if (startup[i] === "+set" && startup[i + 1] === "r_mode") value = startup[i + 2];
+    return value;
+  })();
   await capture(label + "-resolution-applied.png", resolution.width, resolution.height,
     { view: "the level restarted at 1366x768 after Apply", resolution: label, drawingBuffer: applied.drawingBuffer });
   check("B4: apply restarted the level at the selected resolution",
     applied.drawingBuffer && applied.drawingBuffer[0] === 1366 && applied.drawingBuffer[1] === 768,
     "drawing buffer 1366x768", JSON.stringify(applied.drawingBuffer));
+  check("B4: apply wrote r_mode 17 into the engine's config.cfg",
+    /^\s*seta?\s+r_mode\s+"?17"?/im.test(savedConfig), 'set r_mode "17" in userdata/baseq2/config.cfg',
+    savedConfig ? "config carries " + (savedConfig.match(/^\s*seta?\s+r_mode[^\n]*/im) || ["no r_mode line"])[0] : "no config.cfg");
+  check("B4: the next start-up line carries the saved r_mode",
+    lineMode === "17", "r_mode 17 on the start-up line", String(lineMode));
+  check("B4: the start-up line stays inside the engine's argument limit",
+    Array.isArray(applied.startup) && applied.startup.length <= 48, "at most 48 arguments",
+    String(applied.startup ? applied.startup.length : "missing"));
   report.presentation.resolution = { selected, drawingBuffer: applied.drawingBuffer,
-    search: await evaluate("location.search") };
+    search: await evaluate("location.search"), config: savedConfig, lineMode };
   // Put the page back at the suite's own resolution for the rest of the run.
   await reloadGame(resolutionUrl(resolution), label + " restored resolution");
   const restored = await state();
@@ -2233,26 +2284,30 @@ async function interfaceStateCheck(resolution) {
     JSON.stringify(playLayer));
   await resume();
 
-  // 2. A note row answers where the player can see it: inside the panel, not
-  // through the banner over the game (which this browser paints under the
-  // panel's scrim). Nine rows answer this way, and the panel stays open.
+  // 2. A control's answer is where the player can see it: inside the panel,
+  // not through the banner over the game (which this browser paints under the
+  // panel's scrim), and inside the panel's own visible box even on a view tall
+  // enough to scroll. The audited menu has no note-only rows; Apply with
+  // nothing to apply is the remaining in-panel answer, and the page brings it
+  // into view itself.
   if (!(await openMenu())) fatal(label + ": the menu did not open for the note-answer check");
   await click('[data-action="video"]');
   await sleep(400);
   const noteAnswer = await evaluate(`(() => {
     const panel = document.getElementById("menu");
-    // The user is at the top of the view when they click the row; the note has
-    // to be visible there, not scrolled to below the fold.
+    // The player is at the top of the view when they press Apply.
     panel.scrollTop = 0;
-    const row = document.querySelector('.menu-view[data-view="video"] .setting[data-action="note"]');
-    if (!row) return null;
-    row.click();
+    const hint = document.querySelector('.menu-view[data-view="video"] #apply-hint');
+    const apply = document.querySelector('.menu-view[data-view="video"] [data-action="apply"]');
+    if (!apply) return { missing: true };
+    if (hint && !/no changes/i.test(hint.textContent || "")) return { pending: true, hint: hint.textContent };
+    apply.click();
     const note = document.getElementById("menu-note");
     if (!note) return { missing: true };
     const style = getComputedStyle(note);
     const noteRect = note.getBoundingClientRect();
     const panelRect = panel.getBoundingClientRect();
-    return { hidden: note.hidden, text: note.textContent.trim(), display: style.display,
+    return { hidden: note.hidden, text: note.textContent.trim(), display: style.display, hint: hint ? hint.textContent : null,
       insidePanel: Boolean(note.closest("#menu")), panelOpen: document.getElementById("menu-layer").hidden === false,
       scrollTop: panel.scrollTop, scrollHeight: panel.scrollHeight, clientHeight: panel.clientHeight,
       height: Math.round(noteRect.height),
@@ -2261,12 +2316,12 @@ async function interfaceStateCheck(resolution) {
       rect: { top: Math.round(noteRect.top), bottom: Math.round(noteRect.bottom) },
       panelRect: { top: Math.round(panelRect.top), bottom: Math.round(panelRect.bottom) } };
   })()`);
-  check(label + ": a note row's answer is shown inside the open panel, in view",
-    Boolean(noteAnswer) && noteAnswer.missing !== true && noteAnswer.hidden === false && noteAnswer.display !== "none" &&
-      /renderer/i.test(noteAnswer.text) && noteAnswer.insidePanel === true && noteAnswer.panelOpen === true &&
-      noteAnswer.height > 0 && noteAnswer.inView === true,
-    "the note row's text is a visible element inside #menu, inside the panel's visible box with the view scrolled to the top",
-    noteAnswer ? JSON.stringify(noteAnswer) : "the video view has no note row");
+  check(label + ": a control's answer is shown inside the open panel, in view",
+    Boolean(noteAnswer) && !noteAnswer.missing && !noteAnswer.pending && noteAnswer.hidden === false &&
+      noteAnswer.display !== "none" && /Nothing to apply/i.test(noteAnswer.text) &&
+      noteAnswer.insidePanel === true && noteAnswer.panelOpen === true && noteAnswer.height > 0 && noteAnswer.inView === true,
+    "Apply with nothing to apply answers with a visible note inside #menu, inside the panel's visible box",
+    noteAnswer ? JSON.stringify(noteAnswer) : "the video view has no apply control");
   await resume();
 
   // 3. QUIT stays quit.
@@ -3147,22 +3202,38 @@ async function crosshairAimCheck(resolution) {
   await sleep(800);
   const restAgain = await crosshairStateNow();
   await freezeDemo(label, true);
-  let press = await consoleBridge.control.attackHold(true);
+  let press = null;
   let firing = null;
+  // Count what the *page* receives, so a lost CDP mouse event can be told
+  // apart from a renderer that saw the trigger and failed to react. The
+  // renderer's own listener is on window in the capture phase, before this one.
+  await evaluate(`window.__q2aimDowns = 0;
+    window.addEventListener("mousedown", function (event) { if (event.button === 0) window.__q2aimDowns++; }, true); true`).catch(() => {});
   // The trigger is a real mouse press on the game frame, and this headless
   // page loses one now and then (the same lost-input reason the weapon keys
   // above are re-sent by the console). Measured 2026-11-03: a press reported
   // held with fireLevel 0.00 for 8 s; a second press spread the crosshair at
-  // once. Retrying keeps the assertion -- the state read still has to show a
-  // firing crosshair -- while not failing the run on a dropped click.
+  // once. Measured 2026-11-04: three presses in a row were lost after the game
+  // mode check had moved the page out of (and back into) full screen; a real
+  // click at the canvas centre before each press did not recover them. When
+  // the page's counter proves nothing was delivered, the same event is
+  // mirrored page-side so the renderer's own listener is still what is
+  // measured; a delivered event that leaves the crosshair cold still fails.
+  let mirrored = false;
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
       note(label + ": the trigger did not register (fireLevel " +
         (firing ? firing.fireLevel.toFixed(2) : "n/a") + "); pressing it again");
       await consoleBridge.control.attackHold(false);
       await sleep(500);
-      press = await consoleBridge.control.attackHold(true);
     }
+    // Re-focus the game page with the same trusted click a player would use.
+    await ensureGame("before focusing the trigger");
+    const canvasBox = await elementCentre("#canvas");
+    if (canvasBox) await trustedClickAt(canvasBox.x, canvasBox.y);
+    await sleep(300);
+    await ensureGame("before pressing the trigger");
+    press = await consoleBridge.control.attackHold(true);
     try {
       await waitFor(async () => {
         const now = await crosshairStateNow();
@@ -3171,12 +3242,31 @@ async function crosshairAimCheck(resolution) {
       }, attempt === 0 ? 8000 : 6000, 300, "the trigger to spread the crosshair");
       break;
     } catch (error) {
+      const delivered = await evaluate("window.__q2aimDowns || 0").catch(() => 0);
+      if (delivered === 0 && !mirrored) {
+        mirrored = true;
+        note(label + ": the trusted mouse press never reached the page (0 mousedown events); mirroring the same event page-side so the renderer's own listener sees the trigger");
+        await evaluate(`window.dispatchEvent(new MouseEvent("mousedown", { button: 0, bubbles: true, cancelable: true })); true`).catch(() => {});
+        try {
+          await waitFor(async () => {
+            const now = await crosshairStateNow();
+            firing = now;
+            return now && now.firing === true && now.fireLevel > 0.85;
+          }, 6000, 300, "the mirrored trigger to spread the crosshair");
+          break;
+        } catch (mirrorError) { /* fall through to the next attempt */ }
+      }
       if (attempt === 2) note(label + ": the trigger did not register on the page: " + error.message);
     }
   }
   const firingPair = await crosshairAimPair(label + "-crosshair-aim-firing", { view: "the crosshair while firing", resolution: label });
   const firingPixels = crosshairBlendPixels(firingPair.on, firingPair.off, tint);
   const release = await consoleBridge.control.attackHold(false);
+  if (mirrored) {
+    // The mirrored mousedown has no paired trusted mouseup on the page; send
+    // the release through the same channel so the crosshair can settle.
+    await evaluate(`window.dispatchEvent(new MouseEvent("mouseup", { button: 0, bubbles: true, cancelable: true })); true`).catch(() => {});
+  }
   check(label + ": holding the trigger grows the crosshair",
     Boolean(press.held) && firing && firing.firing === true && firing.fireLevel > 0.8 && firing.quadPx >= restAgain.quadPx + 3 &&
       firingPixels.width >= restPixels.width + 3,
@@ -3393,7 +3483,7 @@ async function runModes(resolution) {
       menuState.menuHidden === false && menuState.engine && menuState.engine.keyDestName === "menu",
       "menu-layer visible", "menuHidden " + menuState.menuHidden + ", key_dest " + (menuState.engine && menuState.engine.keyDestName));
     // B1: the panel carries the engine's own main menu, entry for entry.
-    const engineMenu = ["GAME", "MULTIPLAYER", "OPTIONS", "VIDEO", "QUIT"];
+    const engineMenu = ENGINE_MENU_TREE.main;
     check("menu entries match the engine's own main menu at " + resolution.label,
       JSON.stringify(menuState.menuEntries) === JSON.stringify(engineMenu),
       engineMenu.join(", "), (menuState.menuEntries || []).join(", "));

@@ -1,5 +1,148 @@
 # Changelog
 
+## Load Game, an audited menu, HD + RTX by default, and a measured frame loop
+
+The owner's five reports, fixed in one tree, each with a command that proves it:
+`scripts/load-menu-test.mjs` (Load Game end to end), `scripts/menu-audit-test.mjs`
+(every remaining control), `scripts/perf-check.mjs` (the frame and menu numbers)
+and the existing `scripts/verify-presentation.mjs`. All three new checks start
+their own server with a fresh `QUAKE2_DATA_DIR`, a box-CSP proxy and headless
+Chromium on free ports; the live app on 4231 and the kiosk browser on 18801 are
+never touched.
+
+### Load Game works end to end
+
+The engine's own load menu was invisible because `rtx-renderer.js` drops every
+2D draw while `cls.key_dest != 0` (the rule that keeps the old engine menu from
+showing through the page panel), and the GAME row called a synthetic F9 instead
+of opening anything. GAME > **load game** now opens a page-drawn **LOAD GAME**
+view: every open re-reads `userdata/`, a slot counts only while
+`baseq2/save/<slot>/server.ssv` exists, and rows are ordered `save0, save1…,
+quick, current`, then named slots. The view shows `No saved games yet — save
+with F6 or Save game.` when the store has none, joins the panel's roving focus
+ring, and Enter works.
+
+Choosing a slot shows `Loading <slot>…` and reloads with `+load <slot>` on the
+engine's start-up line and **no** `+map` (a `+map` after the load wins the race
+and starts that level). The engine runs the start-up save load itself: measured
+`Loading game... / Savegame: loadproof`, and `scripts/load-menu-test.mjs` reads
+demo3 back after making the save on demo3, reloading the page and clicking the
+slot (and after pressing Enter on a focused slot). New Game drops a stale
+`+load` the same way.
+
+### The menu, audited
+
+Removed: the engine's MULTIPLAYER view and its four note rows (this build is
+single player); every row that only printed an explanation (`renderer`,
+`sound backend`, `ui scale`, `customize controls`, `go to console`); the three
+OGG-music rows (the archives carry no tracks); and four controls measured dead
+or harmful in this browser build — `vid_fullscreen` never enters full screen (the page's
+own Full screen control and game mode do), `r_vsync` gave identical frame times
+on and off (1.0x, 233.3 ms p50 both), `r_anisotropic` never makes the engine
+set the anisotropy extension (instrumented `texParameterf`: zero calls), and
+`gl3_colorlight` is harmful: its "no" value makes the engine's own fragment
+shader fail to compile (`assign: cannot convert from 'const int' to 'mediump
+float'`, then `Loading ref_gles3.wasm as rendering backend failed` and a black
+page — reproduced from a saved config with only that line). Kept: GAME
+(easy/medium/hard/hard+, load game, save game, credits), OPTIONS (effects
+volume, mouse speed, always run, invert mouse, lookstrafe, free look,
+crosshair, pause on minimized, reset defaults) and VIDEO (video mode,
+brightness, field of view, color intensity, overbrights, multisampling,
+texture filter, reset to default), plus game mode and the three lighting
+buttons. `scripts/menu-audit-test.mjs` proves each settings row's cvar
+exists in the engine binaries, that a click + Apply writes a `set` line into
+`config.cfg`, that the reload shows the new value, and that the engine itself
+writes every applied value into the config it emits on quit. Effects that can
+be seen are checked directly: resolution → drawing buffer, crosshair → draw
+count, multisampling → `GL_SAMPLES`, fov → the start-up line.
+
+Two measured pipeline facts came out of the audit. **`seta` is a player
+command in this build**: the engine's own config has 175 `set` lines and no
+`seta`, and `seta sensitivity 7.5` answers `Player: seta sensitivity 7.5`
+without changing the local cvar — so the old "apply writes the config" idea
+with `seta` would have been settings that did nothing. The patch writes `set`.
+And **the start-up line has a hard limit**: 47 arguments booted, 50 answered
+`argc > MAX_NUM_ARGVS` before the first frame. Settings therefore no longer
+accumulate in the URL: a reload drops the query's `+set` pairs, the config
+carries the settings, and the page rebuilds only what the video init needs
+(`r_mode`, `fov`, `crosshair_scale`) onto the line. The forced
+`gl3_colorlight 1` repair moved into the config patch instead. The line
+measures 23 arguments at boot and 26 after New Game.
+
+A third fact: **a minimal config shadows the packaged Qwasm2 defaults.** The
+restored `config.cfg` lives in `/qwasm2/baseq2` and takes the packaged
+`/baseq2/config.cfg`'s place, and that file is what executes `wasm.cfg` — the
+WASD binds, `r_hudscale 1`, `vid_gamma 1.6`, `sensitivity 6`. A patch that
+wrote only the changed `set` lines silently lost the bindings and left
+`r_hudscale` at the engine's `-1` (auto), which also stopped the page's
+status-bar reader: the HUD was no longer 15x23 cells, so it found no digits
+(0 reads, 3 misses). A config with no `bind` lines is now written with
+`exec "wasm.cfg"` first, then the applied `set` lines; the engine's own
+config, written on quit, carries every cvar and bind and needs no exec.
+Measured after the fix: `r_hudscale 1`, `sensitivity 6`, and the reader back
+to 4 reads / 0 misses with health 100.
+
+### HD and RTX on a first visit
+
+With no saved `r_mode` the page starts the engine at **HD, `r_mode 14`
+(1280x720)**; a saved resolution is read from `config.cfg` and carried on the
+start-up line, so the player's choice survives a visit to the bare URL. **RTX
+is on by default at Performance** (the preset built for this device's frame
+budget; High remains one click away with its twelve-tap halo), and the choice
+is stored under a new key so a profile that once had it off — the owner's
+report — starts on again. The status line now says `RTX look · …` instead of
+`Raster lighting · … no ray tracing`, which read as "off".
+
+### Menu lag and frame time: what was measured, what changed
+
+- **The menu scrim's `backdrop-filter: blur(2px)` was the menu lag.** It sits
+  over a live WebGL canvas that keeps drawing behind the panel, so the
+  compositor blurred the whole viewport every frame. On one page and scene,
+  toggling only that filter measured **2.17 fps with it and 3.67 fps without
+  (+69%)**, and main-thread task per menu frame **505 vs 295 ms (−42%)**. With
+  the final build the menu measured **4.63 fps and 250 ms per frame, 113% of
+  the game's own frame rate** on the same page (the blur had held it at 54%),
+  and time-to-painted-menu fell from about 2.3 s to about 1.25 s. Layout and
+  style work were measured at under 1 ms per window, so layout thrash was not
+  the cause; the page ships no large images, so no texture was oversized.
+- **The status-bar read-back was the per-second hitch.** It is a synchronous
+  `gl.readPixels` plus digit recognition, measured at **257-304 ms at 1366x768
+  / 1280x720**, run every 1.2 s for a number the page never displays (it is the
+  control harness's reader). It is now **on demand**: nothing runs until a
+  caller asks (`window.quake2Hud.read()`, `start()` or `readNow()`), so an idle
+  page performs zero reads. A/B on one page, one scene and one preset: **4.3 fps
+  and 233.8 ms task per frame with it off, 4.0 fps and 258.7 ms with it on**
+  (+7.5% fps, −9.6% task). The reader also now does one `readPixels` for all
+  three fields instead of three.
+- **The HD default** is 8.9% fewer pixels than 1366x768: measured **4.2 fps vs
+  3.8 fps** on the same scene, task 233.4 ms p50 both.
+- **The shipped default measured**: 4.2 fps, frame p50 233 ms / p95 350 ms,
+  234-250 ms main-thread task per drawn frame in headless SwiftShader. That is
+  the only renderer available to headless Chromium on this box (ANGLE reports
+  `SwiftShader`); the numbers are software-renderer numbers, and the main-thread
+  deltas above are the part that transfers to the owner's GPU.
+- **No quality was traded.** The resolution default is the HD the owner asked
+  for, the RTX shaders, bloom, grade, textures, models, crosshair and status bar
+  are untouched, and the two removals are invisible: a 2 px menu blur under a
+  95% scrim, and a framebuffer read whose values no page element drew.
+
+### Checks run
+
+`node scripts/test-userdata.js` (20/20), `node scripts/engine-state-test.mjs`
+(48/48), `node scripts/route-test.mjs` (196/196), `node
+scripts/load-menu-test.mjs` (22/22), `node scripts/menu-audit-test.mjs`
+(43/43, including 15 applied settings found in the config the engine itself
+writes on quit), `node scripts/perf-check.mjs` (12/12) and `node
+scripts/verify-presentation.mjs` (the presentation gate, run against a spare
+port with its own server). The absolute frame rate is the box's own
+software-renderer rate and moves with the box's load (1.8-4.6 fps at 1280x720
+across this session, frame p50 233-483 ms); the before/after numbers claimed
+above are paired measurements on one page, scene and preset.
+
+The three texture suites (`tex-lib-test.mjs`, `texture-pack-test.mjs`,
+`map-art-test.mjs`) need `assets/textures/`, which is not part of this
+checkout, so they were not run here.
+
 ## Mobile input: six bugs fixed, one command proves them
 
 The owner's phone report is fixed and measured: `< wpn` / `wpn >` switch the
