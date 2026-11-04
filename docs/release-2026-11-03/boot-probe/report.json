@@ -1,0 +1,399 @@
+{
+  "at": "2026-11-03T18:40:39.482Z",
+  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-t9js74ra",
+  "node": "v24.22.1",
+  "url": "http://127.0.0.1:4391/apps/quake2/",
+  "map": "demo1",
+  "settleMs": 5000,
+  "server": null,
+  "chrome": {
+    "path": "/usr/bin/google-chrome",
+    "debuggingPort": 39883,
+    "headless": true,
+    "profile": "/tmp/q2boot-chrome-nP7tQR"
+  },
+  "checks": [
+    {
+      "name": "the page left a first-frame record (window.quake2BootFrame)",
+      "pass": true,
+      "detail": {
+        "source": "window.quake2BootFrame"
+      },
+      "at": "2026-11-03T18:40:43.840Z"
+    },
+    {
+      "name": "(a) first engine frame: consoleOpen is false",
+      "pass": true,
+      "detail": {
+        "consoleOpen": false,
+        "keyDest": 0,
+        "source": "window.quake2BootFrame"
+      },
+      "at": "2026-11-03T18:40:43.841Z"
+    },
+    {
+      "name": "(a) first engine frame: keyDest is the game (0)",
+      "pass": true,
+      "detail": {
+        "keyDest": 0,
+        "source": "window.quake2BootFrame"
+      },
+      "at": "2026-11-03T18:40:43.841Z"
+    },
+    {
+      "name": "(b) after 5000 ms: consoleOpen is false",
+      "pass": true,
+      "detail": {
+        "consoleOpen": false,
+        "keyDest": 0,
+        "keyName": "game"
+      },
+      "at": "2026-11-03T18:40:56.179Z"
+    },
+    {
+      "name": "(b) after 5000 ms: keyDest is the game (0)",
+      "pass": true,
+      "detail": {
+        "keyDest": 0,
+        "keyName": "game"
+      },
+      "at": "2026-11-03T18:40:56.179Z"
+    },
+    {
+      "name": "no frame in the observed boot ever had the console up",
+      "pass": true,
+      "detail": {
+        "game": 28,
+        "console": 0,
+        "menu": 0,
+        "other": 0
+      },
+      "at": "2026-11-03T18:40:56.179Z"
+    },
+    {
+      "name": "every +set cvar of the app's start-up line is still passed with its value",
+      "pass": true,
+      "detail": {
+        "missing": []
+      },
+      "at": "2026-11-03T18:40:56.180Z"
+    },
+    {
+      "name": "the level still starts (demo1 on the start-up line)",
+      "pass": true,
+      "detail": {
+        "map": "demo1"
+      },
+      "at": "2026-11-03T18:40:56.180Z"
+    },
+    {
+      "name": "the level is running, not a menu: entities are being sent",
+      "pass": true,
+      "detail": {
+        "entityCount": 175
+      },
+      "at": "2026-11-03T18:40:56.180Z"
+    },
+    {
+      "name": "(c) document.fullscreenElement is null after load",
+      "pass": true,
+      "detail": {
+        "fullscreenElement": false,
+        "fullscreenEnabled": true
+      },
+      "at": "2026-11-03T18:40:56.180Z"
+    },
+    {
+      "name": "(e) the fullscreen button either enters fullscreen or shows the blocked hint",
+      "pass": true,
+      "detail": {
+        "fullscreenElement": true,
+        "hintShown": false,
+        "hint": "Full screen is blocked inside the desktop window. Open in its own window"
+      },
+      "at": "2026-11-03T18:41:02.944Z"
+    },
+    {
+      "name": "(e) the button's aria-pressed follows the fullscreen state",
+      "pass": true,
+      "detail": {
+        "hidden": false,
+        "display": "flex",
+        "ariaPressed": "true",
+        "ariaLabel": "Leave full screen",
+        "title": "Leave full screen (Esc)",
+        "classes": "is-on"
+      },
+      "at": "2026-11-03T18:41:02.944Z"
+    },
+    {
+      "name": "(e) Esc leaves fullscreen",
+      "pass": true,
+      "detail": {
+        "fullscreenElement": false
+      },
+      "at": "2026-11-03T18:41:06.399Z"
+    },
+    {
+      "name": "(e) the button's aria-pressed follows Esc",
+      "pass": true,
+      "detail": {
+        "hidden": false,
+        "display": "flex",
+        "ariaPressed": "false",
+        "ariaLabel": "Enter full screen",
+        "title": "Full screen",
+        "classes": ""
+      },
+      "at": "2026-11-03T18:41:06.399Z"
+    },
+    {
+      "name": "(d) document.fullscreenElement is still null 3000 ms after the first canvas click",
+      "pass": true,
+      "detail": {
+        "fullscreenElement": false
+      },
+      "at": "2026-11-03T18:41:33.387Z"
+    },
+    {
+      "name": "a second canvas click does not take the screen either (no armed gesture request)",
+      "pass": true,
+      "detail": {
+        "after": false,
+        "pointerLocked": false
+      },
+      "at": "2026-11-03T18:41:43.069Z"
+    }
+  ],
+  "measurements": {
+    "firstFrame": {
+      "keyDest": 0,
+      "consoleOpen": false,
+      "at": 3103,
+      "frames": 2,
+      "consoleFrames": 0,
+      "closedConsole": false,
+      "source": "window.quake2BootFrame"
+    },
+    "observation": {
+      "frames": 7,
+      "readableFrames": 4,
+      "firstReadable": {
+        "keyDest": 0,
+        "at": 1960,
+        "frame": 4,
+        "canvas": "none",
+        "readyState": "complete"
+      },
+      "lastDest": 0,
+      "changes": [
+        {
+          "keyDest": 0,
+          "at": 1960,
+          "frame": 4,
+          "canvas": "none",
+          "readyState": "complete"
+        }
+      ],
+      "counts": {
+        "game": 4,
+        "console": 0,
+        "menu": 0,
+        "other": 0
+      }
+    },
+    "inGame": {
+      "afterMs": 10561,
+      "engine": {
+        "ok": true,
+        "keyDest": 0,
+        "keyDestName": "game",
+        "consoleOpen": false,
+        "inGame": true,
+        "position": {
+          "x": 128.0625,
+          "y": -319.9375,
+          "z": 64.0625
+        }
+      },
+      "canvasDisplay": "block"
+    },
+    "afterSettleMs": 5137,
+    "settled": {
+      "keyDest": 0,
+      "keyDestName": "game",
+      "consoleOpen": false,
+      "position": {
+        "x": 128.0625,
+        "y": -319.9375,
+        "z": 46.1875
+      },
+      "fullscreenElement": false
+    },
+    "observationAfterSettle": {
+      "frames": 31,
+      "readableFrames": 28,
+      "firstReadable": {
+        "keyDest": 0,
+        "at": 1960,
+        "frame": 4,
+        "canvas": "none",
+        "readyState": "complete"
+      },
+      "lastDest": 0,
+      "changes": [
+        {
+          "keyDest": 0,
+          "at": 1960,
+          "frame": 4,
+          "canvas": "none",
+          "readyState": "complete"
+        }
+      ],
+      "counts": {
+        "game": 28,
+        "console": 0,
+        "menu": 0,
+        "other": 0
+      }
+    },
+    "startup": {
+      "arguments": [
+        "+set",
+        "vid_renderer",
+        "gles3",
+        "+set",
+        "r_retexturing",
+        "1",
+        "+set",
+        "gl3_usefbo",
+        "1",
+        "+set",
+        "cl_gun",
+        "1",
+        "+set",
+        "fov",
+        "90",
+        "+set",
+        "crosshair",
+        "1",
+        "+set",
+        "crosshair_scale",
+        "3",
+        "+set",
+        "q2_crosshair_alpha",
+        "0.45",
+        "+set",
+        "q2_crosshair_tint",
+        "ddb589",
+        "+map",
+        "demo1"
+      ],
+      "sets": [
+        [
+          "vid_renderer",
+          "gles3"
+        ],
+        [
+          "r_retexturing",
+          "1"
+        ],
+        [
+          "gl3_usefbo",
+          "1"
+        ],
+        [
+          "cl_gun",
+          "1"
+        ],
+        [
+          "fov",
+          "90"
+        ],
+        [
+          "crosshair",
+          "1"
+        ],
+        [
+          "crosshair_scale",
+          "3"
+        ],
+        [
+          "q2_crosshair_alpha",
+          "0.45"
+        ],
+        [
+          "q2_crosshair_tint",
+          "ddb589"
+        ]
+      ],
+      "map": "demo1"
+    },
+    "beforeButton": {
+      "button": {
+        "x": 12,
+        "y": 554.609375,
+        "w": 100.15625,
+        "h": 26.390625,
+        "left": 12,
+        "top": 554.609375,
+        "right": 112.15625,
+        "bottom": 581,
+        "display": "flex",
+        "visibility": "visible",
+        "hidden": false
+      },
+      "hint": {
+        "hidden": true,
+        "display": "none",
+        "text": "Full screen is blocked inside the desktop window. Open in its own window"
+      },
+      "fullscreenElement": false
+    },
+    "afterButton": {
+      "fullscreenElement": true,
+      "fullscreenEnabled": true,
+      "hintShown": false,
+      "hint": {
+        "hidden": true,
+        "display": "none",
+        "text": "Full screen is blocked inside the desktop window. Open in its own window"
+      },
+      "button": {
+        "hidden": false,
+        "display": "flex",
+        "ariaPressed": "true",
+        "ariaLabel": "Leave full screen",
+        "title": "Leave full screen (Esc)",
+        "classes": "is-on"
+      }
+    },
+    "afterEscape": {
+      "fullscreenElement": false,
+      "button": {
+        "hidden": false,
+        "display": "flex",
+        "ariaPressed": "false",
+        "ariaLabel": "Enter full screen",
+        "title": "Full screen",
+        "classes": ""
+      }
+    },
+    "afterFirstClick": {
+      "fullscreenElement": false,
+      "pointerLocked": false,
+      "clickedAt": {
+        "x": 639.984375,
+        "y": 316.5
+      }
+    }
+  },
+  "notes": [
+    "screenshot 01-landed.png",
+    "screenshot 02-fullscreen-by-button.png",
+    "screenshot 03-after-escape.png",
+    "screenshot 04-after-canvas-click.png",
+    "screenshot 05-after-second-click.png",
+    "stopped chromium (pid 362383)"
+  ]
+}

@@ -1,0 +1,819 @@
+{
+  "generated": "2026-11-03T08:23:13.302Z",
+  "gitHead": "d1e4ae6678b0dd26d3f92697b2349a5f59d15292",
+  "checks": [
+    {
+      "id": "S1",
+      "name": "mean saturation rises by the stated threshold",
+      "pass": true,
+      "detail": "mean 0.3153 → 0.3272 (+0.0120), threshold +0.005",
+      "value": null
+    },
+    {
+      "id": "S2",
+      "name": "every weapon's saturation rises",
+      "pass": true,
+      "detail": "smallest gain 0.0055",
+      "value": null
+    },
+    {
+      "id": "S3",
+      "name": "mean chroma rises",
+      "pass": true,
+      "detail": "mean 15.61 → 16.08",
+      "value": null
+    },
+    {
+      "id": "E1",
+      "name": "cut-out count is exactly 4x the original",
+      "pass": true,
+      "detail": "all 13 at 4.00",
+      "value": null
+    },
+    {
+      "id": "E2",
+      "name": "cut-out mask is the 2x2 expansion of the original (no opaque texel re-indexed to 255)",
+      "pass": true,
+      "detail": "0 mismatched texels over all 13",
+      "value": null
+    },
+    {
+      "id": "E3",
+      "name": "no near-black/near-white fringe introduced at the cut-out",
+      "pass": true,
+      "detail": "0 introduced; worst fringe colour distance 44 (limit 48)",
+      "value": null
+    },
+    {
+      "id": "E3b",
+      "name": "scaled fringe texels are explained by the source art",
+      "pass": true,
+      "detail": "worst v_handgr 4 vs limit 8 (2x2 of the source's 1)",
+      "value": null
+    },
+    {
+      "id": "E4",
+      "name": "boundary brightness is not shifted by the upscale",
+      "pass": true,
+      "detail": "worst v_handgr 11.1 levels, limit 20",
+      "value": null
+    },
+    {
+      "id": "B1",
+      "name": "blockiness ratio below the bound (whole skin and pistol band)",
+      "pass": true,
+      "detail": "worst whole 2.27, worst bottom 2.55",
+      "value": null
+    },
+    {
+      "id": "B2",
+      "name": "pistol-bottom band is not an outlier",
+      "pass": true,
+      "detail": "v_blast 2.31 vs worst other 2.55 (margin 0.5)",
+      "value": null
+    },
+    {
+      "id": "B3",
+      "name": "blockiness metric detects a nearest-neighbour upscale",
+      "pass": true,
+      "detail": "control ratios 5799702035 … 9857793669",
+      "value": null
+    },
+    {
+      "id": "P1",
+      "name": "tex-check --only models/ exits 0",
+      "pass": true,
+      "detail": "exit 0",
+      "value": null
+    },
+    {
+      "id": "P2",
+      "name": "texture-pack --dry-run --only models/ exits 0",
+      "pass": true,
+      "detail": "exit 0",
+      "value": null
+    },
+    {
+      "id": "P3",
+      "name": "texture-audit --select exits 0",
+      "pass": true,
+      "detail": "exit 0",
+      "value": null
+    },
+    {
+      "id": "P4",
+      "name": "texture-pack reports every picture identical",
+      "pass": true,
+      "detail": "125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed (identical 125 of 125)",
+      "value": null
+    }
+  ],
+  "texture": [
+    {
+      "name": "v_blast",
+      "originalSize": "296x164",
+      "scaledSize": "592x328",
+      "opaqueOriginal": 48543,
+      "opaqueScaled": 194172,
+      "saturationOriginal": 0.22260610857736077,
+      "saturationScaled": 0.23454601613076181,
+      "chromaOriginal": 10.364666378262571,
+      "chromaScaled": 10.692303730712975,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 1.9969432988627058,
+        "boundary": 4.114426374534647,
+        "ratioX": 2.060362142920074,
+        "insideY": 2.421373485909346,
+        "boundaryY": 4.86157015834825,
+        "ratioY": 2.007773764204116,
+        "ratio": 2.060362142920074
+      },
+      "blockBottom": {
+        "inside": 1.742288441850976,
+        "boundary": 4.028209424755976,
+        "ratioX": 2.3120221244632018,
+        "insideY": 1.9465055794431219,
+        "boundaryY": 4.360502494802502,
+        "ratioY": 2.2401695329586486,
+        "ratio": 2.3120221244632018
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 5.067883898305042,
+        "ratioX": 5067883898.305041,
+        "insideY": 0,
+        "boundaryY": 6.1642871414358655,
+        "ratioY": 6164287141.435865,
+        "ratio": 6164287141.435865
+      }
+    },
+    {
+      "name": "v_shotg",
+      "originalSize": "264x180",
+      "scaledSize": "528x360",
+      "opaqueOriginal": 47493,
+      "opaqueScaled": 189972,
+      "saturationOriginal": 0.3004227450194995,
+      "saturationScaled": 0.3110990402202378,
+      "chromaOriginal": 15.079064283157518,
+      "chromaScaled": 15.513944160192029,
+      "cutoutOriginal": 27,
+      "cutoutScaled": 108,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 89,
+        "sourceBoundary": 38,
+        "sourceFringe": 29,
+        "fringe": 63,
+        "introduced": 0,
+        "maxFringeDistance": 11,
+        "maxDistance": 220,
+        "lumaMean": 10.346370786516857,
+        "sourceLumaMean": 6.022421052631577
+      },
+      "blockAll": {
+        "inside": 2.3060055660772742,
+        "boundary": 4.791283840304276,
+        "ratioX": 2.0777416632409462,
+        "insideY": 2.577460132575587,
+        "boundaryY": 5.296362948620186,
+        "ratioY": 2.0548767686767953,
+        "ratio": 2.0777416632409462
+      },
+      "blockBottom": {
+        "inside": 2.634548321759291,
+        "boundary": 5.223227344739864,
+        "ratioX": 1.9825893120274645,
+        "insideY": 3.178821943392257,
+        "boundaryY": 6.381275448143051,
+        "ratioY": 2.0074340626116727,
+        "ratio": 2.0074340626116727
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 5.978193029150884,
+        "ratioX": 5978193029.150884,
+        "insideY": 0,
+        "boundaryY": 6.732766315388333,
+        "ratioY": 6732766315.388332,
+        "ratio": 6732766315.388332
+      }
+    },
+    {
+      "name": "v_shotg2",
+      "originalSize": "296x194",
+      "scaledSize": "592x388",
+      "opaqueOriginal": 57423,
+      "opaqueScaled": 229692,
+      "saturationOriginal": 0.2970794732344986,
+      "saturationScaled": 0.30653978191758763,
+      "chromaOriginal": 15.165891715862982,
+      "chromaScaled": 15.52964839872525,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 2.8943316035104876,
+        "boundary": 5.539874803424599,
+        "ratioX": 1.9140428818540955,
+        "insideY": 3.7622918466143713,
+        "boundaryY": 6.8864619100963695,
+        "ratioY": 1.8303901427246776,
+        "ratio": 1.9140428818540955
+      },
+      "blockBottom": {
+        "inside": 4.041130262473762,
+        "boundary": 7.500653780964508,
+        "ratioX": 1.856078199363218,
+        "insideY": 4.516176347019815,
+        "boundaryY": 8.248137526324728,
+        "ratioY": 1.8263541749798147,
+        "ratio": 1.856078199363218
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 6.782975624672121,
+        "ratioX": 6782975624.67212,
+        "insideY": 0,
+        "boundaryY": 8.869649733930444,
+        "ratioY": 8869649733.930443,
+        "ratio": 8869649733.930443
+      }
+    },
+    {
+      "name": "v_machn",
+      "originalSize": "300x194",
+      "scaledSize": "600x388",
+      "opaqueOriginal": 58198,
+      "opaqueScaled": 232792,
+      "saturationOriginal": 0.35409148842751603,
+      "saturationScaled": 0.3680038679200117,
+      "chromaOriginal": 18.05699508574178,
+      "chromaScaled": 18.52464431767415,
+      "cutoutOriginal": 2,
+      "cutoutScaled": 8,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 12,
+        "sourceBoundary": 6,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 20,
+        "lumaMean": 70.85366666666665,
+        "sourceLumaMean": 72.87733333333333
+      },
+      "blockAll": {
+        "inside": 2.0754545360822614,
+        "boundary": 4.462910905767962,
+        "ratioX": 2.1503293992613255,
+        "insideY": 3.0903029037796435,
+        "boundaryY": 5.928236096717906,
+        "ratioY": 1.9183349598084005,
+        "ratio": 2.1503293992613255
+      },
+      "blockBottom": {
+        "inside": 2.1967363888889158,
+        "boundary": 4.585287003687469,
+        "ratioX": 2.087317816957844,
+        "insideY": 3.2555045512819656,
+        "boundaryY": 6.092504502164387,
+        "ratioY": 1.8714470848352083,
+        "ratio": 2.087317816957844
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 5.45922208047403,
+        "ratioX": 5459222080.47403,
+        "insideY": 0,
+        "boundaryY": 7.746976753021742,
+        "ratioY": 7746976753.021742,
+        "ratio": 7746976753.021742
+      }
+    },
+    {
+      "name": "v_chain",
+      "originalSize": "264x164",
+      "scaledSize": "528x328",
+      "opaqueOriginal": 43295,
+      "opaqueScaled": 173180,
+      "saturationOriginal": 0.212503909025952,
+      "saturationScaled": 0.22377032059215363,
+      "chromaOriginal": 3.103014204873542,
+      "chromaScaled": 3.487256034184086,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 1.7289838899667176,
+        "boundary": 3.9237942942588298,
+        "ratioX": 2.2694221253469062,
+        "insideY": 3.0707313955098554,
+        "boundaryY": 6.262413355176456,
+        "ratioY": 2.0393881940744163,
+        "ratio": 2.2694221253469062
+      },
+      "blockBottom": {
+        "inside": 2.468070994031234,
+        "boundary": 4.809456331374705,
+        "ratioX": 1.9486701731862095,
+        "insideY": 2.640118859045018,
+        "boundaryY": 4.996137849650447,
+        "ratioY": 1.8923912582699578,
+        "ratio": 1.9486701731862095
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 4.800503570434177,
+        "ratioX": 4800503570.434176,
+        "insideY": 0,
+        "boundaryY": 8.647030210075043,
+        "ratioY": 8647030210.075043,
+        "ratio": 8647030210.075043
+      }
+    },
+    {
+      "name": "v_launch",
+      "originalSize": "248x194",
+      "scaledSize": "496x388",
+      "opaqueOriginal": 48111,
+      "opaqueScaled": 192444,
+      "saturationOriginal": 0.29413839489450977,
+      "saturationScaled": 0.30691249101535445,
+      "chromaOriginal": 16.214940450208893,
+      "chromaScaled": 16.665991145476088,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 2.431005372879691,
+        "boundary": 4.9926247652238676,
+        "ratioX": 2.0537283960461856,
+        "insideY": 2.645830613983743,
+        "boundaryY": 5.237733944091421,
+        "ratioY": 1.9796180134922285,
+        "ratio": 2.0537283960461856
+      },
+      "blockBottom": {
+        "inside": 2.1164663978494667,
+        "boundary": 4.931726876362369,
+        "ratioX": 2.330170174860077,
+        "insideY": 2.753645419768385,
+        "boundaryY": 5.600226827607703,
+        "ratioY": 2.0337501652913432,
+        "ratio": 2.330170174860077
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 6.206238094244441,
+        "ratioX": 6206238094.24444,
+        "insideY": 0,
+        "boundaryY": 6.624827532174297,
+        "ratioY": 6624827532.174297,
+        "ratio": 6624827532.174297
+      }
+    },
+    {
+      "name": "v_rocket",
+      "originalSize": "252x194",
+      "scaledSize": "504x388",
+      "opaqueOriginal": 48887,
+      "opaqueScaled": 195548,
+      "saturationOriginal": 0.21377798687664076,
+      "saturationScaled": 0.2244017233960656,
+      "chromaOriginal": 10.201750976742284,
+      "chromaScaled": 10.583028207908033,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 2.2151233840612545,
+        "boundary": 4.905878260154454,
+        "ratioX": 2.214720089839832,
+        "insideY": 2.8821979422348845,
+        "boundaryY": 5.570317378073105,
+        "ratioY": 1.9326630195821408,
+        "ratio": 2.214720089839832
+      },
+      "blockBottom": {
+        "inside": 1.357300544363077,
+        "boundary": 3.4612871845949815,
+        "ratioX": 2.5501258354089993,
+        "insideY": 1.897800849613385,
+        "boundaryY": 4.026711940836937,
+        "ratioY": 2.121777920827282,
+        "ratio": 2.5501258354089993
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 5.93531650716643,
+        "ratioX": 5935316507.1664295,
+        "insideY": 0,
+        "boundaryY": 7.095270643144053,
+        "ratioY": 7095270643.1440525,
+        "ratio": 7095270643.1440525
+      }
+    },
+    {
+      "name": "v_rail",
+      "originalSize": "308x181",
+      "scaledSize": "616x362",
+      "opaqueOriginal": 55747,
+      "opaqueScaled": 222988,
+      "saturationOriginal": 0.43693145094892155,
+      "saturationScaled": 0.4470002288282517,
+      "chromaOriginal": 15.707015624159148,
+      "chromaScaled": 16.385451235044037,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 2.1709135215613324,
+        "boundary": 4.67744273579603,
+        "ratioX": 2.1545965278395744,
+        "insideY": 2.0514673172131825,
+        "boundaryY": 4.34112344877297,
+        "ratioY": 2.1161065605813176,
+        "ratio": 2.1545965278395744
+      },
+      "blockBottom": {
+        "inside": 2.119342207792284,
+        "boundary": 4.336810266202656,
+        "ratioX": 2.0463001445718887,
+        "insideY": 1.7667502480159247,
+        "boundaryY": 3.7674505997476877,
+        "ratioY": 2.13241832227196,
+        "ratio": 2.13241832227196
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 5.799702035380372,
+        "ratioX": 5799702035.380372,
+        "insideY": 0,
+        "boundaryY": 5.402466504328739,
+        "ratioY": 5402466504.328739,
+        "ratio": 5799702035.380372
+      }
+    },
+    {
+      "name": "v_hyperb",
+      "originalSize": "296x194",
+      "scaledSize": "592x388",
+      "opaqueOriginal": 57423,
+      "opaqueScaled": 229692,
+      "saturationOriginal": 0.29197133091411603,
+      "saturationScaled": 0.3059217357282261,
+      "chromaOriginal": 12.13585148807969,
+      "chromaScaled": 12.530336276404924,
+      "cutoutOriginal": 1,
+      "cutoutScaled": 4,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 4,
+        "sourceBoundary": 2,
+        "sourceFringe": 2,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 0,
+        "lumaMean": 0,
+        "sourceLumaMean": 0
+      },
+      "blockAll": {
+        "inside": 2.519646506686877,
+        "boundary": 4.991108352262151,
+        "ratioX": 1.9808764201709539,
+        "insideY": 3.1539282529948993,
+        "boundaryY": 5.862111468981216,
+        "ratioY": 1.8586698868037619,
+        "ratio": 1.9808764201709539
+      },
+      "blockBottom": {
+        "inside": 2.9522788028412155,
+        "boundary": 5.203593698391968,
+        "ratioX": 1.762568526178534,
+        "insideY": 4.060384052321292,
+        "boundaryY": 6.851580115829792,
+        "ratioY": 1.6874216890672677,
+        "ratio": 1.762568526178534
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 6.296647632359907,
+        "ratioX": 6296647632.359906,
+        "insideY": 0,
+        "boundaryY": 7.583788860102684,
+        "ratioY": 7583788860.102684,
+        "ratio": 7583788860.102684
+      }
+    },
+    {
+      "name": "v_bfg",
+      "originalSize": "216x195",
+      "scaledSize": "432x390",
+      "opaqueOriginal": 42095,
+      "opaqueScaled": 168380,
+      "saturationOriginal": 0.3497909462636654,
+      "saturationScaled": 0.35906528552984296,
+      "chromaOriginal": 17.119919230312387,
+      "chromaScaled": 17.64934671576197,
+      "cutoutOriginal": 25,
+      "cutoutScaled": 100,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 94,
+        "sourceBoundary": 40,
+        "sourceFringe": 13,
+        "fringe": 23,
+        "introduced": 0,
+        "maxFringeDistance": 19,
+        "maxDistance": 75,
+        "lumaMean": 79.09405319148932,
+        "sourceLumaMean": 80.7533
+      },
+      "blockAll": {
+        "inside": 3.438713782051128,
+        "boundary": 6.4315953607633425,
+        "ratioX": 1.870349138777993,
+        "insideY": 3.657072234092921,
+        "boundaryY": 6.867039602424597,
+        "ratioY": 1.8777424023531377,
+        "ratio": 1.8777424023531377
+      },
+      "blockBottom": {
+        "inside": 3.726654410019096,
+        "boundary": 6.746960256410424,
+        "ratioX": 1.8104604060605265,
+        "insideY": 3.4972210648149007,
+        "boundaryY": 6.205239357864456,
+        "ratioY": 1.774334319409941,
+        "ratio": 1.8104604060605265
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 8.39691360763292,
+        "ratioX": 8396913607.632919,
+        "insideY": 0,
+        "boundaryY": 8.971763053646516,
+        "ratioY": 8971763053.646515,
+        "ratio": 8971763053.646515
+      }
+    },
+    {
+      "name": "v_disint",
+      "originalSize": "216x195",
+      "scaledSize": "432x390",
+      "opaqueOriginal": 42096,
+      "opaqueScaled": 168384,
+      "saturationOriginal": 0.25920696578968677,
+      "saturationScaled": 0.28262897174411605,
+      "chromaOriginal": 14.274230330672747,
+      "chromaScaled": 14.822786012922842,
+      "cutoutOriginal": 24,
+      "cutoutScaled": 96,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 90,
+        "sourceBoundary": 38,
+        "sourceFringe": 7,
+        "fringe": 10,
+        "introduced": 0,
+        "maxFringeDistance": 0,
+        "maxDistance": 47,
+        "lumaMean": 100.28482222222216,
+        "sourceLumaMean": 100.03386842105265
+      },
+      "blockAll": {
+        "inside": 2.67933030626775,
+        "boundary": 5.3022039713772005,
+        "ratioX": 1.9789288237339642,
+        "insideY": 3.128991061253512,
+        "boundaryY": 5.961142933848543,
+        "ratioY": 1.9051326185190303,
+        "ratio": 1.9789288237339642
+      },
+      "blockBottom": {
+        "inside": 3.097569147673336,
+        "boundary": 5.994862790697685,
+        "ratioX": 1.9353442989967087,
+        "insideY": 2.8219829653371535,
+        "boundaryY": 5.464768849206353,
+        "ratioY": 1.9364995878185447,
+        "ratio": 1.9364995878185447
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 6.610684436493564,
+        "ratioX": 6610684436.493564,
+        "insideY": 0,
+        "boundaryY": 7.514563311378285,
+        "ratioY": 7514563311.378284,
+        "ratio": 7514563311.378284
+      }
+    },
+    {
+      "name": "v_flareg",
+      "originalSize": "312x169",
+      "scaledSize": "624x338",
+      "opaqueOriginal": 52696,
+      "opaqueScaled": 210784,
+      "saturationOriginal": 0.46473843954537236,
+      "saturationScaled": 0.4702374183218222,
+      "chromaOriginal": 22.787706846819493,
+      "chromaScaled": 23.290899688780932,
+      "cutoutOriginal": 32,
+      "cutoutScaled": 128,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 54,
+        "sourceBoundary": 24,
+        "sourceFringe": 11,
+        "fringe": 31,
+        "introduced": 0,
+        "maxFringeDistance": 44,
+        "maxDistance": 44,
+        "lumaMean": 91.07279629629632,
+        "sourceLumaMean": 88.87083333333332
+      },
+      "blockAll": {
+        "inside": 3.424288423607819,
+        "boundary": 6.638485892045056,
+        "ratioX": 1.9386468284265521,
+        "insideY": 4.112568369746315,
+        "boundaryY": 7.467368971306432,
+        "ratioY": 1.8157434235596817,
+        "ratio": 1.9386468284265521
+      },
+      "blockBottom": {
+        "inside": 4.267407192684541,
+        "boundary": 7.6977234253830735,
+        "ratioX": 1.803840851789114,
+        "insideY": 4.247370569381372,
+        "boundaryY": 7.398205941446235,
+        "ratioY": 1.7418319924281482,
+        "ratio": 1.803840851789114
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 8.374662417473466,
+        "ratioX": 8374662417.473466,
+        "insideY": 0,
+        "boundaryY": 9.836601457570344,
+        "ratioY": 9836601457.570343,
+        "ratio": 9836601457.570343
+      }
+    },
+    {
+      "name": "v_handgr",
+      "originalSize": "308x195",
+      "scaledSize": "616x390",
+      "opaqueOriginal": 60055,
+      "opaqueScaled": 240220,
+      "saturationOriginal": 0.4009953313646831,
+      "saturationScaled": 0.4136442848669522,
+      "chromaOriginal": 32.73562567646324,
+      "chromaScaled": 33.3996086920323,
+      "cutoutOriginal": 5,
+      "cutoutScaled": 20,
+      "cutoutRatio": 4,
+      "cutoutMismatch": 0,
+      "edge": {
+        "boundary": 32,
+        "sourceBoundary": 16,
+        "sourceFringe": 1,
+        "fringe": 4,
+        "introduced": 0,
+        "maxFringeDistance": 23,
+        "maxDistance": 100,
+        "lumaMean": 113.01046875000003,
+        "sourceLumaMean": 101.93625000000002
+      },
+      "blockAll": {
+        "inside": 4.050676615050629,
+        "boundary": 7.765716036080664,
+        "ratioX": 1.9171404617259482,
+        "insideY": 3.367004770229247,
+        "boundaryY": 6.533099846029971,
+        "ratioY": 1.940329845622748,
+        "ratio": 1.940329845622748
+      },
+      "blockBottom": {
+        "inside": 4.1896895604395095,
+        "boundary": 8.311883237283682,
+        "ratioX": 1.9838900036335256,
+        "insideY": 3.7763728771228804,
+        "boundaryY": 7.417759698093957,
+        "ratioY": 1.964255103893595,
+        "ratio": 1.9838900036335256
+      },
+      "blockControl": {
+        "inside": 0,
+        "boundary": 9.857793669088323,
+        "ratioX": 9857793669.088324,
+        "insideY": 0,
+        "boundaryY": 8.033484803855808,
+        "ratioY": 8033484803.855807,
+        "ratio": 9857793669.088324
+      }
+    }
+  ],
+  "commands": [
+    {
+      "label": "tex-check",
+      "command": "node scripts/tex-check.mjs --only models/",
+      "status": 0
+    },
+    {
+      "label": "texture-pack",
+      "command": "node scripts/texture-pack.mjs --dry-run --only models/",
+      "status": 0
+    },
+    {
+      "label": "texture-audit",
+      "command": "node scripts/texture-audit.mjs --select",
+      "status": 0
+    }
+  ]
+}

@@ -2,32 +2,265 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1">
+<meta name="viewport" content="width=device-width,height=device-height,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <meta name="color-scheme" content="dark">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quake 2</title>
-<link rel="icon" href="favicon.png">
-<link rel="stylesheet" href="style.css?v=rtx2">
+<link rel="icon" href="favicon.png?v=icon1">
+<link rel="stylesheet" href="style.css?v=touch5">
 </head>
 <body>
+<!-- Boot: a dark plate with the mark and one thin progress rule. -->
 <div id="loading" role="status" aria-live="polite">
+  <div class="boot-mark"><span>QUAKE</span><b>II</b></div>
+  <div class="boot-rule"><div id="progress" hidden><div id="progress-bar"></div></div></div>
   <div id="status">Loading…</div>
-  <div id="progress" hidden><div id="progress-bar"></div></div>
   <div id="detail"></div>
 </div>
+
 <canvas id="canvas" tabindex="-1" aria-label="Quake 2"></canvas>
-<details id="render-settings">
-  <summary>Lighting</summary>
-  <label class="render-switch"><span>RTX-style</span><input id="rtx-toggle" type="checkbox" checked aria-label="RTX-style lighting On or Off"></label>
-  <label>Quality <select id="rtx-quality"><option value="performance">Performance</option><option value="high">High</option></select></label>
-  <small id="rtx-status">Raster lighting · no ray tracing</small>
-  <small>Esc releases the mouse. Off restores original lighting. Original art: console <code>r_retexturing 0; vid_restart</code>.</small>
-</details>
+
+<!-- Touch controls (mobile-controls.js). Inert and hidden on a desktop: the
+     layer is only shown when the device has a coarse pointer (or the first real
+     touch arrives), and everything below it feeds the engine's existing input
+     path. The right-hand area is transparent to touches, so the engine's own
+     touch look receives the drag; the buttons are the only opaque parts.
+     Every target is at least 44 px, and the pad stops clear of the engine's
+     status-bar band. -->
+<div id="mobile-controls" hidden>
+  <div id="mc-look" aria-hidden="true"></div>
+  <div id="mc-stick" role="group" aria-label="Movement thumbstick">
+    <div id="mc-stick-knob" aria-hidden="true"></div>
+  </div>
+  <div id="mc-actions" role="group" aria-label="Game actions">
+    <button id="mc-fire" type="button" class="mc-btn mc-btn-fire" data-mc-action="fire" aria-label="Fire">
+      <span class="mc-ico" aria-hidden="true">&#9678;</span><span class="mc-lbl" aria-hidden="true">FIRE</span>
+    </button>
+    <button id="mc-jump" type="button" class="mc-btn" data-mc-action="jump" aria-label="Jump">
+      <span class="mc-ico" aria-hidden="true">&#8593;</span><span class="mc-lbl" aria-hidden="true">JUMP</span>
+    </button>
+    <button id="mc-use" type="button" class="mc-btn" data-mc-action="use" aria-label="Use or open">
+      <span class="mc-ico" aria-hidden="true">&#9707;</span><span class="mc-lbl" aria-hidden="true">USE</span>
+    </button>
+    <button id="mc-prev" type="button" class="mc-btn mc-btn-small" data-mc-action="prev" aria-label="Previous weapon">
+      <span class="mc-ico" aria-hidden="true">&#8249;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
+    </button>
+    <button id="mc-next" type="button" class="mc-btn mc-btn-small" data-mc-action="next" aria-label="Next weapon">
+      <span class="mc-ico" aria-hidden="true">&#8250;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
+    </button>
+  </div>
+  <button id="mc-pause" type="button" class="mc-btn mc-btn-small" data-mc-action="pause" aria-label="Pause and open the menu">
+    <span class="mc-ico" aria-hidden="true">&#9776;</span><span class="mc-lbl" aria-hidden="true">MENU</span>
+  </button>
+  <button id="mc-toggle" type="button" aria-pressed="true" aria-label="Hide touch controls"><span aria-hidden="true">PAD</span></button>
+  <div id="mc-hint" role="status" aria-live="polite" hidden>
+    <b>Left stick</b> moves &middot; <b>drag the right side</b> to look &middot; <b>FIRE</b> shoots &middot; <b>JUMP</b> &amp; <b>USE</b> beside it
+  </div>
+</div>
+
+<!-- Portrait guide (mobile-controls.js). The game is made for landscape. The
+     dimmed layer does not take pointer events, so in portrait the page and its
+     menus stay usable; the card hides while the menu is open. The button is the
+     user gesture Android Chrome needs for full screen + orientation lock. -->
+<div id="rotate-overlay" hidden>
+  <div class="rotate-card" role="status" aria-live="polite">
+    <div class="rotate-icon" aria-hidden="true">&#8635;</div>
+    <p class="rotate-title">Rotate your device</p>
+    <p class="rotate-text">Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls.</p>
+    <button id="rotate-action" type="button">Use landscape</button>
+    <p id="rotate-note" class="rotate-note">If the screen does not turn, use your device's rotation setting.</p>
+  </div>
+</div>
+
+<!-- Full screen on open (fullscreen.js): the control is the way back out, and
+     the hint points at the app's own window where the desktop blocks it. -->
+<button id="fullscreen-button" type="button" aria-pressed="false" aria-label="Enter full screen" title="Full screen">
+  <span class="fs-icon" aria-hidden="true">&#9974;</span><span class="fs-label">Full screen</span>
+</button>
+<div id="fullscreen-hint" hidden>
+  <p>Full screen is blocked inside the desktop window.</p>
+  <button id="fullscreen-open-window" type="button">Open in its own window</button>
+</div>
+
+<!-- The interface layer: near-black translucent panels, 1px rules and a muted
+     amber accent. It stops at the canvas's controls: the engine's own status
+     bar owns the canvas's bottom band, with nothing drawn over it. -->
+<div id="ui">
+  <!-- No settings control floats over the game: LIGHTING and OPTIONS both live
+       in the menu panel below, which the MENU control (touch) or Escape opens.
+       The play layer carries only the banner and the pointer-lock prompt. -->
+  <div id="banner" role="status" aria-live="polite" hidden><span id="banner-text"></span></div>
+  <div id="prompt" hidden><span>Click to capture the mouse</span></div>
+
+  <div id="menu-layer" hidden>
+    <div class="menu-scrim"></div>
+    <section id="menu" role="dialog" aria-modal="true" aria-labelledby="menu-title">
+      <header class="menu-head">
+        <h1 id="menu-title"><span class="mark-quake">Quake</span><span class="mark-two">II</span></h1>
+        <p class="menu-meta">BaseQ2 <i>·</i> single player</p>
+      </header>
+
+      <!-- The engine's main menu, entry for entry: GAME, MULTIPLAYER, OPTIONS,
+           VIDEO, QUIT. -->
+      <div class="menu-view" data-view="main">
+        <nav class="menu-list" aria-label="Main menu">
+          <button type="button" data-action="game"><span class="label">GAME</span><span class="hint">›</span></button>
+          <button type="button" data-action="multiplayer"><span class="label">MULTIPLAYER</span><span class="hint">›</span></button>
+          <button type="button" data-action="options"><span class="label">OPTIONS</span><span class="hint">›</span></button>
+          <button type="button" data-action="video"><span class="label">VIDEO</span><span class="hint">›</span></button>
+          <button type="button" data-action="quit"><span class="label">QUIT</span><span class="hint">›</span></button>
+        </nav>
+      </div>
+
+      <!-- GAME: the engine's own game menu, row for row: easy, medium, hard,
+           hard+, a separator, load game, save game, credits. The four skills
+           start a new game at that skill; save/load use the engine's own
+           quick-save keys because this page has no console-command channel. -->
+      <div class="menu-view" data-view="game" hidden>
+        <p class="view-title">GAME</p>
+        <nav class="menu-list" aria-label="Game">
+          <button type="button" data-action="newgame" data-skill="0"><span class="label">easy</span><span class="hint">new game</span></button>
+          <button type="button" data-action="newgame" data-skill="1"><span class="label">medium</span><span class="hint">new game</span></button>
+          <button type="button" data-action="newgame" data-skill="2"><span class="label">hard</span><span class="hint">new game</span></button>
+          <button type="button" data-action="newgame" data-skill="3"><span class="label">hard+</span><span class="hint">new game</span></button>
+          <div class="menu-gap" aria-hidden="true"></div>
+          <button type="button" data-action="loadgame"><span class="label">load game</span><span class="hint">F9</span></button>
+          <button type="button" data-action="savegame"><span class="label">save game</span><span class="hint">F6</span></button>
+          <button type="button" data-action="credits"><span class="label">credits</span><span class="hint">›</span></button>
+        </nav>
+        <p class="field-help">New Game starts demo1 at the chosen skill. The engine's load/save menus are slot lists this page cannot draw; F9 and F6 are the engine's own quick-load and quick-save keys.</p>
+      </div>
+
+      <!-- MULTIPLAYER: the engine's entries. This box runs the single-player
+           build, so the entries explain that rather than pretending. -->
+      <div class="menu-view" data-view="multiplayer" hidden>
+        <p class="view-title">MULTIPLAYER</p>
+        <nav class="menu-list" aria-label="Multiplayer">
+          <button type="button" data-action="note" data-note="join network server"><span class="label">join network server</span></button>
+          <button type="button" data-action="note" data-note="start network server"><span class="label">start network server</span></button>
+          <button type="button" data-action="note" data-note="player setup"><span class="label">player setup</span></button>
+          <button type="button" data-action="note" data-note="customize controls"><span class="label">customize controls</span></button>
+        </nav>
+        <p class="field-help">This box build is single player: its network menus are in the engine but networking is not part of this app.</p>
+      </div>
+
+      <!-- VIDEO: the engine's video menu, row for row. The engine's own
+           resolution row (`video mode`, r_mode) is the list from
+           VID_MenuInit: the 33 modenums it prints, then auto and custom. -->
+      <div class="menu-view" data-view="video" hidden>
+        <p class="view-title">VIDEO</p>
+        <nav class="menu-list menu-list-settings" aria-label="Video">
+          <button type="button" class="setting setting-info" data-action="note" data-note="renderer: this app runs the engine's OpenGL ES3 renderer (gles3); the engine's other backends are not part of this build" ><span class="label">renderer</span><span class="value" id="video-renderer">[OpenGL ES3]</span></button>
+          <button type="button" class="setting" data-cvar="r_mode" data-values="0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,32,19,20,21,22,23,24,25,26,27,28,29,30,31,-2,-1" data-labels="320x240,400x300,512x384,640x400,640x480,800x500,800x600,960x720,1024x480,1024x640,1024x768,1152x768,1152x864,1280x800,1280x720,1280x960,1280x1024,1366x768,1440x900,1600x900,1600x1200,1680x1050,1920x1080,1920x1200,2048x1536,2560x1080,2560x1440,2560x1600,3440x1440,3840x1600,3840x2160,4096x2160,5120x2880,auto,custom" data-default="17"><span class="label">video mode</span><span class="value">1366x768</span></button>
+          <button type="button" class="setting" data-cvar="vid_gamma" data-values="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0" data-default="1.6" data-suffix=""><span class="label">brightness</span><span class="value">1.6</span></button>
+          <button type="button" class="setting" data-cvar="fov" data-values="60,61,62,63,64,65,66,67,68,69,70,71,72,73,74,75,76,77,78,79,80,81,82,83,84,85,86,87,88,89,90" data-default="90" data-suffix=""><span class="label">field of view</span><span class="value">90</span></button>
+          <button type="button" class="setting" data-cvar="gl3_intensity" data-values="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0,3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,4.0,4.1,4.2,4.3,4.4,4.5,4.6,4.7,4.8,4.9,5.0" data-default="2.0" data-suffix=""><span class="label">color intensity</span><span class="value">2.0</span></button>
+          <button type="button" class="setting" data-cvar="gl3_overbrightbits" data-values="0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0,1.1,1.2,1.3,1.4,1.5,1.6,1.7,1.8,1.9,2.0,2.1,2.2,2.3,2.4,2.5,2.6,2.7,2.8,2.9,3.0,3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,4.0,4.1,4.2,4.3,4.4,4.5,4.6,4.7,4.8,4.9,5.0" data-default="1.3" data-suffix=""><span class="label">overbrights</span><span class="value">1.3</span></button>
+          <button type="button" class="setting" data-cvar="gl3_colorlight" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">color light</span><span class="value">yes</span></button>
+          <button type="button" class="setting setting-info" data-action="note" data-note="ui scale: this app keeps the engine's HUD at 1x because it reads the status bar's digits back out of the frame; the menu is drawn by the page at a fixed scale"><span class="label">ui scale</span><span class="value">1x (fixed)</span></button>
+          <button type="button" class="setting" data-cvar="vid_fullscreen" data-values="0,1,2" data-default="0" data-labels="no,native fullscreen,fullscreen window"><span class="label">fullscreen</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="r_vsync" data-values="0,1" data-default="0" data-labels="no,yes"><span class="label">vertical sync</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="r_anisotropic" data-values="0,2,4,8,16" data-default="0" data-labels="off,2x,4x,8x,16x"><span class="label">aniso filtering</span><span class="value">off</span></button>
+          <button type="button" class="setting" data-cvar="r_msaa_samples" data-values="0,2,4,8,16" data-default="0" data-labels="off,2x,4x,8x,16x"><span class="label">multisampling</span><span class="value">off</span></button>
+          <button type="button" class="setting" data-cvar="gl_texturemode" data-values="GL_NEAREST,GL_LINEAR_MIPMAP_NEAREST,GL_LINEAR_MIPMAP_LINEAR" data-default="GL_LINEAR_MIPMAP_LINEAR" data-labels="pixelated,standard,trilinear"><span class="label">texture filter</span><span class="value">trilinear</span></button>
+          <button type="button" data-action="reset-video"><span class="label">reset to default</span></button>
+          <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint">no changes</span></button>
+        </nav>
+        <!-- A page control, not an engine row: the engine's VIDEO list above is
+             exactly its own (the acceptance runner compares it row for row), so
+             game mode sits under it in its own list. -->
+        <div class="menu-page-list" role="group" aria-label="Page presentation">
+          <button type="button" class="setting" data-action="game-mode" aria-pressed="false"><span class="label">game mode</span><span class="value" id="game-mode-value">off</span></button>
+        </div>
+        <p class="field-help">video mode is the engine's own r_mode list (its 33 modes, then auto and custom); applying restarts the level at that mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). The engine's <i>custom</i> ui scale and the 91–120° field-of-view range are not offered; see docs/presentation-fixes.md.</p>
+        <p class="field-help"><b>game mode</b> (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop it allows the Window Management API it also blacks out each additional display. Esc leaves full screen and the mode. It is not the engine's own <i>fullscreen</i> row above, which the engine applies on its next start.</p>
+      </div>
+
+      <!-- OPTIONS: the engine's options menu, row for row. The engine applies
+           each row as it changes; this page has only its start-up line, so the
+           apply control sits under the list rather than inside it. -->
+      <div class="menu-view" data-view="options" hidden>
+        <p class="view-title">OPTIONS</p>
+        <nav class="menu-list menu-list-settings" aria-label="Options">
+          <button type="button" class="setting" data-cvar="s_volume" data-values="0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0" data-default="0.7" data-suffix=""><span class="label">effects volume</span><span class="value">0.7</span></button>
+          <button type="button" class="setting" data-cvar="ogg_volume" data-values="0.0,0.1,0.2,0.3,0.4,0.5,0.6,0.7,0.8,0.9,1.0" data-default="0.7" data-suffix=""><span class="label">OGG volume</span><span class="value">0.7</span></button>
+          <button type="button" class="setting" data-cvar="ogg_enable" data-values="0,1" data-default="0" data-labels="disabled,enabled"><span class="label">OGG music</span><span class="value">disabled</span></button>
+          <button type="button" class="setting" data-cvar="ogg_shuffle" data-values="0,1,2,3,4" data-default="0" data-labels="default,play once,sequential,random,truly random"><span class="label">OGG shuffle</span><span class="value">default</span></button>
+          <button type="button" class="setting setting-info" data-action="note" data-note="sound backend: the engine's s_openal cvar is not registered in this build; it runs the SDL backend"><span class="label">sound backend</span><span class="value">sdl</span></button>
+          <button type="button" class="setting" data-cvar="sensitivity" data-values="0,0.5,1,1.5,2,2.5,3,3.5,4,4.5,5,5.5,6,6.5,7,7.5,8,8.5,9,9.5,10,10.5,11" data-default="6" data-labels="0.0,0.5,1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0,6.5,7.0,7.5,8.0,8.5,9.0,9.5,10.0,10.5,11.0"><span class="label">mouse speed</span><span class="value">6.0</span></button>
+          <button type="button" class="setting" data-cvar="cl_run" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">always run</span><span class="value">yes</span></button>
+          <button type="button" class="setting" data-cvar="m_pitch" data-values="0.022,-0.022" data-default="0.022" data-labels="no,yes"><span class="label">invert mouse</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="lookstrafe" data-values="0,1" data-default="0" data-labels="no,yes"><span class="label">lookstrafe</span><span class="value">no</span></button>
+          <button type="button" class="setting" data-cvar="freelook" data-values="0,1" data-default="1" data-labels="no,yes"><span class="label">free look</span><span class="value">yes</span></button>
+          <button type="button" class="setting" data-cvar="crosshair" data-values="0,1,2,3" data-default="1" data-labels="none,cross,dot,angle"><span class="label">crosshair</span><span class="value">cross</span></button>
+          <button type="button" class="setting" data-cvar="vid_pauseonfocuslost" data-values="0,1,2" data-default="0" data-labels="yes,no,unpause on re-focus"><span class="label">pause on minimized</span><span class="value">yes</span></button>
+          <button type="button" data-action="note" data-note="customize controls: the engine's key-binding menu needs key input this page cannot type into"><span class="label">customize controls</span></button>
+          <button type="button" data-action="reset-options"><span class="label">reset defaults</span></button>
+          <button type="button" data-action="note" data-note="go to console: the app has no console text input"><span class="label">go to console</span><span class="hint">hidden in this app</span></button>
+        </nav>
+        <!-- A page control, not an engine row: the engine has no lighting
+             setting of its own. It sat as a floating chip over the game (the
+             reference image's "move to settings menu"); it lives here now, in
+             the settings panel the MENU control opens. rtx-renderer.js finds
+             these buttons by [data-lighting] and persists the choice itself. -->
+        <div class="menu-lighting" role="group" aria-label="Lighting">
+          <p class="view-title">LIGHTING</p>
+          <div class="segmented" role="group" aria-label="Lighting mode">
+            <button type="button" data-lighting="off">Off</button>
+            <button type="button" data-lighting="performance">Performance</button>
+            <button type="button" data-lighting="high">High</button>
+          </div>
+          <small id="rtx-status">Raster lighting · no ray tracing</small>
+          <small>Off returns every light to the engine's original shading. The choice is kept for the next visit.</small>
+        </div>
+        <div class="menu-apply">
+          <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint-options">no changes</span></button>
+        </div>
+        <p class="field-help">Applying restarts the level with the new values; the engine reads them from its own start-up line, not from a visible console. The engine's own menu applies each row immediately; this page needs the apply control because it has only the start-up line. The gamepad row is absent because no gamepad is connected (the engine hides it too).</p>
+      </div>
+
+      <div class="menu-view" data-view="credits" hidden>
+        <p class="view-title">CREDITS</p>
+        <div class="credits">
+          <p><b>Quake II</b> &middot; id Software, 1997</p>
+          <p>Programming: John Carmack, Michael Abrash, John Cash</p>
+          <p>Design: Tim Willits, John Romero, Sandy Petersen</p>
+          <p>Art: Adrian Carmack, Kevin Cloud, Paul Steed</p>
+          <p>Music: Sonic Mayhem &middot; Sound: Nine Inch Nails</p>
+          <p>Engine: Yamagi Quake II (Qwasm2 WebAssembly build)</p>
+        </div>
+      </div>
+
+      <!-- The answer to a note row (and to an Apply with nothing to apply) is
+           written here, inside the panel: the banner that used to carry it is
+           painted under the panel's scrim in this browser, so nine clickable
+           rows appeared to do nothing. -->
+      <p id="menu-note" class="field-help" role="status" aria-live="polite" hidden></p>
+
+      <footer class="menu-foot">
+        <span>↑ ↓ select</span><span>Enter open</span><span>Esc back</span>
+        <span class="foot-back">
+          <button type="button" data-action="resume">Resume</button>
+          <button type="button" data-action="back">Back</button>
+        </span>
+      </footer>
+    </section>
+  </div>
+</div>
+
 <!-- Live engine state, read out of the WASM memory. Loaded first and inert at
      load time: it only defines window.quake2Engine, and it reads nothing until
      the engine's own loader has created the memory. See engine-state.js. -->
-<script src="engine-state.js"></script>
-<script src="rtx-materials.js?v=rtx2"></script>
-<script src="rtx-renderer.js?v=rtx2"></script>
-<script src="app.js?v=rtx2"></script>
+<script src="engine-state.js?v=rtx7"></script>
+<script src="rtx-materials.js?v=rtx6"></script>
+<script src="rtx-renderer.js?v=rtx9"></script>
+<script src="app.js?v=rtx10"></script>
+<script src="fullscreen.js?v=rtx7"></script>
+<script src="game-mode.js?v=rtx8"></script>
+<!-- After app.js: it installs the touch-only engine bindings on the Module that
+     app.js defines, before the engine's loader runs. -->
+<script src="mobile-controls.js?v=touch4"></script>
 </body>
 </html>

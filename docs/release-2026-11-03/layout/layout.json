@@ -1,0 +1,164 @@
+{
+  "at": "2026-11-03T22:23:07.785Z",
+  "base": "http://127.0.0.1:4391",
+  "chrome": "http://127.0.0.1:9331",
+  "checks": [
+    {
+      "name": "844x390: top row carries PAD, MENU, Full screen at >= 44 px, all inside the viewport",
+      "ok": true,
+      "detail": [
+        {
+          "id": "#mc-toggle",
+          "left": 10,
+          "right": 62,
+          "top": 8,
+          "bottom": 52,
+          "w": 52,
+          "h": 44,
+          "display": "flex"
+        },
+        {
+          "id": "#mc-pause",
+          "left": 70,
+          "right": 116,
+          "top": 8,
+          "bottom": 52,
+          "w": 46,
+          "h": 44,
+          "display": "flex"
+        },
+        {
+          "id": "#fullscreen-button",
+          "left": 125,
+          "right": 231.15625,
+          "top": 8,
+          "bottom": 52,
+          "w": 106.15625,
+          "h": 44,
+          "display": "flex"
+        }
+      ]
+    },
+    {
+      "name": "844x390: the three top-row buttons do not collide",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "844x390: the top row does not collide with the weapon pair, FIRE, the stick or the hint",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "844x390: no horizontal overflow",
+      "ok": true,
+      "detail": {
+        "scroll": {
+          "w": 844,
+          "h": 390
+        },
+        "inner": {
+          "w": 844,
+          "h": 390
+        },
+        "scrollX": 0,
+        "scrollY": 0
+      }
+    },
+    {
+      "name": "932x430: top row carries PAD, MENU, Full screen at >= 44 px, all inside the viewport",
+      "ok": true,
+      "detail": [
+        {
+          "id": "#mc-toggle",
+          "left": 10,
+          "right": 62,
+          "top": 8,
+          "bottom": 52,
+          "w": 52,
+          "h": 44,
+          "display": "flex"
+        },
+        {
+          "id": "#mc-pause",
+          "left": 70,
+          "right": 116,
+          "top": 8,
+          "bottom": 52,
+          "w": 46,
+          "h": 44,
+          "display": "flex"
+        },
+        {
+          "id": "#fullscreen-button",
+          "left": 125,
+          "right": 231.15625,
+          "top": 8,
+          "bottom": 52,
+          "w": 106.15625,
+          "h": 44,
+          "display": "flex"
+        }
+      ]
+    },
+    {
+      "name": "932x430: the three top-row buttons do not collide",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "932x430: the top row does not collide with the weapon pair, FIRE, the stick or the hint",
+      "ok": true,
+      "detail": []
+    },
+    {
+      "name": "932x430: no horizontal overflow",
+      "ok": true,
+      "detail": {
+        "scroll": {
+          "w": 932,
+          "h": 430
+        },
+        "inner": {
+          "w": 932,
+          "h": 430
+        },
+        "scrollX": 0,
+        "scrollY": 0
+      }
+    },
+    {
+      "name": "1280x720: #menu is 392 px wide",
+      "ok": true,
+      "detail": "392px"
+    },
+    {
+      "name": "1280x720: the menu heading is 26 px",
+      "ok": true,
+      "detail": "26px"
+    },
+    {
+      "name": "1280x720: no settings chip outside the menu; LIGHTING lives inside it",
+      "ok": true,
+      "detail": {
+        "chips": [],
+        "lightingButtons": 3
+      }
+    },
+    {
+      "name": "1280x720: no horizontal overflow",
+      "ok": true,
+      "detail": {
+        "scroll": {
+          "w": 1280,
+          "h": 720
+        },
+        "inner": {
+          "w": 1280,
+          "h": 720
+        }
+      }
+    }
+  ],
+  "pass": true
+}

@@ -46,6 +46,7 @@ import {
   TextureError,
   decodePcx,
   decodePng,
+  encodePcx8,
   formatBytes,
   paletteForEntry,
   paletteMapper,
@@ -70,6 +71,9 @@ const USAGE = `model-art.mjs -- the model, weapon, item and monster skin pipelin
   --build                resize every generated picture onto its entry's size
   --fallback             for entries with no generated picture, refresh the original pixels
   --engine-check         pack-simulate the built art through its entry's palette
+  --upscale-2x           resample every first-person weapon skin (v_*) to exactly
+                         2x with Lanczos-3 + unsharp, preserving palette and
+                         cut-out; --out <dir> writes the 2x PCX files there
   --preview --out <png>  write a contact sheet of what the engine will show
   --notes                write ${path.relative(PROJECT_ROOT, NOTES_FILE)}
   --only <text>          just entries whose name contains <text> (repeatable)
@@ -391,6 +395,248 @@ export function encodePngRgb(width, height, rgb) {
     pngChunk("IDAT", zlib.deflateSync(raw, { level: 9 })),
     pngChunk("IEND", Buffer.alloc(0)),
   ]);
+}
+
+// ---------------------------------------------------------------------------
+// The 2x skin route: a deterministic Lanczos-3 resample of one PCX skin
+//
+// A view weapon's skin is drawn straight from its own pixels, so the only way to
+// give the engine more texels is to hand it a bigger PCX. This resample does
+// that without touching the picture's identity:
+//
+//   * the palette is the one already at the end of the original PCX, byte for
+//     byte -- a skin's colours are part of the level's look, not a new choice;
+//   * the cut-out mask is replicated exactly 2x2 from the source, so every
+//     transparent pixel the artist drew becomes four and no interpolated colour
+//     is allowed to leak into the silhouette;
+//   * colour is filtered premultiplied by that mask, so a texel next to the
+//     cut-out is pulled from painted metal instead of from the (usually black)
+//     transparent key, which is what would otherwise fringe every edge;
+//   * a 3x3 unsharp mask restores the contrast the interpolation averages away,
+//     and a small chroma gain keeps the palette's colour alive through the
+//     nearest-colour snap (interpolation invents in-between colours, and a
+//     nearest-colour snap without this reads duller than the original).
+//
+// Everything is integer-free node code, seeded by nothing: the same archive
+// bytes always produce the same encoded PCX.
+// ---------------------------------------------------------------------------
+
+export const SKIN_UPSCALE = 2;
+const LANCZOS_A = 3;
+
+function lanczosWeight(distance) {
+  const x = Math.abs(distance);
+  if (x < 1e-9) return 1;
+  if (x >= LANCZOS_A) return 0;
+  const px = Math.PI * x;
+  return (Math.sin(px) / px) * (Math.sin(px / LANCZOS_A) / (px / LANCZOS_A));
+}
+
+// One axis of the separable resample: the normalised Lanczos taps for every
+// output sample. Samples outside the source are clamped to its edge pixels,
+// which is the usual treatment and keeps a border from fading to black.
+function lanczosTaps(sourceLength, targetLength) {
+  const scale = targetLength / sourceLength;
+  const taps = [];
+  for (let target = 0; target < targetLength; target++) {
+    const centre = (target + 0.5) / scale - 0.5;
+    const first = Math.ceil(centre - LANCZOS_A);
+    const last = Math.floor(centre + LANCZOS_A);
+    let total = 0;
+    const pair = [];
+    for (let source = first; source <= last; source++) {
+      const weight = lanczosWeight(centre - source);
+      if (weight === 0) continue;
+      pair.push([Math.max(0, Math.min(sourceLength - 1, source)), weight]);
+      total += weight;
+    }
+    for (const tap of pair) tap[1] /= total;
+    taps.push(pair);
+  }
+  return taps;
+}
+
+// Resample every plane (same width/height) horizontally then vertically.
+function resamplePlanes(planes, sourceWidth, sourceHeight, targetWidth, targetHeight) {
+  const horizontalTaps = lanczosTaps(sourceWidth, targetWidth);
+  const verticalTaps = lanczosTaps(sourceHeight, targetHeight);
+  const horizontal = planes.map(() => new Float32Array(targetWidth * sourceHeight));
+  for (let p = 0; p < planes.length; p++) {
+    const source = planes[p];
+    const out = horizontal[p];
+    for (let y = 0; y < sourceHeight; y++) {
+      for (let x = 0; x < targetWidth; x++) {
+        let sum = 0;
+        for (const [sx, weight] of horizontalTaps[x]) sum += source[y * sourceWidth + sx] * weight;
+        out[y * targetWidth + x] = sum;
+      }
+    }
+  }
+  const result = planes.map(() => new Float32Array(targetWidth * targetHeight));
+  for (let p = 0; p < planes.length; p++) {
+    const source = horizontal[p];
+    const out = result[p];
+    for (let y = 0; y < targetHeight; y++) {
+      const row = y * targetWidth;
+      for (let x = 0; x < targetWidth; x++) {
+        let sum = 0;
+        for (const [sy, weight] of verticalTaps[y]) sum += source[sy * targetWidth + x] * weight;
+        out[row + x] = sum;
+      }
+    }
+  }
+  return result;
+}
+
+// A 3x3 binomial blur of one RGB plane, used by the unsharp pass.
+function blurPlane(plane, width, height) {
+  const out = new Float32Array(plane.length);
+  const at = (x, y) => plane[Math.max(0, Math.min(height - 1, y)) * width + Math.max(0, Math.min(width - 1, x))];
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      out[y * width + x] = (
+        at(x - 1, y - 1) + 2 * at(x, y - 1) + at(x + 1, y - 1) +
+        2 * at(x - 1, y) + 4 * at(x, y) + 2 * at(x + 1, y) +
+        at(x - 1, y + 1) + 2 * at(x, y + 1) + at(x + 1, y + 1)
+      ) / 16;
+    }
+  }
+  return out;
+}
+
+// Mean HSV-style saturation of a skin's opaque pixels: (max-min)/max, over
+// index 255's transparent pixels excluded. Reported by the checks so "the art
+// keeps its colour" is a number.
+export function meanSaturation(indices, palette768) {
+  let sum = 0;
+  let count = 0;
+  for (let pixel = 0; pixel < indices.length; pixel++) {
+    const index = indices[pixel];
+    if (index === TRANSPARENT_INDEX) continue;
+    const r = palette768[index * 3];
+    const g = palette768[index * 3 + 1];
+    const b = palette768[index * 3 + 2];
+    const high = Math.max(r, g, b);
+    if (!high) { count++; continue; }
+    sum += (high - Math.min(r, g, b)) / high;
+    count++;
+  }
+  return count ? sum / count : 0;
+}
+
+export function countCutout(indices) {
+  let count = 0;
+  for (const index of indices) if (index === TRANSPARENT_INDEX) count++;
+  return count;
+}
+
+// The whole route for one 8-bit PCX skin. Returns the encoded 2x PCX and the
+// numbers the caller reports; nothing is written here.
+export function upscaleSkin2x(pcxBytes, options = {}) {
+  const scale = options.scale ?? SKIN_UPSCALE;
+  if (scale !== 2) throw new TextureError("the skin route is exactly 2x (got " + scale + "x)", "BAD_ARGUMENT");
+  const sharpen = options.sharpen ?? 0.55;
+  const chromaGain = options.chromaGain ?? 1.08;
+  const source = decodePcx(pcxBytes);
+  const { width, height, indices, palette } = source;
+  const targetWidth = width * scale;
+  const targetHeight = height * scale;
+  const sourcePixels = width * height;
+  const targetPixels = targetWidth * targetHeight;
+
+  // Premultiplied colour planes: a cut-out texel contributes no colour, so the
+  // filter interpolates painted pixels across the hole instead of pulling the
+  // key colour into the visible edge.
+  const red = new Float32Array(sourcePixels);
+  const green = new Float32Array(sourcePixels);
+  const blue = new Float32Array(sourcePixels);
+  const alpha = new Float32Array(sourcePixels);
+  for (let pixel = 0; pixel < sourcePixels; pixel++) {
+    if (indices[pixel] === TRANSPARENT_INDEX) continue;
+    const index = indices[pixel];
+    red[pixel] = palette[index * 3];
+    green[pixel] = palette[index * 3 + 1];
+    blue[pixel] = palette[index * 3 + 2];
+    alpha[pixel] = 1;
+  }
+  const premultiplied = [red.map((value, pixel) => value * alpha[pixel]),
+    green.map((value, pixel) => value * alpha[pixel]),
+    blue.map((value, pixel) => value * alpha[pixel]), alpha];
+  const [filteredRed, filteredGreen, filteredBlue, filteredAlpha] =
+    resamplePlanes(premultiplied, width, height, targetWidth, targetHeight);
+
+  const rgb = new Float32Array(targetPixels * 3);
+  for (let pixel = 0; pixel < targetPixels; pixel++) {
+    const coverage = filteredAlpha[pixel];
+    if (coverage > 1e-4) {
+      rgb[pixel * 3] = filteredRed[pixel] / coverage;
+      rgb[pixel * 3 + 1] = filteredGreen[pixel] / coverage;
+      rgb[pixel * 3 + 2] = filteredBlue[pixel] / coverage;
+    }
+  }
+
+  // Unsharp, then a small chroma gain about the luma the palette already has.
+  const blurred = [0, 1, 2].map((channel) => {
+    const plane = new Float32Array(targetPixels);
+    for (let pixel = 0; pixel < targetPixels; pixel++) plane[pixel] = rgb[pixel * 3 + channel];
+    return blurPlane(plane, targetWidth, targetHeight);
+  });
+  for (let pixel = 0; pixel < targetPixels; pixel++) {
+    let r = rgb[pixel * 3] + sharpen * (rgb[pixel * 3] - blurred[0][pixel]);
+    let g = rgb[pixel * 3 + 1] + sharpen * (rgb[pixel * 3 + 1] - blurred[1][pixel]);
+    let b = rgb[pixel * 3 + 2] + sharpen * (rgb[pixel * 3 + 2] - blurred[2][pixel]);
+    const luma = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+    r = luma + (r - luma) * chromaGain;
+    g = luma + (g - luma) * chromaGain;
+    b = luma + (b - luma) * chromaGain;
+    rgb[pixel * 3] = Math.max(0, Math.min(255, r));
+    rgb[pixel * 3 + 1] = Math.max(0, Math.min(255, g));
+    rgb[pixel * 3 + 2] = Math.max(0, Math.min(255, b));
+  }
+
+  // Snap onto the entry's own palette. Index 255 is excluded from the choices:
+  // only the original's cut-out may be transparent, and an opaque texel whose
+  // nearest colour happens to be the key must not become a new hole.
+  const map = paletteMapper(palette, { exclude: [TRANSPARENT_INDEX] });
+  const upscaled = Buffer.alloc(targetPixels);
+  let opaque = 0;
+  for (let y = 0; y < targetHeight; y++) {
+    const sourceY = Math.floor(y / scale);
+    for (let x = 0; x < targetWidth; x++) {
+      const sourceX = Math.floor(x / scale);
+      const target = y * targetWidth + x;
+      // The silhouette is nearest-replicated: exactly scale^2 output pixels for
+      // every source pixel, so the cut-out is preserved as a shape and as a
+      // count, not approximated by a threshold.
+      if (indices[sourceY * width + sourceX] === TRANSPARENT_INDEX) {
+        upscaled[target] = TRANSPARENT_INDEX;
+        continue;
+      }
+      upscaled[target] = map(rgb[target * 3], rgb[target * 3 + 1], rgb[target * 3 + 2]);
+      opaque++;
+    }
+  }
+
+  const bytes = encodePcx8(targetWidth, targetHeight, upscaled, palette, { header: source.header });
+  return {
+    bytes,
+    width: targetWidth,
+    height: targetHeight,
+    indices: upscaled,
+    palette,
+    source: { width, height, indices, palette },
+    stats: {
+      sourceWidth: width,
+      sourceHeight: height,
+      sourceSaturation: meanSaturation(indices, palette),
+      saturation: meanSaturation(upscaled, palette),
+      sourceCutout: countCutout(indices),
+      cutout: countCutout(upscaled),
+      opaque,
+      sourceBytes: pcxBytes.length,
+      bytes: bytes.length,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -870,9 +1116,10 @@ function parseArguments(argv) {
     if (argument === "--help" || argument === "-h") options.help = true;
     else if (argument === "--no-palettise") options.palettise = false;
     else if (argument === "--quiet") options.quiet = true;
+    else if (argument === "--upscale-2x") options.mode = "upscale2x";
     else if (argument.startsWith("--") && !takesValue.has(argument.split("=")[0])) {
       const flag = argument.slice(2).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-      if (!["list", "prompts", "build", "fallback", "engineCheck", "preview", "notes"].includes(flag)) throw new TextureError("unknown option " + argument + "\n\n" + USAGE, "BAD_ARGUMENT");
+      if (!["list", "prompts", "build", "fallback", "engineCheck", "upscale2x", "preview", "notes"].includes(flag)) throw new TextureError("unknown option " + argument + "\n\n" + USAGE, "BAD_ARGUMENT");
       options.mode = flag;
     } else {
       const split = argument.indexOf("=");
@@ -1147,6 +1394,43 @@ function main(argv) {
     for (const problem of problems) process.stderr.write("FAIL " + problem + "\n");
     process.stdout.write("pack-simulated " + ok + " entr(y|ies), " + problems.length + " problem(s)\n");
     return problems.length ? 1 : 0;
+  }
+
+  // The opt-in scale route. It is deliberately separate from --build and from
+  // texture-pack's exact-size gate: the default packer still takes only an
+  // entry's own size, and 2x skins reach the engine only through the archive
+  // model-geometry.mjs builds, which declares the doubled size in the MD2 too.
+  if (options.mode === "upscale2x") {
+    const weapons = work.filter((item) => /^models\/weapons\/v_[a-z0-9]+\/(skin|base)\.pcx$/.test(item.entry.name));
+    if (!weapons.length) throw new TextureError("--upscale-2x found no view weapon skin in this selection", "NO_ENTRY");
+    const outDir = options.out && !/\.png$/i.test(options.out) ? options.out : null;
+    if (outDir) fs.mkdirSync(outDir, { recursive: true });
+    let wrote = 0;
+    let bytes = 0;
+    for (const item of weapons) {
+      const original = readPakFile(options.pak, item.entry.name);
+      if (!original) throw new TextureError("the archive has no entry " + item.entry.name, "NO_ENTRY");
+      const upscaled = upscaleSkin2x(original);
+      if (outDir) {
+        const file = path.join(outDir, item.entry.name.replace(/\//g, "_") + ".pcx");
+        fs.writeFileSync(file, upscaled.bytes);
+        wrote++;
+      }
+      bytes += upscaled.bytes.length;
+      const s = upscaled.stats;
+      process.stdout.write(
+        "2x  " + item.entry.name.padEnd(46) + " " + s.sourceWidth + "x" + s.sourceHeight +
+          " -> " + upscaled.width + "x" + upscaled.height + "  " + formatBytes(upscaled.bytes.length) +
+          "  saturation " + s.sourceSaturation.toFixed(3) + " -> " + s.saturation.toFixed(3) +
+          "  cutout " + s.sourceCutout + " -> " + s.cutout +
+          " (" + (s.sourceCutout ? (s.cutout / s.sourceCutout).toFixed(2) : "-") + "x)\n"
+      );
+    }
+    process.stdout.write(
+      "2x skins: " + weapons.length + ", " + formatBytes(bytes) + " of PCX" +
+        (outDir ? ", wrote " + wrote + " to " + rel(outDir) : " (no --out: nothing written)") + "\n"
+    );
+    return 0;
   }
 
   if (options.mode === "preview") {
@@ -1453,9 +1737,15 @@ function notesText(manifest, work, options) {
   return lines.join("\n");
 }
 
-try {
-  process.exitCode = main(process.argv.slice(2));
-} catch (error) {
-  process.stderr.write((error instanceof TextureError ? error.message : error && error.stack ? error.stack : String(error)) + "\n");
-  process.exitCode = 2;
+// Only run the CLI when this file is the program. model-geometry.mjs imports
+// upscaleSkin2x from here, and an unconditional main() would parse that script's
+// arguments as its own (it printed the usage and skipped the build).
+const invokedDirectly = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  try {
+    process.exitCode = main(process.argv.slice(2));
+  } catch (error) {
+    process.stderr.write((error instanceof TextureError ? error.message : error && error.stack ? error.stack : String(error)) + "\n");
+    process.exitCode = 2;
+  }
 }

@@ -15,16 +15,16 @@ engine files in `engine/` were copied from the project's public site
 
 | Path | What |
 |---|---|
-| `index.html`, `style.css`, `app.js` | The page: a full-viewport canvas that boots the engine immediately |
+| `index.html`, `style.css`, `app.js` | The page: a full-viewport canvas that boots the engine immediately, plus the dark interface layer (boot plate, menu/pause/options, HUD band, banners) described in [Interface](#interface) |
 | `engine-state.js` | Loaded by `index.html` before `app.js`. Defines `window.quake2Engine`, which reads the player's position, view angles and `cls.key_dest` straight out of the WASM linear memory, plus the frame-loop console watch. No console, no input, no pause. See [Reading the game's state](#reading-the-games-state) |
 | `engine/` | `index.js` (Emscripten loader), `index.wasm`, `index.data`, `game_baseq2.wasm`, `ref_gles3.wasm`, `ref_gl1.wasm`, `ref_soft.wasm`, `license.txt` |
-| `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot |
+| `baseq2/` | PAK files served as static files and copied into the engine's MemFS at boot. `pak0.pak` is the game; `pak10.pak` is the rebuilt models (see [Models](#models)) and overrides `pak0`'s MD2 entries |
 | `server.js` | Zero-dependency Node static server, 127.0.0.1:4231 (`PORT`), serves `/` and `/apps/quake2/`, and keeps saved games under `/userdata/` (see [Saved games](#saved-games)) |
 | `userdata/` | Created at runtime (git-ignored): the game's saves and `config.cfg`, as the engine laid them out (`baseq2/save/save1/…`). Set `QUAKE2_DATA_DIR` to keep them elsewhere |
 | `control/` | `bridge.mjs` (drives the running game over CDP: navigation *and* the fire button), `route.mjs` (reads a level's own BSP for its exit, waypoints and walkable floor plan, brush entities included), `walker.mjs` (follows a route through a live level, opening doors and re-planning when stuck), `combat.mjs` (the same walker, shooting back at the level's own monsters) and `server.mjs` (an HTTP front door to the bridge on 127.0.0.1:4233), see [Control interface](#control-interface) |
 | `mcp/` | `server.mjs`: a zero-dependency MCP stdio server exposing the bridge as seven tools, see [The MCP server](#the-mcp-server) |
 | `deploy/` | `quake2-control.service`: the systemd **user** unit that keeps the control API (4233) up without a manual step, see [Keeping the HTTP API up](#keeping-the-http-api-up) |
-| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), `tex-lib-test.mjs` (the checker's own rules) and `texture-pack-test.mjs` (what the packer refuses) and `map-art-test.mjs` (which surfaces the map art draws), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests). Also the texture art: `texture-lib.mjs` (the shared PAK/WAL/PCX/SP2 contract), `texture-pack.mjs` (art into the archive), `tex-check.mjs` (art against the manifest), and the tools that draw it, `map-art.mjs`, `model-art.mjs` and `hud-art.mjs`, see [Texture art](#texture-art) |
+| `scripts/` | `test-userdata.js` (the `/userdata` save store), `e2e-saves.js` (the real game in headless Chromium), `quake-control-test.sh` (the live game over CDP), `control-api-test.mjs` (every control route), `goto-test.mjs` (navigation, against the live game), `route-test.mjs` (the route planner, off the archive), `demo1-run.mjs` (play demo1 and prove it) and `mcp-smoke-test.mjs` (the MCP handshake), `tex-lib-test.mjs` (the checker's own rules) and `texture-pack-test.mjs` (what the packer refuses) and `map-art-test.mjs` (which surfaces the map art draws), plus `control-server.sh` (run the API in the foreground), see [Tests](#tests). Also the texture art: `texture-lib.mjs` (the shared PAK/WAL/PCX/SP2 contract), `texture-pack.mjs` (art into the archive), `tex-check.mjs` (art against the manifest), and the tools that draw it, `map-art.mjs`, `model-art.mjs` and `hud-art.mjs`, see [Texture art](#texture-art). The models: `model-geometry.mjs` (the procedural MD2 rebuild into `pak10.pak`), see [Models](#models) |
 | `clawbox.json` | ClawBox app manifest |
 | `reference/` | The original Qwasm2 `index.html` + `getgame.js`, for how the `Module` object is wired |
 
@@ -61,6 +61,121 @@ PORT=4299 QUAKE2_DATA_DIR=/srv/quake2-saves node server.js
 The box serves it at `/apps/quake2/`. The startup line names the port and the
 save folder: `Quake 2 static server on http://127.0.0.1:4231/ (also
 /apps/quake2/), saves in /…/userdata`.
+
+## Interface
+
+The game boots straight into the engine as before; the interface around it is
+one dark layer in `index.html` / `style.css` / `app.js`:
+
+- **Boot plate** — the `QUAKE II` mark, one hairline progress rule, the current
+  step and the byte count. Nothing else.
+- **Menu, pause and options** — one near-black translucent panel with a 1px
+  rule and a muted amber accent: Resume, New Game (the three missions), Options
+  (lighting Off/Performance/High, live) and Controls. Escape still asks the
+  engine for its own menu — that is what pauses the single-player simulation —
+  and the panel comes up over it the moment `cls.key_dest` reads 3, so the
+  engine's keyboard-only menu never shows. Items have hover/focus states and are
+  clickable; ↑ ↓ / Tab move a single roving selection and Enter opens it, and
+  mouse hover moves the same selection. Resume closes the engine menu and
+  re-locks the pointer from the click itself; nothing in the panel requests
+  pointer lock while it is open, and nothing fires the weapon through it.
+- **In-game** — a low gradient band and hairline under the engine's own status
+  bar, a small `Options` chip while the mouse is free, a `click to capture`
+  prompt and a restrained banner for map changes. The canvas, the engine HUD,
+  its pickup messages and its console are untouched.
+
+Keyboard and mouse both work: the panel swallows key presses only while it is
+open (so the engine's menu cannot scroll underneath it), lets the engine see
+release events (a key held when the panel opened must not stay down) and lets
+the app's own engine taps through, and after Resume the game handles them
+exactly as before.
+
+### Game mode (native full screen)
+
+The VIDEO menu has a `game mode` row, and Alt+Enter toggles the same mode while
+the game has the keyboard. It is this page's native-game presentation: every page layer — the
+chips, the panel, the full-screen control, the boot plate — is removed, the page
+is black around the picture, and the game surface fills the display at the
+engine's own aspect ratio (the bars are the black page, not browser background).
+The mode asks for full screen on the display the game is on, which is what
+removes the browser chrome.
+
+- **What it costs.** The mode removes the page's own per-frame work: the
+  status-bar read-back (a synchronous framebuffer read plus digit recognition,
+  measured at about a second per read on a loaded box; the page runs it every
+  1.2 s), the interface poll, and every page layer. On one page, one frozen
+  scene and the same full-screen state, the main thread spends **7-8% less task
+  time per drawn frame** in game mode: three interleaved page/game pairs
+  measured ratios of 0.923, 0.925 and 0.917 of the page's time per frame, and
+  the game presentation drew 8-10% more frames in the same ten seconds. The
+  acceptance check asserts that saving (at least 2% per frame in most adjacent
+  pairs) and keeps the wall-clock requirement that the mode adds no frame time.
+  In the headless software renderer the wall-clock frame is GPU-bound, so its
+  difference is smaller than the main-thread one and is not claimed as a frame
+  rate; the compositor share on the box's GPU is not measured here. The engine,
+  the scene, the renderer and the resolution are untouched.
+- **Other displays, stated honestly.** A web page cannot paint a monitor it has
+  no window on. Where the Window Management API exists and the owner allows it,
+  game mode opens one opaque black window on every additional display and
+  reports what it actually did in `window.quake2GameMode.status().blackout`;
+  with one display, or without the permission, it reports that instead and never
+  claims a monitor went black. No page can hide other applications' windows.
+- **Way back.** Alt+Enter leaves the mode. Esc — the browser's own way out of
+  full screen — leaves it too: the mode ends when full screen does, so the page
+  interface is never stranded hidden, whichever control ended it. Entering with
+  Alt+Enter over the dark panel resumes the paused game first, so the mode never
+  hides every control while the engine still waits at its menu.
+
+### The crosshair's aim feedback
+
+The crosshair is still the engine's own 8x8 picture (`crosshair 0` submits no
+draw; `crosshair_scale` sets the base size). `rtx-renderer.js` now draws that
+picture itself at a size that follows the weapon in hand, widens while the
+trigger is held and narrows while crouching (C): the blaster is the reference
+(1.00), heavier weapons spread to 1.08–1.35, the trigger adds up to +0.35 of the
+size and the crouch removes 18%, with a fast expansion and a slower settle back.
+The colour is unchanged; the default opacity is 0.45 (was 0.500) — a little more
+transparent, and measured below 0.5. The weapon in hand is named from the skin
+size the engine binds for the view model it draws last (pak0's own skin headers
+supply the sizes), and the trigger and crouch keys are read from the page's own
+trusted input events, cleared whenever the game does not own the keyboard.
+
+## Models
+
+The first-person weapons and the enemies are the engine's own MD2 meshes, and
+they stay that way: `scripts/model-geometry.mjs` rebuilds the meshes that ship
+inside `baseq2/pak0.pak` into `baseq2/pak10.pak`, which the engine loads after
+pak0. A later PAK wins, so the original archive, maps, sounds and every skin in
+`assets/textures/models/` stay exactly as they were.
+
+- **Silhouette** — one uniform 1-to-4 edge split per face, with the new midpoint
+  pulled onto the two endpoint tangent planes, so curved barrels, heads and limbs
+  lose their faceted outline while flat panels stay flat. Enemy meshes also get
+  one gentle Laplacian pass (λ 0.25) with a small inflation (0.3 units) to round
+  boxy limbs without losing armour bulk.
+- **Hardware** — barrel collars, a sight rail with front blade and rear notch,
+  vent ribs on the receiver's widest side, a trigger guard, a cable that follows
+  the underside, and rear bevel strips are built from boxes, cylinders and tubes
+  in the model's own space. Their UVs sample quiet patches of that model's
+  existing skin, so the original art paints them. Enemy torsos get chest vents
+  and shoulder collars.
+- **Animation and hit detection** — every added vertex is bound to the nearest
+  original face (barycentrics plus an offset in that face's frame), so it follows
+  the game's own idle/fire/walk frames; frame names, scale and origin are
+  untouched and no gameplay state changes. The GL command list is regenerated
+  as one fan per face.
+- **Budget** — 20 models: vertices 4,433 → 25,090, triangles 7,991 → 36,252;
+  `pak10.pak` is 13.61 MiB. The largest mesh is the tank at 1,646 vertices; the
+  engine refuses a model at 3,399 ("has too many vertices"), so the build stays
+  under its cap.
+- **Shading** — `rtx-renderer.js` gained `q2ModelShade`, patched into the
+  engine's 14 model fragment programs: a tangent-space normal from the skin's
+  own luminance gradient, a key-lit relief term, a painted-metal sheen and a
+  gradient rim, gated by `q2Model` so `Off` restores the engine shader untouched.
+
+`node scripts/model-geometry.mjs` rebuilds `baseq2/pak10.pak` deterministically;
+`--dry-run` measures without writing, `--only <entry>` works on one model and
+`--markers` is the calibration build (three boxes on known axes).
 
 ## Texture art
 

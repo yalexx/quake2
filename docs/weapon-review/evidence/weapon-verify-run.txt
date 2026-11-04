@@ -1,0 +1,57 @@
+project /home/yanko/Projects/quake2/.clawbox/worktrees/t5-2
+PASS S1 mean saturation rises by the stated threshold - mean 0.3153 → 0.3272 (+0.0120), threshold +0.005
+PASS S2 every weapon's saturation rises - smallest gain 0.0055
+PASS S3 mean chroma rises - mean 15.61 → 16.08
+PASS E1 cut-out count is exactly 4x the original - all 13 at 4.00
+PASS E2 cut-out mask is the 2x2 expansion of the original (no opaque texel re-indexed to 255) - 0 mismatched texels over all 13
+PASS E3 no near-black/near-white fringe introduced at the cut-out - 0 introduced; worst fringe colour distance 44 (limit 48)
+PASS E4 boundary brightness is not shifted by the upscale - worst v_handgr 11.1 levels, limit 20
+PASS B1 blockiness ratio below the bound (whole skin and pistol band) - worst whole 2.27, worst bottom 2.55
+PASS B2 pistol-bottom band is not an outlier - v_blast 2.31 vs worst other 2.55 (margin 0.5)
+PASS B3 blockiness metric detects a nearest-neighbour upscale - control ratios 4800503570 … 9857793669
+running tex-check: node scripts/tex-check.mjs --only models/
+running texture-pack: node scripts/texture-pack.mjs --dry-run --only models/
+running texture-audit: node scripts/texture-audit.mjs --select
+PASS P1 tex-check --only models/ exits 0 - exit 0
+PASS P2 texture-pack --dry-run --only models/ exits 0 - exit 0
+PASS P3 texture-audit --select exits 0 - exit 0
+PASS P4 texture-pack reports every picture identical - 125 packed (125 identical to the original), 0 without art, 0 skipped, 0 failed
+starting session clean
+PASS A1 boots demo1 at 1280x720 with the game in hand - keyDest=game canvas=1280x720
+PASS A2 console is closed and cl_gun is 1 - consoleOpen=false
+FAIL A3 cl_gun is 1 - cl_gun="null"
+  retry "sv_cheats 1" ran=true echo=false
+  retry "give all" ran=false echo=false
+PASS A4 give all left the game running (console closed, keyDest=game) - keyDest=game consoleOpen=false
+clean weapon v_blast size 592x328 expect v_blast
+  weapon never became v_blast - re-running give all
+  retry "sv_cheats 1" ran=false echo=false
+  weapon never became v_blast - re-running give all
+  retry "give all" ran=false echo=false
+  retry "use Blaster" ran=false echo=false
+  weapon never became v_blast - re-running give all
+  retry "sv_cheats 1" ran=false echo=false
+session clean failed: Error: the drawn skin size 592x328 is not in modelTextureDraws (keys 256x256,1024x512,592x328,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,528x360,136x60,168x76,168x84,616x390,88x124,136x52,72x68,184x76,56x20,264x124,136x100)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1315:14)
+FAIL A0 clean session completed - the drawn skin size 592x328 is not in modelTextureDraws (keys 256x256,1024x512,592x328,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,528x360,136x60,168x76,168x84,616x390,88x124,136x52,72x68,184x76,56x20,264x124,136x100)
+starting session original
+original weapon v_blast size 296x164 expect v_blast
+  retry "cl_gun 0" ran=false echo=false
+  retry "cl_gun 0" ran=true echo=false
+session original failed: Error: the drawn skin size 296x164 is not in modelTextureDraws (keys 256x256,1024x512,296x164,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,264x180,136x60)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1343:29)
+FAIL O0 original-art baseline session completed - the drawn skin size 296x164 is not in modelTextureDraws (keys 256x256,1024x512,296x164,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,264x180,136x60)
+starting session extras
+extras weapon v_flareg size 624x338 expect v_blast/v_flareg
+  retry "cl_gun 0" ran=false echo=false
+session extras failed: Error: the drawn skin size 624x338 is not in modelTextureDraws (keys 256x256,1024x512,624x338,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,432x390,136x60)
+    at captureWeapons (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:934:13)
+    at async main (file:///home/yanko/Projects/quake2/.clawbox/worktrees/t5-2/scripts/weapon-verify.mjs:1377:22)
+FAIL X0 extra-weapon session completed - the drawn skin size 624x338 is not in modelTextureDraws (keys 256x256,1024x512,624x338,288x195,152x92,276x194,512x512,120x76,200x100,200x60,184x84,432x390,136x60)
+FAIL D-v_shotg2-v_hyperb v_shotg2 and v_hyperb differ - missing capture
+FAIL D-v_bfg-v_disint v_bfg and v_disint differ - missing capture
+FAIL D-v_flareg-v_blast v_flareg and v_blast differ - missing capture
+FAIL D-v_disint-v_shotg v_disint and v_shotg differ - missing capture
+FAIL D-v_handgr-v_machn v_handgr and v_machn differ - missing capture

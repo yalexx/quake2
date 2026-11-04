@@ -570,8 +570,17 @@
     return { read: read(), watch: watch.stats() };
   }
 
+  // One word, no allocation: the renderer samples cls.key_dest at every frame
+  // clear, and read() builds a whole reading (arrays and a timestamp) for a
+  // caller that only wants this number. Null until the memory is up.
+  function keyDestNow() {
+    var buffer = memory();
+    return buffer ? keyDest(buffer) : null;
+  }
+
   window.quake2Engine = {
     version: 1,
+    keyDest: keyDestNow,
     offsets: {
       vieworg: VIEWORG,
       viewangles: VIEWANGLES,

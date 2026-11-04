@@ -1,0 +1,165 @@
+{
+  "clean": {
+    "216x195": [
+      "v_bfg",
+      "v_disint"
+    ],
+    "296x164": [
+      "v_blast"
+    ],
+    "264x164": [
+      "v_chain"
+    ],
+    "308x195": [
+      "v_handgr"
+    ],
+    "296x194": [
+      "v_hyperb",
+      "v_shotg2"
+    ],
+    "248x194": [
+      "v_launch"
+    ],
+    "300x194": [
+      "v_machn"
+    ],
+    "308x181": [
+      "v_rail"
+    ],
+    "252x194": [
+      "v_rocket"
+    ],
+    "264x180": [
+      "v_shotg"
+    ],
+    "432x390": [
+      "v_bfg",
+      "v_disint"
+    ],
+    "592x328": [
+      "v_blast"
+    ],
+    "528x328": [
+      "v_chain"
+    ],
+    "616x390": [
+      "v_handgr"
+    ],
+    "592x388": [
+      "v_hyperb",
+      "v_shotg2"
+    ],
+    "496x388": [
+      "v_launch"
+    ],
+    "600x388": [
+      "v_machn"
+    ],
+    "616x362": [
+      "v_rail"
+    ],
+    "504x388": [
+      "v_rocket"
+    ],
+    "528x360": [
+      "v_shotg"
+    ]
+  },
+  "original": {
+    "216x195": [
+      "v_bfg",
+      "v_disint"
+    ],
+    "296x164": [
+      "v_blast"
+    ],
+    "264x164": [
+      "v_chain"
+    ],
+    "308x195": [
+      "v_handgr"
+    ],
+    "296x194": [
+      "v_hyperb",
+      "v_shotg2"
+    ],
+    "248x194": [
+      "v_launch"
+    ],
+    "300x194": [
+      "v_machn"
+    ],
+    "308x181": [
+      "v_rail"
+    ],
+    "252x194": [
+      "v_rocket"
+    ],
+    "264x180": [
+      "v_shotg"
+    ]
+  },
+  "extra": {
+    "216x195": [
+      "v_bfg",
+      "v_disint"
+    ],
+    "296x164": [
+      "v_blast"
+    ],
+    "264x164": [
+      "v_chain"
+    ],
+    "308x195": [
+      "v_handgr"
+    ],
+    "296x194": [
+      "v_hyperb",
+      "v_shotg2"
+    ],
+    "248x194": [
+      "v_launch"
+    ],
+    "300x194": [
+      "v_machn"
+    ],
+    "308x181": [
+      "v_rail"
+    ],
+    "252x194": [
+      "v_rocket"
+    ],
+    "264x180": [
+      "v_shotg"
+    ],
+    "432x390": [
+      "v_bfg",
+      "v_disint",
+      "v_shotg"
+    ],
+    "624x338": [
+      "v_blast",
+      "v_flareg"
+    ],
+    "528x328": [
+      "v_chain"
+    ],
+    "616x390": [
+      "v_handgr",
+      "v_machn"
+    ],
+    "592x388": [
+      "v_hyperb",
+      "v_shotg2"
+    ],
+    "496x388": [
+      "v_launch"
+    ],
+    "616x362": [
+      "v_rail"
+    ],
+    "504x388": [
+      "v_rocket"
+    ]
+  }
+}
