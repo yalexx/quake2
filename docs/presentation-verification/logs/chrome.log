@@ -101,3 +101,37 @@ I0000 00:00:1793622972.258402 2951606 environment.cc:526] Selected adapter: Inte
 Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
 Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
 I0000 00:00:1793622972.328134 2951614 environment.cc:526] Selected adapter: Intel(R) UHD Graphics 620 (KBL GT2), arch=gen-9, vendor=intel, backend=Vulkan, adapterType=Integrated GPU
+[1330575:1330599:1105/090053.294546:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330599:1105/090053.295906:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330599:1105/090053.295929:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330599:1105/090053.299356:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330599:1105/090053.339683:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+
+DevTools listening on ws://127.0.0.1:43945/devtools/browser/29e78437-a38d-4fb0-a366-2d454342c2ef
+[1330575:1330575:1105/090053.424300:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.424369:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.424458:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.424661:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.424664:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330575:1105/090053.426843:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.429461:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.456450:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330575:1105/090053.456798:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.458952:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.462568:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330575:1105/090053.478802:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.478972:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.491985:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330575:1330599:1105/090053.492072:ERROR:dbus/bus.cc:405] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[1330575:1330575:1105/090053.521455:ERROR:dbus/object_proxy.cc:572] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[1330787:1330787:1105/090055.327756:ERROR:media/audio/alsa/alsa_util.cc:204] PcmOpen: default,Host is down
+[1330787:1330787:1105/090055.332751:ERROR:media/audio/alsa/alsa_util.cc:204] PcmOpen: plug:default,Host is down
+Created TensorFlow Lite XNNPACK delegate for CPU.
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1793862233.427836 1332296 environment.cc:526] Selected adapter: Intel(R) UHD Graphics 620 (KBL GT2), arch=gen-9, vendor=intel, backend=Vulkan, adapterType=Integrated GPU
+Warning: maxDynamicUniformBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
+Warning: maxDynamicStorageBuffersPerPipelineLayout artificially reduced from 500000 to 16 to fit dynamic offset allocation limit.
+I0000 00:00:1793862233.504042 1332308 environment.cc:526] Selected adapter: Intel(R) UHD Graphics 620 (KBL GT2), arch=gen-9, vendor=intel, backend=Vulkan, adapterType=Integrated GPU
+[1330681:1330681:0100/000000.121061:ERROR:gpu/ipc/client/command_buffer_proxy_impl.cc:476] GPU state invalid after WaitForGetOffsetInRange.
