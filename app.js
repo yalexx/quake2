@@ -50,10 +50,14 @@ var Module;
   // Yamagi lists and loads a save slot only while its server.ssv exists.
   const SLOT_FILE = "server.ssv";
   // A save slot the page can offer. The engine's own slot names are save0,
-  // save1, …, quick and current; a console `save <name>` can add others, and a
-  // name with a space, slash or quote would break both the +load command line
-  // and the store's path rules, so only these characters are ever offered.
-  const SLOT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+  // save1, …, quick and current; a console `save <name>` can add others. A
+  // space, slash or quote would break the +load command line and the store's
+  // path rules; a leading dot is refused by the store as a hidden path; and a
+  // leading '-' is refused because the engine's +command scanner treats a
+  // leading '-' token as a new option, so `+load -x` would not pass "-x" to
+  // the command. A leading '_' is valid in all three and is listed (the store
+  // accepts it and `+load _edge` works); it used to be dropped by the page.
+  const SLOT_NAME_RE = /^[A-Za-z0-9_][A-Za-z0-9._-]*$/;
   // The config.cfg the engine writes on quit, and the one the page patches
   // when a setting is applied.
   const CONFIG_PATH = "baseq2/config.cfg";
@@ -1418,12 +1422,14 @@ var Module;
     for (const hint of menuPanel.querySelectorAll("#apply-hint, #apply-hint-options")) hint.textContent = text;
   }
 
-  // The engine has no console on this page, so a change reaches it twice: the
-  // start-up line of the next boot (+set) and the engine's own config.cfg in
-  // the store, which the engine executes at boot. Writing both makes the
-  // value stick whichever of the two the engine reads last; measured, a stale
-  // config used to win for some cvars, and the settings menu showed a value
-  // that was not running, which is what made those rows look dead.
+  // The engine has no console on this page, so a change is written into the
+  // engine's own config.cfg in the store and the page reloads; the engine
+  // executes that file at boot. The start-up line rebuilds only the values the
+  // video init needs from that config (r_mode, fov, crosshair_scale), so a
+  // saved resolution and a saved look survive the reload without carrying every
+  // setting in the URL (the line has an argument limit). Only when the store
+  // cannot be written does the reload fall back to carrying the changes as
+  // +set pairs.
   async function applySettings() {
     const changed = changedSettings();
     if (!changed.length) { showPanelNote("Nothing to apply"); return; }

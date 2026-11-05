@@ -52,6 +52,19 @@ async function main() {
   console.log("  box proxy 127.0.0.1:" + app.proxyPort + " (CSP sandbox), Chrome CDP 127.0.0.1:" + app.cdpPort);
 
   const first = await app.open();
+  // The engine's own console log names the level it loaded (`Map: demo3`).
+  // Reading it avoids a console visit for a fact the engine already wrote: the
+  // console's text input drops keystrokes now and then under load, and a
+  // console read is what made the map checks flaky.
+  async function engineMap() {
+    const log = await app.evaluate("(() => { try { return FS.readFile('/qwasm2/baseq2/qconsole.log', { encoding: 'utf8' }); } catch (error) { return ''; } })()").catch(() => "");
+    let map = null;
+    for (const line of String(log || "").split("\n")) {
+      const match = /^Map: (\S+)/.exec(line);
+      if (match) map = match[1];
+    }
+    return map;
+  }
   report.check("the app boots to HD", first.buffer === "1280x720", "drawing buffer 1280x720", String(first.buffer));
   report.check("RTX is on by default", Boolean(first.rtx && first.rtx.enabled === true),
     "quake2RTX.status().enabled true", first.rtx ? "enabled " + first.rtx.enabled + ", quality " + first.rtx.quality : "no status");
@@ -108,34 +121,54 @@ async function main() {
     empty.slots.length + " slot(s), empty hidden " + empty.emptyHidden + ", text " + JSON.stringify(empty.emptyText));
 
   // ---- make a save, on another level, then reload the page ----------------
-  await app.closeMenu();
-  const saved = await app.command("map demo3");
-  if (saved.map !== "demo3") {
-    // The console drops a keystroke now and then; ask until the engine says so.
-    for (let attempt = 0; attempt < 4 && (await app.mapName()) !== "demo3"; attempt++) {
-      await app.command("map demo3");
-      await sleep(2000);
+  // The console drops a keystroke now and then, and the bridge's `command`
+  // returns the *requested* map as a hint even when the console text never
+  // reached the engine. So each attempt must (a) put the panel away first --
+  // an open panel owns the keyboard and swallows the trusted console keys --
+  // and (b) prove the command ran (echoed) before waiting for the engine's own
+  // `mapname` to answer demo3.
+  let mapAnswer = null;
+  let changed = false;
+  for (let attempt = 0; attempt < 4 && !changed; attempt++) {
+    await app.closeMenu().catch(() => null);
+    mapAnswer = await app.command("map demo3").catch((error) => ({ ran: false, echoFound: false, error: error.message }));
+    if (mapAnswer && mapAnswer.ran && mapAnswer.echoFound) {
+      changed = await waitFor(async () => (await engineMap()) === "demo3", 30000, "demo3 to load", 1000).catch(() => false);
     }
+    if (!changed) await sleep(1500);
   }
-  const changed = await waitFor(async () => (await app.mapName()) === "demo3", 60000, "demo3 to load", 1000).catch(() => false);
-  if (!changed) throw new Error("the console could not load demo3");
+  if (!changed) {
+    throw new Error("the console could not load demo3 (last answer: " +
+      JSON.stringify(mapAnswer && { ran: mapAnswer.ran, echo: mapAnswer.echoFound, error: mapAnswer.error }) + ")");
+  }
   // A console keystroke is dropped now and then on this engine, so ask again
   // if the slot does not appear; each retry is a complete round trip.
   let savedSeen = false;
   for (let attempt = 0; attempt < 3 && !savedSeen; attempt++) {
+    await app.closeMenu().catch(() => null);
     const answer = await app.command("save loadproof");
     if (attempt === 0) report.note("save answer: ran " + answer.ran + ", echo " + answer.echoFound + ", console " + answer.consoleOpen);
     savedSeen = Boolean(await waitFor(async () => (await app.storeRead("baseq2/save/loadproof/server.ssv")) !== null, 20000,
       "the loadproof save on the server", 500).catch(() => false));
   }
   if (!savedSeen) throw new Error("the engine never put loadproof on the server");
-  report.note("made baseq2/save/loadproof on demo3, then reloaded the page");
+  // A console-named slot whose first character is an underscore: the store
+  // accepts it and the engine's own `+load _edge` works, so the page must list
+  // it too. (The review of 5e1ef7d found the page's slot-name filter silently
+  // dropped such a save; this is the regression check for that fix.)
+  const storeAfterSave = await app.storeList();
+  const proofFiles = storeAfterSave.filter((entry) => /^baseq2\/save\/loadproof\//.test(entry.path));
+  for (const entry of proofFiles) {
+    const data = await app.storeRead(entry.path);
+    await app.storeWrite(entry.path.replace("/save/loadproof/", "/save/_edge/"), data);
+  }
+  report.note("made baseq2/save/loadproof on demo3 and copied it to the console-named slot _edge, then reloaded the page");
 
   await app.open(app.url());
   // The first frame can land while the +map demo1 level is still loading, and
   // `mapname` then answers the attract demo's name (q2demo1.dm2). Give the
   // level the same chance a player gives it, then read what the engine says.
-  const reloadedMap = await waitFor(async () => { const name = await app.mapName(); return name === "demo1" ? name : null; },
+  const reloadedMap = await waitFor(async () => { const name = await engineMap(); return name === "demo1" ? name : null; },
     60000, "demo1 after the reload", 1000).catch(() => null);
   report.check("after a page reload the game is back on demo1", reloadedMap === "demo1", "demo1", String(reloadedMap));
 
@@ -155,6 +188,9 @@ async function main() {
   report.check("the saved slot is listed with its name and a load hint",
     listed.slots.some((one) => one.slot === "loadproof" && one.hint === "load" && one.label === "loadproof") && listed.emptyHidden === true,
     "loadproof / load and no empty state", JSON.stringify(listed.slots));
+  report.check("a console-named slot that starts with an underscore is listed",
+    listed.slots.some((one) => one.slot === "_edge" && one.hint === "load"),
+    "an _edge row with a load hint", listed.slots.map((one) => one.slot).join(", "));
   const order = listed.slots.map((one) => one.slot);
   const expected = order.filter((slot) => /^save\d+$/.test(slot)).sort((a, b) => Number(a.slice(4)) - Number(b.slice(4)))
     .concat(["quick", "current"].filter((slot) => order.includes(slot)))
@@ -173,7 +209,11 @@ async function main() {
     return /\+load&loadproof/.test(search) && (await app.evaluate("Boolean(window.quake2BootFrame)").catch(() => false)) ? search : null;
   }, 120000, "Enter to load the focused slot", 500);
   report.check("Enter on the focused slot loads it", /\+load&loadproof/.test(entered), "+load&loadproof", entered);
-  const enterMap = await waitFor(() => app.mapName(), 60000, "the map name after Enter", 1000).catch(() => null);
+  // Wait for the saved level, not for the first answer: while the save is
+  // still loading the engine's own `mapname` is the attract demo's
+  // (q2demo1.dm2), which is a real answer but not the restored level.
+  const enterMap = await waitFor(async () => { const name = await engineMap(); return name === "demo3" ? name : null; },
+    120000, "demo3 after Enter", 1000).catch(() => null);
   report.check("Enter restores the saved level (demo3)", enterMap === "demo3", "demo3", String(enterMap));
 
   // ---- the owner's own path: reload the page, then click the slot ----------
@@ -206,7 +246,7 @@ async function main() {
     startup.includes("+load") && startup[startup.indexOf("+load") + 1] === "loadproof",
     "+load loadproof", startup.slice(-6).join(" "));
   report.check("and carries no +map of its own", !startup.includes("+map"), "no +map", startup.includes("+map") ? "+map present" : "none");
-  const restoredMap = await waitFor(async () => { const name = await app.mapName(); return name === "demo3" ? name : null; }, 60000, "demo3 after the click", 1000).catch(() => null);
+  const restoredMap = await waitFor(async () => { const name = await engineMap(); return name === "demo3" ? name : null; }, 120000, "demo3 after the click", 1000).catch(() => null);
   report.check("the click restores the save's own level", restoredMap === "demo3", "demo3", String(restoredMap));
   const loaded = await app.state();
   report.check("the load boot still starts at HD", loaded.buffer === "1280x720", "1280x720", String(loaded.buffer));
