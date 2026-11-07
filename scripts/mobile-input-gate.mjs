@@ -534,15 +534,40 @@ async function holdMoveKeys(names, down) {
 // ---- Console (trusted key events only) -----------------------------------
 
 async function consoleOpen() {
-  await evaluate("document.getElementById('canvas').focus(); 1");
-  await sleep(150);
-  await keyEvent("keyDown", "`", "Backquote", 192);
-  await sleep(60);
-  await keyEvent("keyUp", "`", "Backquote", 192);
-  await waitFor("the engine console (key_dest 1)", async () => {
-    const state = await readEngine();
-    return state && state.keyDest === 1;
-  }, 8000);
+  // The page closes any console that appears in the first seconds of a boot
+  // (app.js startBootFrameWatch: until 8 s after the watch started, once the
+  // game has landed). A console opened inside that window is shut again by
+  // the page's own Escape before this check can read it, so wait it out: the
+  // landing frame's timestamp is on the record.
+  await waitFor("the page's boot console watch to end", async () => dumpJson(`(() => {
+    const frame = window.quake2BootFrame;
+    return Boolean(frame && typeof frame.at === "number" && performance.now() > frame.at + 8500);
+  })()`), 30000, 250).catch(() => null);
+  // A toggle can still be dropped by the engine's key queue on a busy frame;
+  // send it again (only while the game, not the console, has the keyboard)
+  // rather than fail the run on one lost keystroke.
+  let lastState = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await evaluate("document.getElementById('canvas').focus(); 1");
+    await sleep(150);
+    const before = await readEngine();
+    if (before && before.keyDest === 1) return;
+    await keyEvent("keyDown", "`", "Backquote", 192);
+    await sleep(60);
+    await keyEvent("keyUp", "`", "Backquote", 192);
+    const opened = await waitFor("the engine console (key_dest 1)", async () => {
+      const state = await readEngine();
+      lastState = state;
+      return state && state.keyDest === 1;
+    }, 8000).catch(() => false);
+    if (opened) {
+      if (attempt > 0) report.notes.push({ kind: "console-retry", attempts: attempt + 1, stage });
+      return;
+    }
+  }
+  const focus = await dumpJson(`(() => { const el = document.activeElement; return el ? (el.id || el.tagName) : null; })()`);
+  throw new Error("timed out waiting for the engine console (key_dest 1) after 3 toggles; keyDest " +
+    (lastState && lastState.keyDest) + ", focus " + focus);
 }
 
 function charInfo(ch) {
@@ -633,7 +658,10 @@ async function layoutSnapshot() {
     const layer = document.getElementById("mobile-controls");
     if (layer) layer.querySelectorAll("*").forEach((element) => { if (element.id !== "mc-look") add(element); });
     const card = document.querySelector("#rotate-overlay .rotate-card");
-    if (card) add(card, ".rotate-card");
+    if (card) {
+      add(card, ".rotate-card");
+      card.querySelectorAll("button").forEach((button) => add(button));
+    }
     // A control drawn inside another measured one (the rotate card's button)
     // is a nesting, not two targets competing for one finger.
     elements.forEach((element, i) => {
@@ -1138,7 +1166,63 @@ async function checksTouch(base, candidate) {
 
   // ---- Layout: the HUD review's top row and target sizes.
   stage = "layout";
-  await checkLandscapeLayouts();
+  const layouts = await checkLandscapeLayouts();
+
+  // ---- Ergonomics and opacity (docs/mobile-hud-review.md, criterion 6).
+  stage = "opacity";
+  {
+    // The aiming zone: the middle 40 % of the picture's width, where the look
+    // drag starts and the crosshair sits. No target may reach into it.
+    const zoneHits = [];
+    for (const id of ["L1", "L2"]) {
+      const snap = layouts[id];
+      const left = snap.viewport.w * 0.30, right = snap.viewport.w * 0.70;
+      for (const one of snap.targets) {
+        if (one.right > left + 0.5 && one.left < right - 0.5) zoneHits.push({ layout: id, id: one.id, box: round(one) });
+      }
+    }
+    check("A1", "ergonomics: no target reaches into the aiming zone (x 30-70 %) at 844x390 or 932x430",
+      zoneHits.length === 0 && ["L1", "L2"].every((id) => layouts[id] && layouts[id].targets.length >= LANDSCAPE_TARGETS.length),
+      { zone: ["L1", "L2"].map((id) => ({ layout: id, x: [Number((layouts[id].viewport.w * 0.30).toFixed(1)), Number((layouts[id].viewport.w * 0.70).toFixed(1))] })),
+        hits: zoneHits, nearest: ["L1", "L2"].map((id) => {
+          const w = layouts[id].viewport.w;
+          const left = Math.max(...layouts[id].targets.filter((one) => one.right <= w * 0.5).map((one) => one.right));
+          const right = Math.min(...layouts[id].targets.filter((one) => one.left >= w * 0.5).map((one) => one.left));
+          return { layout: id, leftGroupEnds: Number(left.toFixed(1)), rightGroupStarts: Number(right.toFixed(1)) };
+        }) });
+
+    // Idle: nobody touching anything. Every pad control is drawn at a
+    // computed opacity between 0.3 and 0.6, and the look surface is clear.
+    await sleep(500);
+    const idle = await layoutSnapshot();
+    const look = await dumpJson(`(() => { const cs = getComputedStyle(document.getElementById("mc-look")); return { background: cs.backgroundColor, image: cs.backgroundImage, opacity: cs.opacity }; })()`);
+    const idleOut = idle.targets.filter((one) => !(one.opacity >= 0.3 && one.opacity <= 0.6));
+    check("O1", "opacity at idle: every pad control is drawn between 0.3 and 0.6, and the look surface is clear",
+      idle.targets.length >= LANDSCAPE_TARGETS.length && idleOut.length === 0 && look.background === "rgba(0, 0, 0, 0)" && look.image === "none",
+      { opacity: Object.fromEntries(idle.targets.map((one) => [one.id, one.opacity])), outOfRange: idleOut.map((one) => one.id), look });
+
+    // Pressed: the control under the finger is drawn at full strength, and
+    // goes back to its idle value after the release. CROUCH and the stick's
+    // centre are the presses with no side effect a later check could trip on.
+    const pressedReadings = {};
+    for (const selector of ["#mc-crouch", "#mc-stick"]) {
+      const box = await rect(selector);
+      await pressAt(box.left + box.w / 2, box.top + box.h / 2);
+      await sleep(600);
+      const during = await dumpJson(`Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)})).opacity)`);
+      const others = await dumpJson(`Number(getComputedStyle(document.getElementById("mc-fire")).opacity)`);
+      await releaseTouch();
+      await sleep(700);
+      const afterRelease = await dumpJson(`Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)})).opacity)`);
+      pressedReadings[selector] = { pressed: during, fireMeanwhile: others, afterRelease };
+    }
+    // The crouch press ducked the player; let the view come back up before
+    // the next checks read positions.
+    await readStable("after the opacity presses", 8000, 900).catch(() => null);
+    check("O2", "opacity pressed: the control under the finger is drawn at 1, the others stay at idle, and it returns to idle after release",
+      Object.values(pressedReadings).every((one) => one.pressed === 1 && one.fireMeanwhile >= 0.3 && one.fireMeanwhile <= 0.6 && one.afterRelease >= 0.3 && one.afterRelease <= 0.6),
+      pressedReadings);
+  }
 
   // ---- Check 1: an empty tap never fires.
   stage = "1";
@@ -1634,6 +1718,14 @@ async function checksTouch(base, candidate) {
       { padOnBefore: padBefore && padBefore.padOn, rowBox: rowBox && round(rowBox), rowOff, padOnAfterOff: padOff && padOff.padOn,
         stickDisplayOff: stickOff.display, actionsDisplayOff: actionsOff.display, targetsOff: snapOff.targets.map((one) => one.id),
         floating: snapOff.floating, rowOn, padOnAfterOn: padOn && padOn.padOn, stickDisplayOn: stickOn.display, actionsDisplayOn: actionsOn.display });
+    // Opacity with the pad put away: nothing of the pad is drawn (no box, no
+    // touch), MENU alone stays, at the idle strength.
+    const menuOff = snapOff.targets.find((one) => one.id === "#mc-pause");
+    check("O3", "opacity with the pad hidden: the stick and every action control are not drawn and take no touch; MENU stays at idle strength",
+      Boolean(stickOff.display === "none" && actionsOff.display === "none" && stickOff.w === 0 && actionsOff.w === 0 &&
+        snapOff.targets.length === 1 && menuOff && menuOff.opacity >= 0.3 && menuOff.opacity <= 0.6 && menuOff.w >= 44 && menuOff.h >= 44),
+      { stick: { display: stickOff.display, w: stickOff.w }, actions: { display: actionsOff.display, w: actionsOff.w },
+        drawnTargets: snapOff.targets.map((one) => ({ id: one.id, opacity: one.opacity, box: round(one) })) });
   }
 
   // ---- Check 6: two fingers at once.

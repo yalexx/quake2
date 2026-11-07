@@ -754,6 +754,13 @@ body.is-game-mode #loading {
   --mc-top: calc(env(safe-area-inset-top, 0px) + 8px);
   --mc-line: rgba(198, 168, 102, 0.38);
   --mc-fill: rgba(6, 8, 10, 0.52);
+  /* Opacity (the owner's HUD review): a control nobody is touching is drawn
+     at half strength so the picture shows through it; the control under a
+     finger is drawn at full strength. Put away (OPTIONS > touch controls off,
+     the menu open, portrait) the pad is not drawn at all. Measured by the
+     input gate from getComputedStyle. */
+  --mc-rest: 0.5;
+  --mc-pressed: 1;
 }
 
 #mobile-controls[hidden] {
@@ -812,6 +819,17 @@ body.is-game-mode #mobile-controls {
   border-radius: 50%;
   border: 1px dashed rgba(198, 168, 102, 0.14);
   pointer-events: none;
+}
+
+#mc-stick,
+.mc-btn {
+  opacity: var(--mc-rest);
+  transition: opacity 140ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
+}
+
+#mc-stick.is-active,
+.mc-btn.is-down {
+  opacity: var(--mc-pressed);
 }
 
 #mc-stick.is-active {
