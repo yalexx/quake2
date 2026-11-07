@@ -62,9 +62,11 @@ in `config.cfg`.
 
 `scripts/store-package.mjs` builds the Store tarball reproducibly (the 1.0.0
 exclusions: `docs/`, `assets/`, `baseq2/pak9.pak`), boots the extracted copy
-on a spare port, and records its size and sha256. For 1.2.4: 49,952,039 bytes
-(2.4 MiB under the 50 MiB cap), sha256 `274a60be…4dc380`. It boots demo1 in
-3.3 s with cheats 0 and no console errors. Nothing was published.
+on a spare port, and records its size and sha256. The 1.2.4 package is under
+the 50 MiB cap with about 2.4 MiB to spare and boots demo1 with cheats 0. Its
+exact size, sha256 and boot record are in `docs/release-1.2.4/README.md`;
+this changelog is inside the package, so it does not quote its own hash.
+Nothing was published.
 
 ## Load Game, an audited menu, HD + RTX by default, and a measured frame loop
 
