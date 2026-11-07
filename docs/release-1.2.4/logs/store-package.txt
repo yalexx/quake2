@@ -1,12 +1,11 @@
-building the Store package from 581c478ad533
-  ok   the package is under the Store's 50 MiB compressed cap -- {"bytes":49952542,"cap":52428800}
-  ok   the package is under the Store's 256 MiB raw cap -- {"rawBytes":71608784,"cap":268435456}
+building the Store package from c33754086310
+  ok   the package is under the Store's 50 MiB compressed cap -- {"bytes":49952894,"cap":52428800}
+  ok   the package is under the Store's 256 MiB raw cap -- {"rawBytes":71609401,"cap":268435456}
   ok   the package carries pak0 and pak10 and leaves pak9 out -- {"pak0":true,"pak10":true,"pak9":false}
-  ok   the package is reproducible (a second build has the same sha256) -- {"first":"af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10","second":"af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10"}
+  ok   the package is reproducible (a second build has the same sha256) -- {"first":"99a3b2e3e14f786f2dd73a8e3826cf446c6e146b1d2a278d420441f99408ac6b","second":"99a3b2e3e14f786f2dd73a8e3826cf446c6e146b1d2a278d420441f99408ac6b"}
   ok   the extracted package has no docs/, assets/ or pak9 -- null
   ok   the package's server answers pak0 and pak10, and 404s the left-out pak9 -- {"pak0.pak":{"status":200,"bytes":47498591},"pak10.pak":{"status":200,"bytes":13770565},"pak9.pak":{"status":404,"bytes":null}}
-  ok   the packaged app boots into a level with the keyboard in the game -- {"bootMs":3059,"position":{"x":128.0625,"y":-319.9375,"z":64.0625}}
+  ok   the packaged app boots into a level with the keyboard in the game -- {"bootMs":3035,"position":{"x":128.0625,"y":-319.9375,"z":64.0625}}
   ok   its start-up line is map demo1 with cheats 0 -- {"startupTail":["crosshair_scale","3","+map","demo1"]}
   ok   no console errors and no page exceptions -- {"consoleErrors":[],"pageErrors":[]}
-PASSED: 9/9 checks; package 49952542 bytes, sha256 af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10
-exit=0
+PASSED: 9/9 checks; package 49952894 bytes, sha256 99a3b2e3e14f786f2dd73a8e3826cf446c6e146b1d2a278d420441f99408ac6b

@@ -40,7 +40,7 @@ Chrome this run started (its own server on 4472). The suites' stdout is in
 | 10 | `node scripts/mobile-fullscreen-test.mjs` | 8/8 checks |
 | 11 | `node scripts/mobile-controls-test.mjs` | 97/97 checks |
 | 12 | `node scripts/boot-probe.mjs` | 17/17 checks |
-| 13 | `node scripts/store-package.mjs --port 4471 --version 1.2.4` | PASSED, 9/9 checks: 49,952,542 bytes, sha256 `af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10` |
+| 13 | `node scripts/store-package.mjs --port 4471 --version 1.2.4` | PASSED, 9/9 checks: 49,952,894 bytes, sha256 `99a3b2e3e14f786f2dd73a8e3826cf446c6e146b1d2a278d420441f99408ac6b` |
 
 Suites 2–9 are desktop or server checks. They ran before the last change to
 `mobile-controls.js`, which is inert without a touch layer; `app.js` and
@@ -80,6 +80,12 @@ Suites 2–9 are desktop or server checks. They ran before the last change to
   the first press had reached (316.8 units, then 0.0). The gate now waits out
   the watch and pushes the second press back the way the first one came. No
   assertion was loosened.
+* **Review pass:** the salvaged `fullscreen.js` treated a browser with no
+  Fullscreen API at all (iPhone Safari) like the desktop's sandboxed frame. The
+  row read `own window`, and a tap opened a second tab that cannot go full
+  screen either. The row is now not offered there, as the 1.2.3 button was
+  not. A stub-DOM check (no `requestFullscreen`) opens 0 windows, and
+  `mobile-fullscreen-test` still passes 8/8 on Chrome.
 * **Two older suites were stale against 1.2.3:** `mobile-controls-test`
   expected applied settings on the URL, and `boot-probe` expected crosshair
   pairs on the start-up line. Since `5fa1aa7` both live in `config.cfg`, on
@@ -92,14 +98,14 @@ Suites 2–9 are desktop or server checks. They ran before the last change to
 
 | | |
 | --- | --- |
-| Contents | Every file git lists except `docs/`, `assets/` and `baseq2/pak9.pak` (the exclusions used since 1.0.0): 71,608,784 bytes raw |
-| Package | `quake2-store-1.2.4.tgz`, **49,952,542 bytes** (47.6 MiB), built from `581c478` |
-| sha256 | `af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10` |
+| Contents | Every file git lists except `docs/`, `assets/` and `baseq2/pak9.pak` (the exclusions used since 1.0.0): 71,609,401 bytes raw |
+| Package | `quake2-store-1.2.4.tgz`, **49,952,894 bytes** (47.6 MiB), built from `c337540` |
+| sha256 | `99a3b2e3e14f786f2dd73a8e3826cf446c6e146b1d2a278d420441f99408ac6b` |
 | Reproducible | A second build gave the same sha256. Every mtime is the newest commit that touched a packaged file, so a docs-only commit (like the one that records this) does not change it |
-| Boot | Extracted into an empty `quake-2` folder, its own `server.js` on port 4471: pak0 200 (47,498,591 bytes), pak10 200 (13,770,565 bytes), pak9 404 as intended. In a level 3.1 s after opening the bare URL, keyboard in the game, at 128.06 / −319.94 / 64.06 (demo1's start). The start-up line ends `+map demo1`, with no cheats. 0 console errors, 0 page exceptions |
+| Boot | Extracted into an empty `quake-2` folder, its own `server.js` on port 4471: pak0 200 (47,498,591 bytes), pak10 200 (13,770,565 bytes), pak9 404 as intended. In a level 3.0 s after opening the bare URL, keyboard in the game, at 128.06 / −319.94 / 64.06 (demo1's start). The start-up line ends `+map demo1`, with no cheats. 0 console errors, 0 page exceptions |
 
 The cap is the Store's 50 MiB (52,428,800 bytes) compressed. This package
-leaves 2,476,258 bytes (2.4 MiB) of room; 1.0.0 had 6.5 MiB. pak10 grew with
+leaves 2,475,906 bytes (2.4 MiB) of room; 1.0.0 had 6.5 MiB. pak10 grew with
 the 2x weapon skins. The next archive or art round has to be measured
 against this margin, or the package will be refused.
 
