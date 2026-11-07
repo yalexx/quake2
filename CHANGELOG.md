@@ -12,7 +12,8 @@ criteria, and every one is now measured in the live engine by
   not here"). The floating `Full screen` button and its hint are gone. VIDEO
   has a `full screen` row (on/off). Inside the desktop's sandboxed window the
   row reads `own window` and opens the app in a window that can fill the
-  display. `scripts/mobile-fullscreen-test.mjs` enters and leaves full screen
+  display. In a browser with no Fullscreen API at all (iPhone Safari) the row
+  is not offered, as the old button was not. `scripts/mobile-fullscreen-test.mjs` enters and leaves full screen
   with a phone touch: 8/8.
 * **The PAD button is gone** ("remove this dpad button"). MENU is now the only
   control in the top row. You can still put the on-screen pad away, from a

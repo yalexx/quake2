@@ -99,7 +99,7 @@ Suites 2–9 are desktop or server checks. They ran before the last change to
 | Boot | Extracted into an empty `quake-2` folder, its own `server.js` on port 4471: pak0 200 (47,498,591 bytes), pak10 200 (13,770,565 bytes), pak9 404 as intended. In a level 3.1 s after opening the bare URL, keyboard in the game, at 128.06 / −319.94 / 64.06 (demo1's start). The start-up line ends `+map demo1`, with no cheats. 0 console errors, 0 page exceptions |
 
 The cap is the Store's 50 MiB (52,428,800 bytes) compressed. This package
-leaves 2,476,258 bytes (2.4 MiB) of room; 1.0.0 had 6.8 MiB. pak10 grew with
+leaves 2,476,258 bytes (2.4 MiB) of room; 1.0.0 had 6.5 MiB. pak10 grew with
 the 2x weapon skins. The next archive or art round has to be measured
 against this margin, or the package will be refused.
 

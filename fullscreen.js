@@ -140,6 +140,7 @@
   row.addEventListener("click", function (event) {
     event.preventDefault();
     event.stopPropagation();
+    if (!supported) return;
     if (blocked) openOwnWindow();
     else toggle();
   });
@@ -147,6 +148,17 @@
   document.addEventListener("webkitfullscreenchange", sync);
 
   sync();
+
+  // A browser with no Fullscreen API at all (iPhone Safari has none for a
+  // page) cannot go full screen in any window, so "own window" would only
+  // open a second tab that cannot either. The row is not offered there, as
+  // the old corner button was not. (.menu-page-list draws its buttons as
+  // flex boxes, which outranks the hidden attribute, so the box is hidden
+  // explicitly too.)
+  if (!supported) {
+    row.hidden = true;
+    row.style.display = "none";
+  }
 
   // Read-only, for the checks and for the page's own diagnostics. Nothing else
   // in the page needs to know the mode.

@@ -37,7 +37,8 @@ model index, `gunindex`) and `ammo`.
    is set, the row reads `on`); a second tap leaves it (`null`, `off`).
 4. Inside the box's sandboxed window, where the browser refuses full screen,
    the row reads `own window` and opens the app in its own window instead of
-   failing silently.
+   failing silently. A browser with no Fullscreen API at all (iPhone Safari)
+   is not offered the row, since no window could go full screen there.
 
 Proved by `scripts/mobile-fullscreen-test.mjs` (phone), the menu audit and the
 presentation gate (desktop), and the input gate's layout check (absence).
