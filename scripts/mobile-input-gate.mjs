@@ -1205,16 +1205,30 @@ async function checksTouch(base, candidate) {
     // goes back to its idle value after the release. CROUCH and the stick's
     // centre are the presses with no side effect a later check could trip on.
     const pressedReadings = {};
+    const readOpacity = (selector) => dumpJson(`(() => { const element = document.querySelector(${JSON.stringify(selector)});
+      return { opacity: Number(getComputedStyle(element).opacity), classes: element.className }; })()`);
     for (const selector of ["#mc-crouch", "#mc-stick"]) {
       const box = await rect(selector);
       await pressAt(box.left + box.w / 2, box.top + box.h / 2);
-      await sleep(600);
-      const during = await dumpJson(`Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)})).opacity)`);
-      const others = await dumpJson(`Number(getComputedStyle(document.getElementById("mc-fire")).opacity)`);
+      // The press is registered by the touch layer (is-down / is-active) on
+      // the page's next input turn; read once it has been.
+      await waitFor("the press on " + selector + " to register", async () => {
+        const now = await readOpacity(selector);
+        return /\bis-(down|active)\b/.test(now.classes);
+      }, 8000, 100).catch(() => null);
+      await sleep(300);
+      const during = await readOpacity(selector);
+      const others = await readOpacity("#mc-fire");
       await releaseTouch();
-      await sleep(700);
-      const afterRelease = await dumpJson(`Number(getComputedStyle(document.querySelector(${JSON.stringify(selector)})).opacity)`);
-      pressedReadings[selector] = { pressed: during, fireMeanwhile: others, afterRelease };
+      // The release fades back over 140 ms of animation time; on a page that
+      // draws a few frames a second that takes longer in wall time.
+      let afterRelease = null;
+      await waitFor("the control back at idle after the release", async () => {
+        afterRelease = await readOpacity(selector);
+        return afterRelease.opacity >= 0.3 && afterRelease.opacity <= 0.6;
+      }, 8000, 200).catch(() => null);
+      pressedReadings[selector] = { pressed: during.opacity, pressedClasses: during.classes, fireMeanwhile: others.opacity,
+        afterRelease: afterRelease && afterRelease.opacity };
     }
     // The crouch press ducked the player; let the view come back up before
     // the next checks read positions.

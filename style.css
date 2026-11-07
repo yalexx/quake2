@@ -827,9 +827,12 @@ body.is-game-mode #mobile-controls {
   transition: opacity 140ms ease, border-color 120ms ease, background 120ms ease, transform 120ms ease;
 }
 
+/* Full strength the moment a finger lands (no fade in: the press is the
+   feedback); the fade back to rest after the release is the transition above. */
 #mc-stick.is-active,
 .mc-btn.is-down {
   opacity: var(--mc-pressed);
+  transition-duration: 0s;
 }
 
 #mc-stick.is-active {
