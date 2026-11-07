@@ -1,0 +1,36 @@
+PASS 5a. buttons: PREV/NEXT leave the weapon unchanged with only the blaster {"before":61,"afterNext":61,"afterPrev":61,"ammo":{"before":0,"afterNext":0,"afterP
+PASS setup. engine is in game with a controllable player before the checks {"keyDest":0,"dead":false,"position":{"x":-911.9375,"y":-71.9375,"z":-105.8125}}
+PASS setup-arm. give all armed the player: ammo is readable and above zero {"ammo":200,"weaponIndex":105,"keyDest":0}
+PASS 1. a tap away from the controls never fires or turns [{"at":[422,70],"ammo":[200,200],"yawDelta":0,"pitchDelta":0,"newEntities":0,"mousedown":0,"fireHeld":
+PASS 2a. FIRE press/hold fires: ammo falls and/or a new entity appears; the press does not turn the view {"ammo":[200,190,185,185],"ammoDrop":15,"muzzleEntities
+PASS 2b. FIRE release stops firing (ammo is stable afterwards) {"afterRelease":185,"settled":185,"settled2":185,"fireHeld":false}
+PASS 2c. pointercancel on held FIRE releases it and stops the shots {"fireHeld":false,"ammo":[174,174]}
+PASS 3a. look drag left+up raises yaw and lowers pitch, without firing {"yawDelta":29.169,"pitchDelta":-17.155,"ammo":[174,174],"newEntities":0}
+PASS 3b. look drag right+down lowers yaw and raises pitch, without firing {"yawDelta":-29.169,"pitchDelta":17.155,"ammo":[174,174]}
+PASS 3c. a tap on the look surface fires nothing and turns nothing {"ammo":[174,174],"yawDelta":0,"pitchDelta":0,"mousedown":0}
+PASS 4a. stick pressed at the ring centre holds no keys and does not move the player {"keys":[],"movedUnits":0}
+PASS 4b. stick at 70% of the ring moves in the 8 expected directions {"noclip":true,"directions":{"N":{"distance":129.6,"forward":129.6,"right":0,"zDelta":0,"al
+PASS 4c. stick release stops the player {"movedAfterRelease":0,"noclip":true}
+FAIL 5b. buttons: JUMP raises z and the player lands again {"zBefore":-105.8125,"zMax":-105.8125,"zAfter":-105.8125,"roseUnits":0,"rose":false,"landed":false}
+FAIL 5c. buttons: USE holds and releases the engine's +use key, and the engine cfg that binds it actually executed {"keylog":[{"type":"down","key":"e","vk":69,"
+PASS 5d. buttons: USE leaves the keyboard in the game with the player alive {"keyDest":0,"dead":false,"position":{"x":-911.9375,"y":-71.9375,"z":-105.8125},"key
+FAIL 5e. buttons: NEXT and PREV change the weapon with the give-all loadout {"before":105,"afterNext":null,"afterPrev":null}
+PASS 5f. buttons: PAUSE opens the engine menu with the pad hidden, and Resume returns the game {"keyDestWhilePaused":3,"padDisplayWhileMenu":"none","menuOpenCla
+PASS 5g. buttons: PAD hides and shows the pad {"padOnBefore":true,"padOnAfterHide":false,"stickDisplayHidden":"none","padOnAfterShow":true,"stickDisplayShown":"
+PASS 6a. two fingers: stick + FIRE move the player and fire in the same window {"movedUnits":303.9,"ammo":[200,187],"keys":["forward"],"fireHeld":true}
+PASS 6b. two fingers: look + FIRE turn the view and fire in the same window {"yawDelta":29.42,"pitchDelta":-12.27,"ammo":[183,161]}
+PASS 6c. two fingers: stick + look move the player and turn the view at once {"movedUnits":519,"yawDelta":19.54,"pitchDelta":0}
+PASS 7a. touchCancel on held FIRE releases it; ammo stops; the next press fires {"fireHeldAfterCancel":false,"ammoStable":true,"ammo":[158,151,151,141]}
+PASS 7b. touchCancel on held stick releases it; the player stops; the next press moves {"movedWhileHeld":323.8,"keysAfterCancel":[],"movedAfterCancel":0,"floorD
+PASS 8a. blur/tab hide: held stick + FIRE are released and the player/ammo stop {"held":{"keys":["forward"],"fireHeld":true,"ammo":129},"afterHide":{"keys":[],"
+PASS 8b. returning to the tab leaves no keys down and the next FIRE press works {"visibility":"visible","keys":[],"fireHeld":false,"ammo":[141,128,115]}
+PASS 9a. portrait (390x844): rotate guide visible, pad hidden, pause reachable {"portrait":true,"rotateDisplay":"flex","rotateText":"↻ Rotate your device Quak
+PASS 9b. portrait: a tap where FIRE would be fires nothing {"ammo":[115,115],"ammoReason":null,"dead":false,"yawDelta":0,"pitchDelta":0,"mousedown":0,"fireHeld"
+PASS 9c. portrait: pause opens the menu and Resume returns to the game {"keyDestPaused":3,"keyDestAfterResume":0}
+PASS 10a. desktop (1280x720, no touch emulation): the touch layer is absent {"isTouchUi":false,"touchUiClass":false,"controls":{"hidden":true,"display":"none"},
+PASS 10b. desktop: a trusted click takes the pointer lock {"pointerLockElement":"canvas","lockBefore":"canvas","lockAfterExit":"canvas","mode":"headful-xvfb"}
+PASS 10c. desktop: trusted mouse moves change yaw and pitch {"locked":{"yawDelta":-19.8,"pitchDelta":6.6},"note":null}
+PASS 10d. desktop: the left mouse button fires (ammo changes) {"ammo":[200,192]}
+PASS 10e. desktop: the keyboard moves the player {"movedUnits":306,"keyDest":0}
+FAILED: 31/34 checks
+report: (kept in the run evidence folder, not committed)
