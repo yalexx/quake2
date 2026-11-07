@@ -46,7 +46,8 @@ const app = new Harness({ name: "q2-menu-audit" });
 let code = 0;
 
 const KNOWN_ACTIONS = ["resume", "back", "game", "options", "video", "credits", "newgame",
-  "loadgame", "loadslot", "savegame", "apply", "reset-video", "reset-options", "quit", "game-mode"];
+  "loadgame", "loadslot", "savegame", "apply", "reset-video", "reset-options", "quit", "game-mode",
+  "fullscreen", "touch-pad"];
 const AUDITED = {
   options: ["effects volume", "mouse speed", "always run", "invert mouse", "lookstrafe",
     "free look", "crosshair", "pause on minimized"],
@@ -131,6 +132,20 @@ async function main() {
   report.check("VIDEO carries the audited rows, in order",
     JSON.stringify(videoLabels) === JSON.stringify(AUDITED.video),
     AUDITED.video.join(", "), videoLabels.join(", "));
+  // The touch layer's show/hide row (the PAD button that sat over the game
+  // moved here in the owner's HUD review) lives in OPTIONS and is shown only
+  // on a touch device; the input gate drives it on a phone. On this desktop
+  // it must be in the menu and not be drawn.
+  const touchRow = await app.evaluate(`(() => {
+    const row = document.querySelector('#menu [data-action="touch-pad"]');
+    const group = row && row.closest(".menu-touch");
+    const view = row && row.closest(".menu-view");
+    return row ? { view: view ? view.dataset.view : null, groupHidden: Boolean(group && group.hidden),
+      drawn: row.getClientRects().length > 0, touchUi: document.body.classList.contains("touch-ui") } : null;
+  })()`);
+  report.check("the touch-controls row is in OPTIONS and not drawn on a desktop",
+    Boolean(touchRow) && touchRow.view === "options" && touchRow.groupHidden === true && touchRow.drawn === false && touchRow.touchUi === false,
+    "OPTIONS > touch controls, hidden without a touch layer", JSON.stringify(touchRow));
   report.check("the dead OGG-music, note and engine-fullscreen rows are gone",
     !buttons.some((one) => /OGG|sound backend|customize controls|go to console|vertical sync|aniso filtering/i.test(one.label)) &&
       !buttons.some((one) => ["vid_fullscreen", "r_vsync", "r_anisotropic", "gl3_colorlight"].includes(one.cvar)),
@@ -364,30 +379,43 @@ async function main() {
   await app.evaluate("document.exitFullscreen && document.exitFullscreen().catch(function () {})");
   await sleep(500);
 
-  // This harness runs the page under the box's CSP sandbox, which does not
-  // grant full screen (allow-fullscreen is absent). There the control's own
-  // defined behaviour is the blocked one: it labels itself "Open in its own
-  // window for full screen" and clicking it opens that window -- clicking it
-  // here would navigate this run, so the label is what is checked. Where the
-  // document *can* go full screen (the presentation gate runs without the
-  // sandbox), the same button enters and leaves it; that is the gate's check.
+  // The owner's HUD review moved full screen off the game picture and into
+  // VIDEO's page-control list. This harness runs the page under the box's CSP
+  // sandbox, which does not grant full screen (allow-fullscreen is absent), so
+  // the row's own defined behaviour is the blocked one: it reads "own window"
+  // and its click opens the app in a window that may fill the display.
+  // Clicking it here would navigate this run, so its state is what is checked;
+  // where the document *can* go full screen (the presentation gate runs
+  // without the sandbox), the same row enters and leaves it.
   const fullscreenState = await app.evaluate(`(() => {
-    const button = document.getElementById("fullscreen-button");
-    return { enabled: document.fullscreenEnabled, title: button.title, label: button.getAttribute("aria-label"), hidden: button.hidden };
+    const row = document.querySelector('#menu [data-action="fullscreen"]');
+    const value = document.getElementById("fullscreen-value");
+    const status = window.quake2Fullscreen && window.quake2Fullscreen.status ? window.quake2Fullscreen.status() : null;
+    return row ? { enabled: document.fullscreenEnabled, inVideo: !!(row.closest(".menu-view") && row.closest(".menu-view").dataset.view === "video"),
+      inPageList: !!row.closest(".menu-page-list"), value: value ? value.textContent.trim() : null,
+      title: row.title, label: row.getAttribute("aria-label"), status: status,
+      playLayer: !!document.getElementById("fullscreen-button") || !!document.getElementById("fullscreen-hint") } : null;
   })()`);
-  if (fullscreenState.enabled) {
-    await app.trustedClick("#fullscreen-button");
+  if (fullscreenState && fullscreenState.enabled) {
+    if (!(await app.openMenu())) throw new Error("the menu did not open for full screen");
+    await app.click('[data-action="video"]');
+    await sleep(300);
+    await app.evaluate(`(() => { const row = document.querySelector('#menu [data-action="fullscreen"]'); if (row) row.scrollIntoView({ block: "center" }); return true; })()`);
+    await app.trustedClick('#menu [data-action="fullscreen"]');
     const fullscreen = await waitFor(() => app.evaluate("Boolean(document.fullscreenElement)"), 12000, "full screen", 300).catch(() => false);
-    report.check("the Full screen control enters full screen", fullscreen === true, "document.fullscreenElement", String(fullscreen));
+    report.check("the Full screen row enters full screen", fullscreen === true, "document.fullscreenElement", String(fullscreen));
     await app.evaluate("document.exitFullscreen && document.exitFullscreen().catch(function () {})");
     await sleep(700);
     report.check("full screen can be left", (await app.evaluate("!document.fullscreenElement")) === true,
       "no fullscreenElement", String(await app.evaluate("Boolean(document.fullscreenElement)")));
   } else {
-    report.check("the Full screen control states the sandbox's own-window path", fullscreenState.hidden === false &&
+    report.check("the Full screen row states the sandbox's own-window path", Boolean(fullscreenState) &&
+      fullscreenState.playLayer === false && fullscreenState.inVideo && fullscreenState.inPageList &&
+      fullscreenState.status && fullscreenState.status.blocked === true && fullscreenState.value === "own window" &&
       /own window/i.test(fullscreenState.title + " " + fullscreenState.label),
-      "a visible control labelled 'Open in its own window for full screen'", JSON.stringify(fullscreenState));
-    report.note("full screen is blocked by the box's CSP sandbox (fullscreenEnabled false); the control offers the own-window path, and the presentation gate checks the entering/leaving path without the sandbox");
+      "the VIDEO page-control row reads 'own window' when the sandbox blocks full screen, and nothing floats over the game",
+      JSON.stringify(fullscreenState));
+    report.note("full screen is blocked by the box's CSP sandbox (fullscreenEnabled false); the menu row offers the own-window path, and the presentation gate checks the entering/leaving path without the sandbox");
   }
 
   // ---- QUIT --------------------------------------------------------------

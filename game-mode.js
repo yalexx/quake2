@@ -64,7 +64,7 @@
   function uiHidden() {
     // The CSS class hides every page layer; this reads the result back rather
     // than assuming the stylesheet applied.
-    var layers = ["ui", "fullscreen-button", "fullscreen-hint", "loading", "banner", "prompt"];
+    var layers = ["ui", "loading", "banner", "prompt"];
     var hidden = 0;
     for (var i = 0; i < layers.length; i++) {
       var element = document.getElementById(layers[i]);

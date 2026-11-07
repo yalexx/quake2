@@ -603,6 +603,108 @@ async function instrument() {
 }
 const gateCounters = () => dumpJson(`(() => (window.__gate || { mousedown: 0, mouseup: 0, keylog: [], events: [], moves: [] }))()`);
 
+// ---- Layout (the owner's HUD review, docs/mobile-hud-review.md) ------------
+// Every element of the play layer that takes a touch, measured from the page
+// itself rather than from a list of known ids: any descendant of
+// #mobile-controls that is drawn (display, visibility, a non-zero box) and
+// accepts pointer events, except the full-picture look surface. In portrait
+// the rotate card is a touch target too. Each entry carries its own computed
+// opacity so the opacity checks read the same snapshot.
+async function layoutSnapshot() {
+  return dumpJson(`(() => {
+    const W = window.innerWidth, H = window.innerHeight;
+    const out = [];
+    const elements = [];
+    const add = (element, name) => {
+      const cs = getComputedStyle(element);
+      if (cs.display === "none" || cs.visibility === "hidden" || cs.pointerEvents === "none") return;
+      let hiddenAncestor = false;
+      for (let node = element.parentElement; node; node = node.parentElement) {
+        if (getComputedStyle(node).display === "none") { hiddenAncestor = true; break; }
+      }
+      if (hiddenAncestor) return;
+      const box = element.getBoundingClientRect();
+      if (!(box.width > 0) || !(box.height > 0)) return;
+      out.push({ id: name || (element.id ? "#" + element.id : element.className || element.tagName),
+        left: box.left, top: box.top, right: box.right, bottom: box.bottom, w: box.width, h: box.height,
+        opacity: Number(cs.opacity), inside: [] });
+      elements.push(element);
+    };
+    const layer = document.getElementById("mobile-controls");
+    if (layer) layer.querySelectorAll("*").forEach((element) => { if (element.id !== "mc-look") add(element); });
+    const card = document.querySelector("#rotate-overlay .rotate-card");
+    if (card) add(card, ".rotate-card");
+    // A control drawn inside another measured one (the rotate card's button)
+    // is a nesting, not two targets competing for one finger.
+    elements.forEach((element, i) => {
+      elements.forEach((other, j) => { if (i !== j && other.contains(element)) out[i].inside.push(out[j].id); });
+    });
+    return {
+      viewport: { w: W, h: H },
+      targets: out,
+      floating: ["fullscreen-button", "fullscreen-hint", "mc-toggle"].filter((id) => document.getElementById(id)),
+      fullscreenRow: (() => {
+        const row = document.querySelector('#menu [data-action="fullscreen"]');
+        const view = row && row.closest(".menu-view");
+        return row ? { inVideo: Boolean(view && view.dataset.view === "video"), inPageList: Boolean(row.closest(".menu-page-list")),
+          value: (document.getElementById("fullscreen-value") || {}).textContent || null } : null;
+      })(),
+    };
+  })()`);
+}
+
+function overlapsOf(targets) {
+  const found = [];
+  for (let i = 0; i < targets.length; i++) {
+    for (let j = i + 1; j < targets.length; j++) {
+      const a = targets[i], b = targets[j];
+      if (a.inside.includes(b.id) || b.inside.includes(a.id)) continue;
+      const w = Math.min(a.right, b.right) - Math.max(a.left, b.left);
+      const h = Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top);
+      if (w > 0.5 && h > 0.5) found.push({ a: a.id, b: b.id, area: Number((w * h).toFixed(1)) });
+    }
+  }
+  return found;
+}
+
+const round = (box) => [Math.round(box.left), Math.round(box.top), Math.round(box.w), Math.round(box.h)];
+
+// One viewport's layout: no floating full-screen or PAD control, the VIDEO
+// row present, no two targets overlapping and every target >= 44 px.
+async function checkLayout(id, label, expectTargets) {
+  const snap = await layoutSnapshot();
+  const overlaps = overlapsOf(snap.targets);
+  const small = snap.targets.filter((one) => one.w < 44 || one.h < 44).map((one) => ({ id: one.id, w: one.w, h: one.h }));
+  const missing = expectTargets.filter((wanted) => !snap.targets.some((one) => one.id === wanted));
+  const boxes = Object.fromEntries(snap.targets.map((one) => [one.id, round(one)]));
+  check(id, label + ": no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px",
+    snap.floating.length === 0 && snap.fullscreenRow && snap.fullscreenRow.inVideo && snap.fullscreenRow.inPageList &&
+      overlaps.length === 0 && small.length === 0 && missing.length === 0,
+    { viewport: snap.viewport, floating: snap.floating, fullscreenRow: snap.fullscreenRow, overlaps, small, missing, boxes });
+  return snap;
+}
+
+const LANDSCAPE_TARGETS = ["#mc-stick", "#mc-fire", "#mc-jump", "#mc-use", "#mc-pause"];
+const PORTRAIT_TARGETS = ["#mc-pause", ".rotate-card", "#rotate-action"];
+
+// The landscape layouts the review names, then back to the run's own size.
+async function checkLandscapeLayouts() {
+  const sizes = [
+    { id: "L1", size: { width: 844, height: 390 } },
+    { id: "L2", size: { width: 932, height: 430 } },
+  ];
+  if (MOBILE_SIZE.width !== 844 || MOBILE_SIZE.height !== 390) sizes.push({ id: "L0", size: MOBILE_SIZE });
+  const snaps = {};
+  for (const one of sizes) {
+    await emulate(one.size, true, MOBILE_UA, landscapeOrientation());
+    await sleep(900);
+    snaps[one.id] = await checkLayout(one.id, "layout " + one.size.width + "x" + one.size.height + " landscape", LANDSCAPE_TARGETS);
+  }
+  await emulate(MOBILE_SIZE, true, MOBILE_UA, landscapeOrientation());
+  await sleep(900);
+  return snaps;
+}
+
 // ---- Game boot ------------------------------------------------------------
 
 async function waitForGame(label, timeoutMs = 180000) {
@@ -1025,6 +1127,10 @@ async function checksTouch(base, candidate) {
   // The pad live in the game, at the phone size the owner reported from.
   if (options.phone) await capture("phone-landscape", "landscape 844x390, pad live in game");
 
+  // ---- Layout: the HUD review's top row and target sizes.
+  stage = "layout";
+  await checkLandscapeLayouts();
+
   // ---- Check 1: an empty tap never fires.
   stage = "1";
   {
@@ -1372,19 +1478,61 @@ async function checksTouch(base, candidate) {
       Boolean(menuOk) && padWhileMenu.display === "none" && Boolean(resumed),
       { keyDestWhilePaused: menuState && menuState.keyDest, padDisplayWhileMenu: padWhileMenu.display, menuOpenClass: padWhileMenu.menuOpen, keyDestAfterResume: resumed && resumed.keyDest });
 
-    // PAD toggle hides and shows the pad.
-    const toggleBefore = await touchState();
-    await tapSelector("#mc-toggle", 80);
-    await sleep(900);
+    // Touch controls off and back on from the menu (OPTIONS > touch
+    // controls). The PAD button over the game is gone (the owner's HUD
+    // review); this row is the one place the pad is put away and brought back.
+    const padRow = async () => dumpJson(`(() => {
+      const row = document.querySelector('[data-action="touch-pad"]');
+      return row ? { value: (document.getElementById("touch-pad-value") || {}).textContent || null, pressed: row.getAttribute("aria-pressed"),
+        inOptions: Boolean(row.closest('.menu-view[data-view="options"]')) } : null;
+    })()`);
+    const openPadOptions = async () => {
+      await tapSelector("#mc-pause", 80);
+      await waitFor("the page menu after MENU", async () => dumpJson(`document.body.classList.contains("menu-open")`), 10000);
+      await sleep(300);
+      await tapSelector('.menu-view[data-view="main"] [data-action="options"]', 80);
+      await waitFor("the OPTIONS view", async () => dumpJson(`(() => { const view = document.querySelector('.menu-view[data-view="options"]'); return Boolean(view && !view.hidden); })()`), 5000);
+      await dumpJson(`(() => { const row = document.querySelector('[data-action="touch-pad"]'); if (row) row.scrollIntoView({ block: "center" }); return true; })()`);
+      await sleep(300);
+      return rect('[data-action="touch-pad"]');
+    };
+    const resumeFromMenu = async () => {
+      await tapSelector('.menu-foot [data-action="resume"]', 90);
+      return waitFor("the game after Resume", async () => {
+        const now = await readEngine();
+        const open = await dumpJson(`document.body.classList.contains("menu-open")`);
+        return now && now.keyDest === 0 && !open ? now : false;
+      }, 12000).catch(() => null);
+    };
+    const padBefore = await touchState();
+    const rowBox = await openPadOptions();
+    await tapSelector('[data-action="touch-pad"]', 80);
+    await sleep(400);
+    const rowOff = await padRow();
+    const resumedOff = await resumeFromMenu();
+    await sleep(600);
     const padOff = await touchState();
+    const snapOff = await layoutSnapshot();
     const stickOff = await rect("#mc-stick");
-    await tapSelector("#mc-toggle", 80);
-    await sleep(900);
+    const actionsOff = await rect("#mc-actions");
+    if (options.phone) await capture("phone-pad-off", "landscape 844x390, touch controls off from OPTIONS: only MENU stays");
+    await openPadOptions();
+    await tapSelector('[data-action="touch-pad"]', 80);
+    await sleep(400);
+    const rowOn = await padRow();
+    const resumedOn = await resumeFromMenu();
+    await sleep(600);
     const padOn = await touchState();
     const stickOn = await rect("#mc-stick");
-    check("5g", "buttons: PAD hides and shows the pad",
-      toggleBefore && padOff && padOn && toggleBefore.padOn === true && padOff.padOn === false && stickOff.display === "none" && padOn.padOn === true && stickOn.display !== "none",
-      { padOnBefore: toggleBefore && toggleBefore.padOn, padOnAfterHide: padOff && padOff.padOn, stickDisplayHidden: stickOff.display, padOnAfterShow: padOn && padOn.padOn, stickDisplayShown: stickOn.display });
+    const actionsOn = await rect("#mc-actions");
+    check("5g", "touch controls: no PAD button; OPTIONS > touch controls hides the pad (MENU stays) and shows it again",
+      Boolean(padBefore && padBefore.padOn === true && rowBox && rowBox.h >= 44 && rowOff && rowOff.inOptions && rowOff.value === "off" &&
+        resumedOff && padOff && padOff.padOn === false && stickOff.display === "none" && actionsOff.display === "none" &&
+        snapOff.targets.length === 1 && snapOff.targets[0].id === "#mc-pause" && snapOff.floating.length === 0 &&
+        rowOn && rowOn.value === "on" && resumedOn && padOn && padOn.padOn === true && stickOn.display !== "none" && actionsOn.display !== "none"),
+      { padOnBefore: padBefore && padBefore.padOn, rowBox: rowBox && round(rowBox), rowOff, padOnAfterOff: padOff && padOff.padOn,
+        stickDisplayOff: stickOff.display, actionsDisplayOff: actionsOff.display, targetsOff: snapOff.targets.map((one) => one.id),
+        floating: snapOff.floating, rowOn, padOnAfterOn: padOn && padOn.padOn, stickDisplayOn: stickOn.display, actionsDisplayOn: actionsOn.display });
   }
 
   // ---- Check 6: two fingers at once.
@@ -1658,6 +1806,7 @@ async function checkPortrait(base, candidate) {
     portrait && overlay.display !== "none" && overlay.hidden !== true && /Rotate your device/i.test(overlay.text || "") && stick.display === "none" && actions.display === "none" && pause.display !== "none",
     { portrait, rotateDisplay: overlay.display, rotateText: overlay.text, stickDisplay: stick.display, actionsDisplay: actions.display, pauseDisplay: pause.display });
   if (options.phone) await capture("phone-portrait", "portrait 390x844 with the rotate guide");
+  await checkLayout("L3", "layout 390x844 portrait", PORTRAIT_TARGETS);
 
   // A tap where the FIRE button would be (bottom right) must not fire.  The
   // engine's stats array is momentarily unreadable while the page resizes for

@@ -9,7 +9,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Quake 2</title>
 <link rel="icon" href="favicon.png?v=icon1">
-<link rel="stylesheet" href="style.css?v=touch7">
+<link rel="stylesheet" href="style.css?v=hud124">
 </head>
 <body>
 <!-- Boot: a dark plate with the mark and one thin progress rule. -->
@@ -54,7 +54,6 @@
   <button id="mc-pause" type="button" class="mc-btn mc-btn-small" data-mc-action="pause" aria-label="Pause and open the menu">
     <span class="mc-ico" aria-hidden="true">&#9776;</span><span class="mc-lbl" aria-hidden="true">MENU</span>
   </button>
-  <button id="mc-toggle" type="button" aria-pressed="true" aria-label="Hide touch controls"><span aria-hidden="true">PAD</span></button>
   <div id="mc-hint" role="status" aria-live="polite" hidden>
     <b>Left stick</b> moves &middot; <b>drag the right side</b> to look &middot; <b>FIRE</b> shoots &middot; <b>JUMP</b> &amp; <b>USE</b> beside it
   </div>
@@ -74,15 +73,10 @@
   </div>
 </div>
 
-<!-- Full screen on open (fullscreen.js): the control is the way back out, and
-     the hint points at the app's own window where the desktop blocks it. -->
-<button id="fullscreen-button" type="button" aria-pressed="false" aria-label="Enter full screen" title="Full screen">
-  <span class="fs-icon" aria-hidden="true">&#9974;</span><span class="fs-label">Full screen</span>
-</button>
-<div id="fullscreen-hint" hidden>
-  <p>Full screen is blocked inside the desktop window.</p>
-  <button id="fullscreen-open-window" type="button">Open in its own window</button>
-</div>
+<!-- Full screen lives in the menu (VIDEO > full screen, fullscreen.js): no
+     control floats over the game picture (the owner's HUD review). Where the
+     desktop's sandboxed window blocks full screen, the same row offers the app
+     in its own window instead. -->
 
 <!-- The interface layer: near-black translucent panels, 1px rules and a muted
      amber accent. It stops at the canvas's controls: the engine's own status
@@ -165,14 +159,20 @@
           <button type="button" data-action="reset-video"><span class="label">reset to default</span></button>
           <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint">no changes</span></button>
         </nav>
-        <!-- A page control, not an engine row: the engine's VIDEO list above is
+        <!-- Page controls, not engine rows: the engine's VIDEO list above is
              exactly its own (the acceptance runner compares it row for row), so
-             game mode sits under it in its own list. -->
+             full screen and game mode sit under it in their own list.
+             fullscreen.js owns the full-screen row: a tap enters or leaves full
+             screen, or -- where the desktop's sandboxed window forbids it --
+             opens the app in its own window. It is here and not over the game
+             because the picture belongs to the game (the owner's HUD review). -->
         <div class="menu-page-list" role="group" aria-label="Page presentation">
+          <button type="button" class="setting" data-action="fullscreen" aria-pressed="false" title="Full screen"><span class="label">full screen</span><span class="value" id="fullscreen-value">off</span></button>
           <button type="button" class="setting" data-action="game-mode" aria-pressed="false"><span class="label">game mode</span><span class="value" id="game-mode-value">off</span></button>
         </div>
         <p class="field-help">video mode is the engine's own r_mode list (its 33 modes, then auto and custom); HD (1280x720) is the default and applying restarts the level at the chosen mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). Applying writes the values into the engine's config.cfg and restarts the level, so they survive later visits.</p>
-        <p class="field-help"><b>game mode</b> (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop where the Window Management API is allowed it also blacks out each additional display. Esc leaves full screen and the mode. For plain full screen with the page interface kept, use the <b>Full screen</b> control over the game. The engine's own <i>vid_fullscreen</i> row is not offered: in this browser build it does not enter full screen, so it was a control that did nothing.</p>
+        <p class="field-help"><b>full screen</b> asks the browser for the whole screen and leaves it on a second tap (or Esc), with the page interface kept. Inside the ClawBox desktop's sandboxed window the browser forbids full screen; there the row reads <i>own window</i> and opens the app in a window that is allowed to fill the display.</p>
+        <p class="field-help"><b>game mode</b> (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop where the Window Management API is allowed it also blacks out each additional display. Esc leaves full screen and the mode. The engine's own <i>vid_fullscreen</i> row is not offered: in this browser build it does not enter full screen, so it was a control that did nothing.</p>
       </div>
 
       <!-- OPTIONS: the settings that work in this build. Each row is a real
@@ -210,6 +210,17 @@
           </div>
           <small id="rtx-status">RTX look · Performance</small>
           <small>RTX is on by default (Performance, the preset built for this device's frame budget; High adds the wide light halo). Off returns every light to the engine's original shading. The choice is kept for the next visit.</small>
+        </div>
+        <!-- TOUCH CONTROLS: shown only on a touch device (mobile-controls.js
+             unhides it). The PAD button that sat over the game is gone (the
+             owner's HUD review); this page control is where the on-screen pad
+             is put away and brought back. It changes no engine cvar, so it
+             takes effect at once and needs no apply. -->
+        <div class="menu-touch" role="group" aria-label="Touch controls" hidden>
+          <p class="view-title">TOUCH</p>
+          <div class="menu-page-list">
+            <button type="button" class="setting" data-action="touch-pad" aria-pressed="true"><span class="label">touch controls</span><span class="value" id="touch-pad-value">on</span></button>
+          </div>
         </div>
         <div class="menu-apply">
           <button type="button" data-action="apply"><span class="label">apply</span><span class="hint" id="apply-hint-options">no changes</span></button>
@@ -253,10 +264,10 @@
 <script src="rtx-materials.js?v=rtx7"></script>
 <script src="rtx-renderer.js?v=rtx13"></script>
 <script src="app.js?v=rtx15"></script>
-<script src="fullscreen.js?v=rtx8"></script>
-<script src="game-mode.js?v=rtx9"></script>
+<script src="fullscreen.js?v=hud124"></script>
+<script src="game-mode.js?v=hud124"></script>
 <!-- After app.js: it installs the touch-only engine bindings on the Module that
      app.js defines, before the engine's loader runs. -->
-<script src="mobile-controls.js?v=touch5"></script>
+<script src="mobile-controls.js?v=hud124"></script>
 </body>
 </html>

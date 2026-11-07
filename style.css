@@ -596,89 +596,9 @@ canvas {
   .menu-list button { height: 38px; }
   .menu-foot { margin-top: 10px; padding-top: 10px; }
 }
-/* Full screen: the app asks for it on open (fullscreen.js) and this is the
-   way back out. The control stays small, dim and out of the way until it is
-   wanted. */
-#fullscreen-button {
-  position: fixed;
-  left: max(12px, calc(env(safe-area-inset-left, 0px) + 12px));
-  /* Clear of the engine's own status bar, which owns the canvas's bottom
-     edge: 52px is above the bar at every resolution this app runs. */
-  bottom: max(52px, calc(env(safe-area-inset-bottom, 0px) + 52px));
-  z-index: 6;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 5px 10px 5px 8px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 6px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #d0d0d0;
-  font: 12px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: 0.02em;
-  cursor: pointer;
-  opacity: 0.35;
-  transition: opacity 120ms ease, background 120ms ease;
-  user-select: none;
-}
-
-#fullscreen-button:hover,
-#fullscreen-button:focus-visible {
-  opacity: 1;
-  background: rgba(0, 0, 0, 0.8);
-  outline: none;
-}
-
-#fullscreen-button .fs-icon {
-  font-size: 13px;
-  line-height: 1;
-}
-
-/* In full screen the label would sit over the HUD for no reason: the glyph
-   stays, the words go. */
-body.is-fullscreen #fullscreen-button .fs-label {
-  display: none;
-}
-
-body.is-fullscreen #fullscreen-button {
-  opacity: 0.18;
-}
-
-#fullscreen-hint {
-  position: fixed;
-  left: 12px;
-  bottom: 86px;
-  z-index: 7;
-  max-width: min(360px, calc(100vw - 24px));
-  padding: 10px 12px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 8px;
-  background: rgba(18, 18, 18, 0.94);
-  color: #c8c8c8;
-  font: 12px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-}
-
-#fullscreen-hint[hidden] {
-  display: none;
-}
-
-#fullscreen-hint p {
-  margin: 0 0 8px;
-}
-
-#fullscreen-hint button {
-  padding: 4px 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 5px;
-  background: #2a2a2a;
-  color: #e6e6e6;
-  font: inherit;
-  cursor: pointer;
-}
-
-#fullscreen-hint button:hover {
-  background: #3a3a3a;
-}
+/* Full screen has no control over the game any more: it is VIDEO's
+   `full screen` row (fullscreen.js), drawn by the .menu-page-list rules below.
+   The owner's HUD review: the picture belongs to the game. */
 
 /* ---- Game mode (game-mode.js) -------------------------------------------
    The game surface alone: every page layer removed rather than dimmed, and the
@@ -691,8 +611,6 @@ body.is-game-mode {
 }
 
 body.is-game-mode #ui,
-body.is-game-mode #fullscreen-button,
-body.is-game-mode #fullscreen-hint,
 body.is-game-mode #loading {
   display: none !important;
 }
@@ -763,6 +681,29 @@ body.is-game-mode #loading {
 
 .menu-lighting .view-title {
   margin: 0 0 6px;
+}
+
+/* TOUCH: the on-screen pad's show/hide row, a page control in OPTIONS that
+   mobile-controls.js unhides on a touch device only. It replaces the PAD
+   button that used to sit over the game. */
+.menu-touch {
+  margin: 12px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.menu-touch[hidden] {
+  display: none;
+}
+
+.menu-touch .view-title {
+  margin: 0 0 6px;
+}
+
+.menu-touch .menu-page-list {
+  margin: 0;
+  padding: 0;
+  border-top: 0;
 }
 
 .menu-lighting .segmented {
@@ -999,11 +940,13 @@ body.is-game-mode #mobile-controls {
   font-size: 22px;
 }
 
-/* Pause/menu: small, top left beside the pad toggle, out of the aiming area. */
+/* Pause/menu: the only control in the top row (the owner's HUD review removed
+   PAD and moved full screen into the menu). Top left, out of the aiming area,
+   44 px tall. */
 #mc-pause {
   position: absolute;
   top: var(--mc-top);
-  left: calc(env(safe-area-inset-left, 0px) + 70px);
+  left: var(--mc-side);
   z-index: 3;
   width: 46px;
   height: 44px;
@@ -1027,37 +970,9 @@ body.is-game-mode #mobile-controls {
   outline-offset: 2px;
 }
 
-/* The show/hide control. It stays available while the pad is hidden, so the
-   last choice is never a dead end. */
-#mc-toggle {
-  position: absolute;
-  top: var(--mc-top);
-  left: calc(env(safe-area-inset-left, 0px) + 10px);
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 52px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0;
-  border: 1px solid rgba(198, 168, 102, 0.32);
-  border-radius: 10px;
-  background: rgba(6, 8, 10, 0.5);
-  color: var(--muted);
-  font: 600 9px/1 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  letter-spacing: 0.16em;
-  pointer-events: auto;
-  touch-action: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-#mc-toggle[aria-pressed="false"] {
-  color: var(--dim);
-  border-color: rgba(198, 168, 102, 0.16);
-}
-
+/* Touch controls off (OPTIONS > touch controls): the pad is put away and only
+   MENU stays, so the menu -- and the row that brings the pad back -- is always
+   one tap away. */
 #mobile-controls.controls-hidden #mc-stick,
 #mobile-controls.controls-hidden #mc-actions,
 #mobile-controls.controls-hidden #mc-hint {
@@ -1068,8 +983,7 @@ body.is-game-mode #mobile-controls {
    seconds or as soon as the player uses a control. */
 #mc-hint {
   position: absolute;
-  /* Below the top control row: the first-show hint must not run under PAD,
-     MENU or the full-screen button. */
+  /* Below the top control row: the first-show hint must not run under MENU. */
   top: calc(var(--mc-top) + 60px);
   left: 50%;
   z-index: 1;
@@ -1238,15 +1152,14 @@ body.touch-ui.mc-portrait:not(.menu-open):not(.is-game-mode) #rotate-overlay {
 }
 
 /* Portrait: the game pad is put away (the card asks for landscape), but the
-   pause and pad-toggle controls stay so the menus remain reachable. */
+   pause control stays so the menus remain reachable. */
 body.mc-portrait #mc-stick,
 body.mc-portrait #mc-actions,
 body.mc-portrait #mc-hint {
   display: none;
 }
 
-body.mc-portrait #mc-pause,
-body.mc-portrait #mc-toggle {
+body.mc-portrait #mc-pause {
   display: flex;
 }
 
@@ -1259,37 +1172,6 @@ body.mc-portrait #mc-toggle {
 body.touch-ui .segmented button {
   min-height: 44px;
   font-size: 10.5px;
-}
-
-/* One top row on touch, left to right: PAD (52 px at 10), MENU (46 px at 70),
-   Full screen (from 126 px). Nothing else floats over the play area, and the
-   row clears the first-show hint, which starts at --mc-top + 60 px. */
-body.touch-ui #fullscreen-button {
-  /* The same 8 px safe-area top the pad's --mc-top uses. That variable lives
-     on #mobile-controls and would not be readable here. */
-  top: max(8px, calc(env(safe-area-inset-top, 0px) + 8px));
-  bottom: auto;
-  left: calc(env(safe-area-inset-left, 0px) + 125px);
-  /* Above the pad (z-index 8): the look surface now covers the whole picture,
-     so this top-row control must sit above it or a finger could never reach
-     it. A tap here is a normal button tap and never reaches the canvas. */
-  z-index: 9;
-  min-height: 44px;
-  padding: 0 12px;
-  opacity: 0.72;
-}
-
-body.touch-ui #fullscreen-hint {
-  left: calc(env(safe-area-inset-left, 0px) + 10px);
-  bottom: auto;
-  /* Below the top row's 44 px targets, clear of the row's own box. */
-  top: max(62px, calc(env(safe-area-inset-top, 0px) + 62px));
-  max-width: calc(100vw - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px) - 20px);
-}
-
-body.touch-ui #fullscreen-hint button {
-  min-height: 44px;
-  padding: 0 14px;
 }
 
 /* A finger needs 44 px on every row, including the engine's VIDEO/OPTIONS

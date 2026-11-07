@@ -15,7 +15,8 @@
 //   (b) after 5 s, still consoleOpen === false and keyDest "game"
 //   (c) document.fullscreenElement is null after load
 //   (d) it is still null after the first click on the game canvas
-//   (e) the fullscreen button enters fullscreen (or shows the blocked hint
+//   (e) no full-screen control floats over the game; the VIDEO menu's
+//       `full screen` row enters full screen (or offers the app's own window
 //       where the browser refuses) and Esc leaves it
 //
 // plus the start-up line itself: every cvar the app passes is still on it and
@@ -446,8 +447,11 @@ function readBootRecord() {
 function readLive() {
   return dumpJson(`(() => {
     const canvas = document.getElementById("canvas");
-    const button = document.getElementById("fullscreen-button");
-    const hint = document.getElementById("fullscreen-hint");
+    // Full screen is VIDEO's page-control row now (the owner's HUD review);
+    // the floating button and its hint are checked for absence.
+    const button = document.querySelector('#menu [data-action="fullscreen"]');
+    const value = document.getElementById("fullscreen-value");
+    const floating = ["fullscreen-button", "fullscreen-hint"].filter((id) => document.getElementById(id));
     let engine = null;
     try {
       const api = window.quake2Engine;
@@ -477,8 +481,10 @@ function readLive() {
         ariaLabel: button.getAttribute("aria-label"),
         title: button.getAttribute("title"),
         classes: button.className,
+        value: value ? value.textContent.trim() : null,
       } : null,
-      hint: hint ? { hidden: hint.hidden, display: getComputedStyle(hint).display, text: (hint.textContent || "").replace(/\\s+/g, " ").trim() } : null,
+      floating,
+      menuOpen: document.body.classList.contains("menu-open"),
       startupArguments: Array.isArray(window.quake2StartupArguments) ? window.quake2StartupArguments : null,
       entityCount: (() => {
         try {
@@ -632,37 +638,49 @@ async function run() {
     { fullscreenElement: settled.fullscreenElement, fullscreenEnabled: settled.fullscreenEnabled });
   await screenshot("01-landed.png");
 
-  // ---- (e) the button ---------------------------------------------------
+  // ---- (e) the full-screen row -----------------------------------------
   // Measured before the canvas is clicked: a click on the game locks the
-  // pointer, and a locked pointer is not how a player would press a page
-  // control either, so the button is tested the way the page offers it.
-  const button = await rect("#fullscreen-button");
-  if (!button || button.w < 1 || button.h < 1) throw new Error("the fullscreen button is not on the page");
+  // pointer, and a locked pointer is not how a player would reach a page
+  // control either. Full screen lives in VIDEO's page-control list (the
+  // owner's HUD review: nothing floats over the game), so the menu is opened
+  // the way a player does it (Esc), the row is clicked, and Resume puts the
+  // game back before (d) clicks the canvas.
   const beforeButton = await readLive();
-  report.measurements.beforeButton = { button, hint: beforeButton.hint, fullscreenElement: beforeButton.fullscreenElement };
+  check("(e) no full-screen control floats over the game", beforeButton.floating.length === 0 && Boolean(beforeButton.button),
+    { floating: beforeButton.floating, row: beforeButton.button });
+  await pressEscape();
+  await waitFor("the page menu after Esc", async () => (await readLive()).menuOpen === true, 15000, 200);
+  const videoEntry = await rect('.menu-view[data-view="main"] [data-action="video"]');
+  if (!videoEntry || videoEntry.w < 1) throw new Error("the VIDEO entry is not in the menu");
+  await mouseClick(videoEntry.left + videoEntry.w / 2, videoEntry.top + videoEntry.h / 2);
+  await sleep(400);
+  await evaluate(`(() => { const row = document.querySelector('#menu [data-action="fullscreen"]'); if (row) row.scrollIntoView({ block: "center" }); return true; })()`);
+  await sleep(300);
+  const button = await rect('#menu [data-action="fullscreen"]');
+  if (!button || button.w < 1 || button.h < 1) throw new Error("the full-screen row is not in the VIDEO view");
+  report.measurements.beforeButton = { button, row: beforeButton.button, fullscreenElement: beforeButton.fullscreenElement };
   await mouseClick(button.left + button.w / 2, button.top + button.h / 2);
 
   let entered = null;
   for (let i = 0; i < 40; i++) {
     entered = await readLive();
     if (entered.fullscreenElement) break;
-    if (entered.hint && entered.hint.hidden === false) break;
+    if (entered.button && entered.button.value === "own window") break;
     await sleep(150);
   }
-  const hintShown = Boolean(entered && entered.hint && entered.hint.hidden === false);
+  const ownWindow = Boolean(entered && entered.button && entered.button.value === "own window");
   report.measurements.afterButton = {
     fullscreenElement: entered ? entered.fullscreenElement : null,
     fullscreenEnabled: entered ? entered.fullscreenEnabled : null,
-    hintShown,
-    hint: entered ? entered.hint : null,
+    ownWindow,
     button: entered ? entered.button : null,
   };
-  check("(e) the fullscreen button either enters fullscreen or shows the blocked hint",
-    Boolean(entered && (entered.fullscreenElement === true || hintShown)),
-    { fullscreenElement: entered ? entered.fullscreenElement : null, hintShown, hint: entered ? entered.hint && entered.hint.text : null });
+  check("(e) the VIDEO full-screen row either enters fullscreen or offers the app's own window",
+    Boolean(entered && (entered.fullscreenElement === true || ownWindow)),
+    { fullscreenElement: entered ? entered.fullscreenElement : null, ownWindow, row: entered ? entered.button : null });
   if (entered && entered.fullscreenElement) {
-    check("(e) the button's aria-pressed follows the fullscreen state",
-      entered.button && entered.button.ariaPressed === "true", entered.button);
+    check("(e) the row's aria-pressed and value follow the fullscreen state",
+      entered.button && entered.button.ariaPressed === "true" && entered.button.value === "on", entered.button);
     await screenshot("02-fullscreen-by-button.png");
     // Esc is the browser's own way out (full screen is a user-agent mode, so
     // the page cannot close it from script without this key).
@@ -674,22 +692,32 @@ async function run() {
       await sleep(150);
     }
     // `fullscreenchange` reaches the page a moment after the element is gone;
-    // give the button's own handler the frame it needs before reading it.
+    // give the row's own handler the frame it needs before reading it.
     await sleep(400);
     left = await readLive();
     report.measurements.afterEscape = { fullscreenElement: left ? left.fullscreenElement : null, button: left ? left.button : null };
     check("(e) Esc leaves fullscreen", Boolean(left && left.fullscreenElement === false),
       { fullscreenElement: left ? left.fullscreenElement : null });
-    check("(e) the button's aria-pressed follows Esc",
-      left && left.button && left.button.ariaPressed === "false", left ? left.button : null);
+    check("(e) the row's aria-pressed and value follow Esc",
+      left && left.button && left.button.ariaPressed === "false" && left.button.value === "off", left ? left.button : null);
     await screenshot("03-after-escape.png");
   } else {
     // The blocked path: this document can never go fullscreen, so Esc has
-    // nothing to leave, and the hint must already point at the own-window
+    // nothing to leave, and the row must already point at the own-window
     // route rather than promise a click will fix it.
     check("(e) Esc leaves fullscreen (nothing was entered to leave)",
       Boolean(entered && entered.fullscreenElement === false), { fullscreenElement: entered ? entered.fullscreenElement : null });
   }
+  // Back to the game before the canvas checks: Resume, if the menu is still
+  // up (the browser's Esc out of full screen does not reach the page).
+  if ((await readLive()).menuOpen) {
+    const resume = await rect('.menu-foot [data-action="resume"]');
+    if (resume && resume.w > 0) await mouseClick(resume.left + resume.w / 2, resume.top + resume.h / 2);
+  }
+  await waitFor("the game after Resume", async () => {
+    const live = await readLive();
+    return live.menuOpen === false && live.engine && live.engine.keyDest === 0;
+  }, 15000, 200);
 
   // ---- (d) no fullscreen after the first canvas click -------------------
   const canvas = await rect("#canvas");

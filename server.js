@@ -40,13 +40,18 @@ const PORT = Number(process.env.PORT || 4231);
 // slug ("quake-2") and runs it from a folder of that name, while a Coding Agent
 // project keeps its own folder name. Match any spelling of THIS app's id — the
 // folder it runs from, ignoring dashes, underscores and case — then strip it.
+//
+// The app's own id ("quake2") is always one of the accepted spellings. A
+// checkout that lives in a differently named folder — a Coding Agent run's
+// worktree, for one — is still the same app, and the box (and the test
+// harnesses, which all address /apps/quake2/) must be able to reach it.
 const APP_ID = path.basename(ROOT);
 const appKey = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
-const APP_KEY = appKey(APP_ID);
+const APP_KEYS = new Set([appKey(APP_ID), appKey("quake2")]);
 
 function stripAppBase(urlPath) {
   const match = /^\/apps\/([^/]+)(\/.*)?$/.exec(urlPath);
-  if (match && appKey(match[1]) === APP_KEY) return match[2] || "/";
+  if (match && APP_KEYS.has(appKey(match[1]))) return match[2] || "/";
   return urlPath;
 }
 const USERDATA = "/userdata";

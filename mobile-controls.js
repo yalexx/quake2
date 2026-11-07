@@ -67,7 +67,13 @@
 (function () {
   "use strict";
 
-  var STORE_KEY = "quake2-touch-controls";
+  // The pad's on/off choice, made in OPTIONS > touch controls. The PAD button
+  // that used to sit over the game (and kept its choice under the old key) is
+  // gone: the owner's HUD review. A value an earlier visit left under the old
+  // key is deleted rather than honoured, so nobody is left with a hidden pad
+  // and no button they remember to bring it back with.
+  var STORE_KEY = "quake2-touch-pad";
+  var LEGACY_STORE_KEY = "quake2-touch-controls";
   var HINT_KEY = "quake2-touch-hint";
   var STICK_DEADZONE = 0.22;
   var STICK_RADIUS_FRACTION = 0.42;
@@ -77,7 +83,9 @@
   var lookSurface = document.getElementById("mc-look");
   var stick = document.getElementById("mc-stick");
   var knob = document.getElementById("mc-stick-knob");
-  var toggleButton = document.getElementById("mc-toggle");
+  var padGroup = document.querySelector(".menu-touch");
+  var padRow = document.querySelector('[data-action="touch-pad"]');
+  var padRowValue = document.getElementById("touch-pad-value");
   var hintElement = document.getElementById("mc-hint");
   var rotateOverlay = document.getElementById("rotate-overlay");
   var rotateButton = document.getElementById("rotate-action");
@@ -112,7 +120,7 @@
       return window.localStorage.getItem(key);
     } catch (error) {
       // The ClawBox desktop may frame the app in an opaque-origin sandbox,
-      // where storage is denied. The toggle still works for this session.
+      // where storage is denied. The menu row still works for this session.
       return null;
     }
   }
@@ -122,6 +130,14 @@
       window.localStorage.setItem(key, value);
     } catch (error) {
       // No persistence in a sandboxed frame; the current session keeps its state.
+    }
+  }
+
+  function dropLegacyChoice() {
+    try {
+      window.localStorage.removeItem(LEGACY_STORE_KEY);
+    } catch (error) {
+      // Nothing to remove, or storage is denied.
     }
   }
 
@@ -471,11 +487,11 @@
   function applyPadVisibility() {
     if (!root) return;
     root.classList.toggle("controls-hidden", !padOn);
-    if (toggleButton) {
-      toggleButton.setAttribute("aria-pressed", padOn ? "true" : "false");
-      toggleButton.setAttribute("aria-label", padOn ? "Hide touch controls" : "Show touch controls");
-      toggleButton.classList.toggle("is-off", !padOn);
+    if (padRow) {
+      padRow.setAttribute("aria-pressed", padOn ? "true" : "false");
+      padRow.setAttribute("aria-label", padOn ? "Touch controls on: hide the on-screen pad" : "Touch controls off: show the on-screen pad");
     }
+    if (padRowValue) padRowValue.textContent = padOn ? "on" : "off";
     if (!padOn) releaseAll();
   }
 
@@ -579,8 +595,9 @@
     });
   }
 
-  // If the page is already in full screen (fullscreen.js asks for it on the
-  // first gesture), the orientation lock is allowed there and costs nothing.
+  // If the page is already in full screen (the player chose VIDEO > full
+  // screen, fullscreen.js), the orientation lock is allowed there and costs
+  // nothing.
   function lockIfFullscreen() {
     if (!uiEnabled || !isPortrait() || !document.fullscreenElement) return;
     var orientation = window.screen && window.screen.orientation;
@@ -592,6 +609,9 @@
     if (uiEnabled) return;
     uiEnabled = true;
     document.body.classList.add("touch-ui");
+    // The pad's on/off row exists only where there is a pad to put away.
+    if (padGroup) padGroup.hidden = false;
+    dropLegacyChoice();
     applyPadVisibility();
     syncOrientation();
     syncLive();
@@ -709,7 +729,7 @@
   stick.addEventListener("lostpointercapture", stickUp);
   stick.addEventListener("contextmenu", function (event) { event.preventDefault(); });
 
-  if (toggleButton) toggleButton.addEventListener("click", togglePad);
+  if (padRow) padRow.addEventListener("click", togglePad);
   if (rotateButton) rotateButton.addEventListener("click", function (event) {
     event.preventDefault();
     event.stopPropagation();

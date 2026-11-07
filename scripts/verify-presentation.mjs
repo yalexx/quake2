@@ -2455,22 +2455,32 @@ async function pressAltEnter() {
 // Both frame samples must be taken in the same display state: full screen is
 // not part of game mode's saving (the claim is the page work it removes), and
 // in this headless browser a full-screen page and a windowed one composite
-// differently enough to swamp the difference. The page asks for full screen on
-// its own first gesture; this drives its own control only when it has not.
+// differently enough to swamp the difference. Full screen lives in VIDEO's
+// menu row now (the owner's HUD review: no control floats over the game), so
+// this opens the menu, clicks the row with a trusted input -- the gesture the
+// browser requires -- and resumes the game before the caller samples frames.
 async function ensurePageFullscreen(label) {
   const now = await pageLayers();
   if (now.fullscreenElement) return true;
   await evaluate("document.exitPointerLock ? document.exitPointerLock() : null");
   await sleep(300);
-  const rect = await elementCentre("#fullscreen-button");
+  if (!(await openMenu())) return false;
+  await click('[data-action="video"]');
+  await sleep(500);
+  await evaluate(`(() => { const row = document.querySelector('#menu [data-action="fullscreen"]'); if (row) row.scrollIntoView({ block: "center" }); return true; })()`);
+  const rect = await elementCentre('#menu [data-action="fullscreen"]');
   if (!rect) return false;
   await trustedClickAt(rect.x, rect.y);
   try {
     await waitFor(async () => (await pageLayers()).fullscreenElement === true, 10000, 300, "the page to enter full screen");
-    return true;
   } catch (error) {
     return false;
   }
+  // The row was reached through the page menu, which pauses the game: put the
+  // game back before the frame comparison starts.
+  await resume();
+  await sleep(1000);
+  return true;
 }
 
 // The normal page's own per-frame work, as the main thread pays for it: the
@@ -2684,11 +2694,15 @@ async function gameModeCheck(resolution) {
 
   check(label + ": game mode is active and the game is running", entered.active === true && resumed === true,
     "active, key_dest game", "active " + entered.active + ", key_dest " + (await state()).engine.keyDestName);
-  const uiGone = layers.ui && layers.ui.display === "none" && layers.fullscreenButton && layers.fullscreenButton.display === "none" &&
-    (!layers.loading || layers.loading.display === "none");
+  // Full screen has no floating control any more (VIDEO > full screen), so
+  // the old button is checked for absence instead of for display:none.
+  const uiGone = layers.ui && layers.ui.display === "none" &&
+    (!layers.loading || layers.loading.display === "none") &&
+    !layers.fullscreenButton && !layers.hint;
   check(label + ": game mode hides every page layer", Boolean(uiGone),
-    "#ui, #fullscreen-button and #loading are display:none",
-    JSON.stringify({ ui: layers.ui, button: layers.fullscreenButton, loading: layers.loading }));
+    "#ui and #loading are display:none, and no floating full-screen control exists",
+    JSON.stringify({ ui: layers.ui, loading: layers.loading,
+      floatingFullscreen: Boolean(layers.fullscreenButton || layers.hint) }));
   check(label + ": game mode makes the page black around the picture",
     layers.bodyBackground === "rgb(0, 0, 0)" && layers.htmlBackground === "rgb(0, 0, 0)",
     "rgb(0, 0, 0) on <html> and <body>", layers.htmlBackground + " / " + layers.bodyBackground);
