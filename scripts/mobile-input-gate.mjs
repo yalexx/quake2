@@ -684,7 +684,7 @@ async function checkLayout(id, label, expectTargets) {
   return snap;
 }
 
-const LANDSCAPE_TARGETS = ["#mc-stick", "#mc-fire", "#mc-jump", "#mc-use", "#mc-pause"];
+const LANDSCAPE_TARGETS = ["#mc-stick", "#mc-fire", "#mc-jump", "#mc-crouch", "#mc-use", "#mc-weapon", "#mc-pause"];
 const PORTRAIT_TARGETS = ["#mc-pause", ".rotate-card", "#rotate-action"];
 
 // The landscape layouts the review names, then back to the run's own size.
@@ -1016,23 +1016,32 @@ async function fireButton() {
   return rect("#mc-fire");
 }
 
-// With only the blaster owned, the two weapon buttons must not change the
-// weapon.  Run at the spawn, before the fixture walk: the walk can cross map
-// items and leave the player owning a second weapon.
+// With only the blaster owned, WPN must not change the weapon -- and must not
+// be silent either: the owner's note was "the wpn buttons not doing anything".
+// The pad says there is nothing to switch to.  Run at the spawn, before the
+// fixture walk: the walk can cross map items and leave the player owning a
+// second weapon.
 async function checkBlasterOnly() {
   const before = await readEngine();
-  const next = await rect("#mc-next");
-  const prev = await rect("#mc-prev");
-  if (!next || !prev || next.w === 0 || prev.w === 0) throw new Error("no weapon buttons on the pad");
-  await tapSelector("#mc-next", 120);
-  await sleep(1500);
-  const afterNext = await readEngine();
-  await tapSelector("#mc-prev", 120);
-  await sleep(1500);
-  const afterPrev = await readEngine();
-  check("5a", "buttons: PREV/NEXT leave the weapon unchanged with only the blaster",
-    afterNext.weaponIndex === before.weaponIndex && afterPrev.weaponIndex === before.weaponIndex,
-    { before: before.weaponIndex, afterNext: afterNext.weaponIndex, afterPrev: afterPrev.weaponIndex, ammo: { before: before.ammo, afterNext: afterNext.ammo, afterPrev: afterPrev.ammo } });
+  const weapon = await rect("#mc-weapon");
+  if (!weapon || weapon.w === 0) throw new Error("no WPN control on the pad");
+  const tapsBefore = (await touchState()).weaponTaps;
+  await tapSelector("#mc-weapon", 120);
+  // The touch layer waits for both 2 s and 20 drawn frames before it decides
+  // nothing changed (headless rendering here runs at a few frames a second).
+  const noted = await waitFor("the WPN note", async () => {
+    const now = await touchState();
+    const engine = await readEngine();
+    if (engine && engine.weaponIndex !== before.weaponIndex) return { changed: true, now, engine };
+    return now && now.weaponNote ? { changed: false, now, engine } : false;
+  }, 30000, 250).catch(() => null);
+  const note = await rect("#mc-weapon-note");
+  const after = await readEngine();
+  check("5a", "WPN with only the blaster: the weapon index stays and the pad says there is nothing to switch to",
+    Boolean(noted && !noted.changed && noted.now.weaponTaps === tapsBefore + 1 && note && note.display !== "none" && note.w > 0 &&
+      after.weaponIndex === before.weaponIndex),
+    { before: before.weaponIndex, after: after.weaponIndex, taps: noted && noted.now.weaponTaps, noteShown: Boolean(noted && noted.now.weaponNote),
+      noteText: note && note.text, noteBox: note && note.w > 0 ? round(note) : null, ammo: [before.ammo, after.ammo] });
 }
 
 // A deathmatch death respawns the player with the blaster only, which silently
@@ -1382,12 +1391,25 @@ async function checksTouch(base, candidate) {
     // +moveup is sampled per frame: hold it across a few frames so the jump
     // starts on any box, but release well before the first landing (~0.7 s of
     // game time) so the player does not bunny-hop through the landing check.
-    await pressAt(jx, jy);
-    await sleep(600);
-    await releaseTouch();
+    // z is read during the hold as well as after it: on a box that draws
+    // quickly the whole jump fits inside the hold, and a check that only
+    // looked after the release saw the player already back on the floor
+    // (measured on the 1.2.3 tree: 0 units, while a reading at 300 ms into
+    // the hold showed +15).
     let maxZ = jumpBefore.position.z;
     let rose = false;
     let landed = false;
+    await pressAt(jx, jy);
+    const holdStart = Date.now();
+    while (Date.now() - holdStart < 600) {
+      const now = await readEngine();
+      if (now && now.position) {
+        if (now.position.z > maxZ) maxZ = now.position.z;
+        if (now.position.z > jumpBefore.position.z + 5) rose = true;
+      }
+      await sleep(60);
+    }
+    await releaseTouch();
     const jumpStart = Date.now();
     while (Date.now() - jumpStart < 25000) {
       const now = await readEngine();
@@ -1423,30 +1445,109 @@ async function checksTouch(base, candidate) {
       useAfter.keyDest === 0 && useAfter.dead === false,
       { keyDest: useAfter.keyDest, dead: useAfter.dead, position: useAfter.position, keysHeldWhileUse: useDuring && useDuring.keys });
 
-    // PREV/NEXT with the give-all loadout change the weapon.
+    // WPN with the give-all loadout: each tap switches to the next weapon the
+    // engine's own weapon model index confirms.  The tap is weapnext on /,
+    // the key default.cfg binds; on the 1.2.3 tree the pad pressed [ and ],
+    // which kept default.cfg's invprev/invnext because q2touch.cfg never ran.
     const weaponBefore = await readEngine();
-    await tapSelector("#mc-next", 120);
-    let nextState = null;
-    const nextOk = await waitFor("weaponIndex change after NEXT", async () => {
-      const now = await readEngine();
-      if (now.weaponIndex !== weaponBefore.weaponIndex) { nextState = now; return true; }
-      return false;
-    }, 8000).catch(() => null);
-    await tapSelector("#mc-prev", 120);
-    let prevState = null;
-    const prevOk = await waitFor("weaponIndex change after PREV", async () => {
-      const now = await readEngine();
-      if (nextState && now.weaponIndex !== nextState.weaponIndex) { prevState = now; return true; }
-      return false;
-    }, 8000).catch(() => null);
-    check("5e", "buttons: NEXT and PREV change the weapon with the give-all loadout",
-      Boolean(nextOk) && Boolean(prevOk),
-      { before: weaponBefore.weaponIndex, afterNext: nextState && nextState.weaponIndex, afterPrev: prevState && prevState.weaponIndex });
+    const switches = [];
+    let previous = weaponBefore;
+    for (let tap = 0; tap < 2; tap++) {
+      await tapSelector("#mc-weapon", 120);
+      let switched = null;
+      await waitFor("weaponIndex change after WPN tap " + (tap + 1), async () => {
+        const now = await readEngine();
+        if (now && now.weaponIndex !== null && now.weaponIndex !== previous.weaponIndex) { switched = now; return true; }
+        return false;
+      }, 20000).catch(() => null);
+      switches.push({ before: previous.weaponIndex, after: switched && switched.weaponIndex });
+      if (!switched) break;
+      previous = switched;
+      await sleep(600);
+    }
+    const weaponNoteAfter = await touchState();
+    check("5e", "WPN with the give-all loadout: each tap changes the engine's weapon index, with no 'nothing to switch' note",
+      switches.length === 2 && switches.every((one) => one.after !== null && one.after !== one.before) && weaponNoteAfter && weaponNoteAfter.weaponNote === false,
+      { before: weaponBefore.weaponIndex, switches, note: weaponNoteAfter && weaponNoteAfter.weaponNote,
+        q2touchExecuted: report.notes.some((entry) => entry.kind === "engine-cfg" && /q2touch/i.test(entry.text)) });
 
-    // If PREV landed on a weapon with no ammo (the blaster), select the machinegun again.
-    if (prevState && prevState.ammo === 0) {
-      await keyTap("4", "Digit4", 52, "4");
-      await sleep(1500);
+    // Back to the machinegun for the ammo checks below.
+    await keyTap("4", "Digit4", 52, "4");
+    await waitFor("the machinegun back after WPN", async () => {
+      const now = await readEngine();
+      return now && now.weaponIndex === weaponBefore.weaponIndex && typeof now.ammo === "number" && now.ammo > 0;
+    }, 20000).catch(() => null);
+
+    // CROUCH: holds the PC's crouch key, c (+movedown).  The engine's view
+    // origin drops by the duck (view height 22 -> -2) while it is held and
+    // comes back after the release; x/y do not move.
+    {
+      const crouchBox = await rect("#mc-crouch");
+      const jumpRow = await rect("#mc-jump");
+      if (!crouchBox || crouchBox.w === 0) throw new Error("no #mc-crouch");
+      const standing = await readStable("crouch: standing", 8000, 900).catch(() => null) || await readEngine();
+      const countersBefore = await gateCounters();
+      await pressAt(crouchBox.left + crouchBox.w / 2, crouchBox.top + crouchBox.h / 2);
+      let ducked = null;
+      await waitFor("the view to drop while CROUCH is held", async () => {
+        const now = await readEngine();
+        if (now && now.position && now.position.z < standing.position.z - 15) { ducked = now; return true; }
+        return false;
+      }, 15000, 120).catch(() => null);
+      const held = await touchState();
+      await releaseTouch();
+      let stood = null;
+      await waitFor("the view back after CROUCH is released", async () => {
+        const now = await readEngine();
+        if (now && now.position && Math.abs(now.position.z - standing.position.z) <= 2) { stood = now; return true; }
+        return false;
+      }, 15000, 120).catch(() => null);
+      const counters = await gateCounters();
+      const cKeys = counters.keylog.slice(countersBefore.keylog.length).filter((entry) => entry.vk === 67 && entry.synthetic);
+      const drift = ducked ? Math.hypot(ducked.position.x - standing.position.x, ducked.position.y - standing.position.y) : null;
+      check("5h", "CROUCH beside JUMP holds c: the engine's view drops >= 15 units while held and returns after release",
+        Boolean(ducked && stood && held && held.keys.includes("crouch") && drift !== null && drift < 2 &&
+          cKeys.some((entry) => entry.type === "down") && cKeys.some((entry) => entry.type === "up") &&
+          Math.abs(crouchBox.top - jumpRow.top) < 1 && Math.abs(crouchBox.h - jumpRow.h) < 1 && crouchBox.right <= jumpRow.left),
+        { zStanding: standing.position.z, zDucked: ducked && ducked.position.z, zAfter: stood && stood.position.z,
+          drop: ducked ? Number((standing.position.z - ducked.position.z).toFixed(2)) : null, xyDrift: drift === null ? null : Number(drift.toFixed(2)),
+          keysHeld: held && held.keys, keylog: cKeys.map((entry) => entry.type),
+          crouchBox: round(crouchBox), jumpBox: round(jumpRow) });
+    }
+
+    // CROUCH with the stick: a crouch-walk moves the player with the view low.
+    {
+      const stick = await rect("#mc-stick");
+      const crouchBox = await rect("#mc-crouch");
+      const sx = stick.left + stick.w / 2, sy = stick.top + stick.h / 2;
+      const offset = stick.w * 0.42 * 0.70;
+      const start = await readStable("crouch-walk: standing", 8000, 900).catch(() => null) || await readEngine();
+      const id1 = nextTouchId(), id2 = nextTouchId();
+      const cx = crouchBox.left + crouchBox.w / 2, cy = crouchBox.top + crouchBox.h / 2;
+      await touchEvent("touchStart", [point(id2, cx, cy)]);
+      let low = null;
+      await waitFor("the view low before the crouch-walk", async () => {
+        const now = await readEngine();
+        if (now && now.position && now.position.z < start.position.z - 15) { low = now; return true; }
+        return false;
+      }, 15000, 120).catch(() => null);
+      await touchEvent("touchStart", [point(id2, cx, cy), point(id1, sx, sy)]);
+      await sleep(120);
+      await touchEvent("touchMove", [point(id2, cx, cy), point(id1, sx, sy - offset)]);
+      let walked = null;
+      await waitFor("the crouch-walk to cover ground", async () => {
+        const now = await readEngine();
+        if (now && now.position && distance(start.position, now.position) > 30) { walked = now; return true; }
+        return false;
+      }, 15000, 150).catch(() => null);
+      const walkState = await touchState();
+      await touchEvent("touchEnd", []);
+      await sleep(900);
+      check("5i", "CROUCH with the stick: a crouch-walk moves the player while the view stays low",
+        Boolean(low && walked && walked.position.z < start.position.z - 15 && walkState && walkState.keys.includes("crouch") && walkState.keys.includes("forward")),
+        { zStanding: start.position.z, zLow: low && low.position.z, zWhileWalking: walked && walked.position.z,
+          movedUnits: walked ? Number(distance(start.position, walked.position).toFixed(1)) : null, keys: walkState && walkState.keys });
+      await returnTo(start);
     }
 
     // PAUSE: the engine menu opens, the pad hides, Resume returns to the game.
@@ -1606,6 +1707,43 @@ async function checksTouch(base, candidate) {
       check("6c", "two fingers: stick + look move the player and turn the view at once",
         movedUnits > 10 && Math.abs(d.yaw) > 5,
         { movedUnits: Number(movedUnits.toFixed(1)), yawDelta: Number(d.yaw.toFixed(2)), pitchDelta: Number(d.pitch.toFixed(2)) });
+      await returnTo(before);
+    }
+
+    // stick + FIRE that slides: move, aim and fire in ONE two-finger gesture
+    // (the owner's "fire+move"). The left thumb holds the stick forward; the
+    // right thumb presses FIRE and slides left while it keeps firing.
+    {
+      await ensureArmed("check 6d");
+      const before = await readEngine();
+      const countersBefore = await gateCounters();
+      const id1 = nextTouchId(), id2 = nextTouchId();
+      await touchEvent("touchStart", [point(id1, sx, sy)]);
+      await sleep(120);
+      await touchEvent("touchMove", [point(id1, sx, sy - offset)]);
+      await touchEvent("touchStart", [point(id1, sx, sy - offset), point(id2, fx, fy)]);
+      await sleep(700);
+      const aiming = await touchState();
+      for (let i = 1; i <= 10; i++) {
+        await touchEvent("touchMove", [point(id1, sx, sy - offset), point(id2, fx - 6 * i, fy - 2 * i)]);
+        await sleep(70);
+      }
+      await sleep(1600);
+      const during = await readEngine();
+      const held = await touchState();
+      await touchEvent("touchEnd", []);
+      await sleep(900);
+      const after = await readEngine();
+      const counters = await gateCounters();
+      const movedUnits = distance(before.position, during.position);
+      const d = angleDelta(before, during);
+      const ammoDrop = before.ammo - during.ammo;
+      check("6d", "one two-finger gesture: stick + FIRE sliding to aim moves >= 50 units, turns >= 5 deg and drops ammo",
+        movedUnits >= 50 && Math.abs(d.yaw) >= 5 && ammoDrop > 0 && held && held.fireHeld === true && held.keys.includes("forward") &&
+          aiming && aiming.fireAiming === true && after.ammo <= during.ammo,
+        { movedUnits: Number(movedUnits.toFixed(1)), yawDelta: Number(d.yaw.toFixed(2)), pitchDelta: Number(d.pitch.toFixed(2)),
+          ammo: [before.ammo, during.ammo, after.ammo], keys: held && held.keys, fireHeld: held && held.fireHeld,
+          fireAiming: aiming && aiming.fireAiming, mousedowns: counters.mousedown - countersBefore.mousedown });
       await returnTo(before);
     }
   }

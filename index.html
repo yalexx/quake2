@@ -35,27 +35,32 @@
     <div id="mc-stick-knob" aria-hidden="true"></div>
   </div>
   <div id="mc-actions" role="group" aria-label="Game actions">
-    <button id="mc-fire" type="button" class="mc-btn mc-btn-fire" data-mc-action="fire" aria-label="Fire">
+    <!-- FIRE: press to shoot; slide the same thumb to aim while it fires. -->
+    <button id="mc-fire" type="button" class="mc-btn mc-btn-fire" data-mc-action="fire" aria-label="Fire (slide to aim)">
       <span class="mc-ico" aria-hidden="true">&#9678;</span><span class="mc-lbl" aria-hidden="true">FIRE</span>
     </button>
     <button id="mc-jump" type="button" class="mc-btn" data-mc-action="jump" aria-label="Jump">
       <span class="mc-ico" aria-hidden="true">&#8593;</span><span class="mc-lbl" aria-hidden="true">JUMP</span>
     </button>
+    <!-- CROUCH: hold, like the PC's C key (+movedown). -->
+    <button id="mc-crouch" type="button" class="mc-btn" data-mc-action="crouch" aria-label="Crouch (hold)">
+      <span class="mc-ico" aria-hidden="true">&#8595;</span><span class="mc-lbl" aria-hidden="true">CROUCH</span>
+    </button>
     <button id="mc-use" type="button" class="mc-btn" data-mc-action="use" aria-label="Use or open">
       <span class="mc-ico" aria-hidden="true">&#9707;</span><span class="mc-lbl" aria-hidden="true">USE</span>
     </button>
-    <button id="mc-prev" type="button" class="mc-btn mc-btn-small" data-mc-action="prev" aria-label="Previous weapon">
-      <span class="mc-ico" aria-hidden="true">&#8249;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
-    </button>
-    <button id="mc-next" type="button" class="mc-btn mc-btn-small" data-mc-action="next" aria-label="Next weapon">
-      <span class="mc-ico" aria-hidden="true">&#8250;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
+    <!-- WPN: the next weapon the player carries (the engine's weapnext). -->
+    <button id="mc-weapon" type="button" class="mc-btn" data-mc-action="weapon" aria-label="Next weapon">
+      <span class="mc-ico" aria-hidden="true">&#8635;</span><span class="mc-lbl" aria-hidden="true">WPN</span>
     </button>
   </div>
+  <!-- Said when a WPN tap had nothing to switch to; never takes a touch. -->
+  <div id="mc-weapon-note" role="status" aria-live="polite" hidden>No other weapon to switch to yet</div>
   <button id="mc-pause" type="button" class="mc-btn mc-btn-small" data-mc-action="pause" aria-label="Pause and open the menu">
     <span class="mc-ico" aria-hidden="true">&#9776;</span><span class="mc-lbl" aria-hidden="true">MENU</span>
   </button>
   <div id="mc-hint" role="status" aria-live="polite" hidden>
-    <b>Left stick</b> moves &middot; <b>drag the right side</b> to look &middot; <b>FIRE</b> shoots &middot; <b>JUMP</b> &amp; <b>USE</b> beside it
+    <b>Left stick</b> moves &middot; <b>drag the right side</b> to look &middot; <b>FIRE</b> shoots, slide it to aim &middot; <b>JUMP</b>, <b>CROUCH</b> &amp; <b>USE</b> beside it
   </div>
 </div>
 
@@ -263,7 +268,7 @@
 <script src="engine-state.js?v=rtx8"></script>
 <script src="rtx-materials.js?v=rtx7"></script>
 <script src="rtx-renderer.js?v=rtx13"></script>
-<script src="app.js?v=rtx15"></script>
+<script src="app.js?v=hud124"></script>
 <script src="fullscreen.js?v=hud124"></script>
 <script src="game-mode.js?v=hud124"></script>
 <!-- After app.js: it installs the touch-only engine bindings on the Module that

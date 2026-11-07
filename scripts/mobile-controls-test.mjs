@@ -634,43 +634,44 @@ async function run() {
   const fireBox = await rect("#mc-fire");
   const jumpBox = await rect("#mc-jump");
   const useBox = await rect("#mc-use");
-  const prevBox = await rect("#mc-prev");
-  const nextBox = await rect("#mc-next");
+  const crouchBox = await rect("#mc-crouch");
+  const weaponBox = await rect("#mc-weapon");
   const pauseBox = await rect("#mc-pause");
-  const toggleBox = await rect("#mc-toggle");
-  const fullscreenBox = await rect("#fullscreen-button");
+  const floatingControls = await dumpJson(`["mc-toggle", "fullscreen-button", "fullscreen-hint", "mc-prev", "mc-next"].filter((id) => document.getElementById(id))`);
   const stickBox = await rect("#mc-stick");
   const lookBox = await rect("#mc-look");
   const stickCentre = { x: stickBox.left + stickBox.w / 2, y: stickBox.top + stickBox.h / 2 };
 
-  // The top row at 844x390: PAD, MENU and Full screen share it at 44 px, and
-  // nothing in it may overlap anything else, the weapon pair or the hint.
-  const topRow = [toggleBox, pauseBox, fullscreenBox];
+  // The top row at 844x390 (the owner's HUD review): PAD is gone and full
+  // screen lives in VIDEO, so MENU is the row's only control, at 44 px, and
+  // nothing may overlap it, the weapon control or the hint.
+  const topRow = [pauseBox];
   const overlaps = (a, b) => a && b &&
     !(a.right <= b.left + 0.5 || b.right <= a.left + 0.5 || a.bottom <= b.top + 0.5 || b.bottom <= a.top + 0.5);
   const rowClash = [];
-  for (const [nameA, a] of [["#mc-toggle", toggleBox], ["#mc-pause", pauseBox], ["#fullscreen-button", fullscreenBox],
-    ["#mc-prev", prevBox], ["#mc-next", nextBox], ["#mc-hint", firstHintBox]]) {
-    for (const [nameB, b] of [["#mc-toggle", toggleBox], ["#mc-pause", pauseBox], ["#fullscreen-button", fullscreenBox],
-      ["#mc-prev", prevBox], ["#mc-next", nextBox], ["#mc-hint", firstHintBox]]) {
+  const clashSet = [["#mc-pause", pauseBox], ["#mc-weapon", weaponBox], ["#mc-crouch", crouchBox], ["#mc-jump", jumpBox],
+    ["#mc-use", useBox], ["#mc-fire", fireBox], ["#mc-hint", firstHintBox]];
+  for (const [nameA, a] of clashSet) {
+    for (const [nameB, b] of clashSet) {
       if (nameA < nameB && overlaps(a, b)) rowClash.push(nameA + " / " + nameB);
     }
   }
-  check("the top row carries PAD, MENU and Full screen at 844x390",
+  check("no PAD, full-screen or WPN-pair control is left over the game", floatingControls.length === 0, floatingControls);
+  check("the top row carries MENU alone at 844x390",
     topRow.every((box) => box && box.w >= 44 && box.h >= 44 && box.top >= 0 && box.bottom <= metrics.inner.h + 0.5 &&
       box.left >= 0 && box.right <= metrics.inner.w + 0.5 && box.display !== "none"),
     topRow.map((box) => box && { id: box.text, left: Number(box.left.toFixed(1)), right: Number(box.right.toFixed(1)),
       top: Number(box.top.toFixed(1)), bottom: Number(box.bottom.toFixed(1)), w: box.w, h: box.h }));
-  check("PAD, MENU, Full screen, the weapon pair and the hint do not overlap",
+  check("MENU, the action controls and the hint do not overlap",
     rowClash.length === 0,
-    "no pair of the six control boxes intersects",
+    "no pair of the seven boxes intersects",
     JSON.stringify(rowClash));
   check("the first-show hint sits below the top control row",
     firstHintBox && topRow.every((box) => box && firstHintBox.top >= box.bottom + 2),
     { hintTop: firstHintBox && Number(firstHintBox.top.toFixed(1)),
       rowBottom: Number(Math.max(...topRow.map((box) => box ? box.bottom : 0)).toFixed(1)) });
 
-  const buttons = [fireBox, jumpBox, useBox, prevBox, nextBox, pauseBox, toggleBox];
+  const buttons = [fireBox, jumpBox, crouchBox, useBox, weaponBox, pauseBox];
   check("FIRE is the large primary action (>= 72 px)", fireBox && fireBox.w >= 72 && fireBox.h >= 72, { w: fireBox && fireBox.w, h: fireBox && fireBox.h });
   check("FIRE is larger than every secondary control", buttons.filter((b) => b !== fireBox).every((b) => b.w < fireBox.w), buttons.map((b) => b.w));
   check("every touch target is at least 44 px", buttons.every((b) => b.w >= 44 && b.h >= 44) && stickBox.w >= 44 && stickBox.h >= 44,
@@ -680,13 +681,16 @@ async function run() {
     Math.hypot(useBox.left + useBox.w / 2 - (fireBox.left + fireBox.w / 2), useBox.top + useBox.h / 2 - (fireBox.top + fireBox.h / 2)) <= 175,
     { jump: Math.round(Math.hypot(jumpBox.left + jumpBox.w / 2 - (fireBox.left + fireBox.w / 2), jumpBox.top + jumpBox.h / 2 - (fireBox.top + fireBox.h / 2))),
       use: Math.round(Math.hypot(useBox.left + useBox.w / 2 - (fireBox.left + fireBox.w / 2), useBox.top + useBox.h / 2 - (fireBox.top + fireBox.h / 2))) });
-  check("weapon cycle is small and above the firing arc", prevBox && nextBox && prevBox.w <= 48 && nextBox.w <= 48 && prevBox.bottom <= useBox.top + 1,
-    { prev: prevBox, next: nextBox, useTop: useBox.top });
+  check("WPN is one control, smaller than FIRE, above the firing arc", weaponBox && weaponBox.w <= 56 && weaponBox.bottom <= useBox.top + 1,
+    { weapon: weaponBox, useTop: useBox.top });
+  check("CROUCH sits beside JUMP, in its row and at its size", crouchBox && jumpBox && Math.abs(crouchBox.top - jumpBox.top) < 1 &&
+    Math.abs(crouchBox.h - jumpBox.h) < 1 && crouchBox.right <= jumpBox.left,
+    { crouch: crouchBox, jump: jumpBox });
   check("pause/menu is small and out of the aiming area", pauseBox && pauseBox.w <= 50 && pauseBox.top < 60, { w: pauseBox.w, top: pauseBox.top });
   check("all controls fit inside the viewport", buttons.every((b) => b.left >= 0 && b.top >= 0 && b.right <= metrics.inner.w + 0.5 && b.bottom <= metrics.inner.h + 0.5) &&
     stickBox.left >= 0 && stickBox.right <= metrics.inner.w + 0.5 && stickBox.bottom <= metrics.inner.h + 0.5, null);
-  check("no control covers the engine status-bar band", Math.max(fireBox.bottom, jumpBox.bottom, useBox.bottom, stickBox.bottom, prevBox.bottom, nextBox.bottom) <= metrics.inner.h - 50,
-    { lowest: Math.max(fireBox.bottom, jumpBox.bottom, useBox.bottom, stickBox.bottom, prevBox.bottom, nextBox.bottom), viewportBottom: metrics.inner.h });
+  check("no control covers the engine status-bar band", Math.max(fireBox.bottom, jumpBox.bottom, crouchBox.bottom, useBox.bottom, stickBox.bottom, weaponBox.bottom) <= metrics.inner.h - 50,
+    { lowest: Math.max(fireBox.bottom, jumpBox.bottom, crouchBox.bottom, useBox.bottom, stickBox.bottom, weaponBox.bottom), viewportBottom: metrics.inner.h });
   const coverage = buttons.concat([stickBox]).reduce((sum, b) => sum + b.w * b.h, 0) / (metrics.inner.w * metrics.inner.h);
   check("the right side stays mostly free for dragging to look", coverage < 0.22, { coverage: Number(coverage.toFixed(3)) });
   const lookCentre = { x: lookBox.left + lookBox.w * 0.72, y: lookBox.top + lookBox.h * 0.5 };
@@ -698,23 +702,21 @@ async function run() {
   check("the look area is the touch look surface above the canvas",
     stack && stack[0] === "mc-look" && stack.indexOf("canvas") > 0, stack);
   check("every control carries a visible label and an accessible name",
-    [["#mc-fire", "FIRE"], ["#mc-jump", "JUMP"], ["#mc-use", "USE"], ["#mc-prev", "WPN"], ["#mc-next", "WPN"], ["#mc-pause", "MENU"]]
+    [["#mc-fire", "FIRE"], ["#mc-jump", "JUMP"], ["#mc-crouch", "CROUCH"], ["#mc-use", "USE"], ["#mc-weapon", "WPN"], ["#mc-pause", "MENU"]]
       .every(([selector, label]) => {
-        const boxes = { "#mc-fire": fireBox, "#mc-jump": jumpBox, "#mc-use": useBox, "#mc-prev": prevBox, "#mc-next": nextBox, "#mc-pause": pauseBox };
+        const boxes = { "#mc-fire": fireBox, "#mc-jump": jumpBox, "#mc-crouch": crouchBox, "#mc-use": useBox, "#mc-weapon": weaponBox, "#mc-pause": pauseBox };
         return boxes[selector].text.includes(label) && boxes[selector].aria;
       }), null);
 
-  // The full-screen control shares the top row and must stay tappable there.
-  const fullscreenHit = await dumpJson(`(() => {
-    const box = document.getElementById("fullscreen-button").getBoundingClientRect();
-    const element = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
-    const button = element && element.closest ? element.closest("button") : null;
-    return { id: button ? button.id : null, display: getComputedStyle(document.getElementById("fullscreen-button")).display };
+  // Full screen moved into VIDEO's page-control list (the owner's HUD review).
+  const fullscreenRow = await dumpJson(`(() => {
+    const row = document.querySelector('#menu [data-action="fullscreen"]');
+    const view = row && row.closest(".menu-view");
+    return row ? { view: view && view.dataset.view, pageList: Boolean(row.closest(".menu-page-list")) } : null;
   })()`);
-  check("the full-screen control is finger-sized and tappable",
-    fullscreenBox && fullscreenBox.h >= 44 && fullscreenBox.left >= 0 && fullscreenBox.right <= metrics.inner.w + 0.5 &&
-    fullscreenHit && fullscreenHit.id === "fullscreen-button",
-    { box: fullscreenBox, hit: fullscreenHit });
+  check("the full-screen control is VIDEO's page-control row, not a button over the game",
+    Boolean(fullscreenRow && fullscreenRow.view === "video" && fullscreenRow.pageList) && !floatingControls.includes("fullscreen-button"),
+    fullscreenRow);
 
   // Safe-area insets: Chrome can emulate a notch and a home indicator. The
   // controls and the canvas must move inside them, not under them.
@@ -753,7 +755,7 @@ async function run() {
   // the game state changed first.)
   await evaluate(`(() => {
     window.__touchWeaponKeys = [];
-    for (const key of ["[", "]"]) {
+    for (const key of ["/"]) {
       window.addEventListener("keydown", function (event) {
         if (event.key === key) window.__touchWeaponKeys.push({ type: "down", key, synthetic: !!event.__q2synthetic });
       }, true);
@@ -763,14 +765,11 @@ async function run() {
     }
     return 1;
   })()`);
-  await tapSelector("#mc-prev");
-  await tapSelector("#mc-next");
+  await tapSelector("#mc-weapon");
   const weaponKeys = await dumpJson("window.__touchWeaponKeys || []");
-  check("the weapon buttons press the engine's weapon keys",
-    weaponKeys.some((one) => one.key === "[" && one.type === "down" && one.synthetic) &&
-    weaponKeys.some((one) => one.key === "[" && one.type === "up" && one.synthetic) &&
-    weaponKeys.some((one) => one.key === "]" && one.type === "down" && one.synthetic) &&
-    weaponKeys.some((one) => one.key === "]" && one.type === "up" && one.synthetic),
+  check("WPN presses the engine's weapnext key (/)",
+    weaponKeys.some((one) => one.key === "/" && one.type === "down" && one.synthetic) &&
+    weaponKeys.some((one) => one.key === "/" && one.type === "up" && one.synthetic),
     weaponKeys);
   check("weapon switching leaves the game in control", (await readEngine()).keyDest === 0);
 
@@ -1046,33 +1045,38 @@ async function run() {
   await waitForFirstLive();
   await waitForGame("after resetting settings");
 
-  // Show/hide and persistence.
+  // Show/hide and persistence: OPTIONS > touch controls (the PAD button over
+  // the game is gone; the input gate drives the row through the menu).
   stage = "toggle";
-  await tapSelectorSafe("#mc-toggle");
+  const padRowClick = () => evaluate(`(() => { document.querySelector('[data-action="touch-pad"]').click(); return 1; })()`);
+  await padRowClick();
   await sleep(250);
   const hidden = await dumpJson(`(() => ({
     actions: getComputedStyle(document.getElementById("mc-actions")).display,
     stick: getComputedStyle(document.getElementById("mc-stick")).display,
-    toggle: getComputedStyle(document.getElementById("mc-toggle")).display,
-    stored: localStorage.getItem("quake2-touch-controls")
+    pause: getComputedStyle(document.getElementById("mc-pause")).display,
+    value: document.getElementById("touch-pad-value").textContent,
+    stored: localStorage.getItem("quake2-touch-pad")
   }))()`);
-  check("the pad can be hidden and the choice is stored", hidden.actions === "none" && hidden.stick === "none" && hidden.toggle !== "none" && hidden.stored === "off", hidden);
+  check("the pad can be hidden from OPTIONS, MENU stays, and the choice is stored", hidden.actions === "none" && hidden.stick === "none" && hidden.pause !== "none" && hidden.value === "off" && hidden.stored === "off", hidden);
   await cdp.send("Page.reload", { ignoreCache: false });
   await waitForFirstLive();
   await waitForGame("after reload");
   const afterReload = await dumpJson(`(() => ({
     actions: getComputedStyle(document.getElementById("mc-actions")).display,
-    toggle: getComputedStyle(document.getElementById("mc-toggle")).display,
-    stored: localStorage.getItem("quake2-touch-controls")
+    pause: getComputedStyle(document.getElementById("mc-pause")).display,
+    value: document.getElementById("touch-pad-value").textContent,
+    stored: localStorage.getItem("quake2-touch-pad")
   }))()`);
-  check("the hidden choice survives a reload", afterReload.actions === "none" && afterReload.toggle !== "none" && afterReload.stored === "off", afterReload);
-  await tapSelectorSafe("#mc-toggle");
+  check("the hidden choice survives a reload", afterReload.actions === "none" && afterReload.pause !== "none" && afterReload.value === "off" && afterReload.stored === "off", afterReload);
+  await padRowClick();
   await sleep(250);
   const shown = await dumpJson(`(() => ({
     actions: getComputedStyle(document.getElementById("mc-actions")).display,
-    stored: localStorage.getItem("quake2-touch-controls")
+    value: document.getElementById("touch-pad-value").textContent,
+    stored: localStorage.getItem("quake2-touch-pad")
   }))()`);
-  check("the pad comes back and the choice is stored", shown.actions !== "none" && shown.stored === "on", shown);
+  check("the pad comes back and the choice is stored", shown.actions !== "none" && shown.value === "on" && shown.stored === "on", shown);
   // A delayed synthetic tap from the safe helper can land after the check and
   // toggle it off again; confirm the state the rest of the run relies on.
   if (!(await evaluate("window.quake2Touch.isPadOn()"))) {
@@ -1139,10 +1143,9 @@ async function run() {
   const portraitPad = await dumpJson(`(() => ({
     stick: getComputedStyle(document.getElementById("mc-stick")).display,
     actions: getComputedStyle(document.getElementById("mc-actions")).display,
-    pause: getComputedStyle(document.getElementById("mc-pause")).display,
-    toggle: getComputedStyle(document.getElementById("mc-toggle")).display
+    pause: getComputedStyle(document.getElementById("mc-pause")).display
   }))()`);
-  check("portrait: the game pad is put away but pause stays reachable", portraitPad.stick === "none" && portraitPad.actions === "none" && portraitPad.pause !== "none" && portraitPad.toggle !== "none", portraitPad);
+  check("portrait: the game pad is put away but pause stays reachable", portraitPad.stick === "none" && portraitPad.actions === "none" && portraitPad.pause !== "none", portraitPad);
   check("portrait: no horizontal overflow", portrait.scroll.w <= portrait.inner.w && portrait.scroll.h <= portrait.inner.h, { scroll: portrait.scroll, inner: portrait.inner });
   await screenshot("portrait-390x844-rotate.png");
 
@@ -1214,20 +1217,19 @@ async function run() {
   const desktopGeometry = await dumpJson(`(() => {
     const menu = getComputedStyle(document.getElementById("menu"));
     const heading = getComputedStyle(document.querySelector(".menu-head h1"));
-    const fullscreen = getComputedStyle(document.getElementById("fullscreen-button"));
     return { menuWidth: menu.width, headingSize: heading.fontSize,
       chips: ["options-chip", "lighting-chip", "lighting-panel"].filter((id) => document.getElementById(id)),
       playLayerControls: Array.from(document.querySelectorAll("#ui > button, #ui > .segmented, #ui > div[id]"))
         .filter((element) => !["banner", "prompt", "menu-layer"].includes(element.id)).map((element) => element.id || element.className),
       lightingButtons: document.querySelectorAll("#menu [data-lighting]").length,
-      fullscreenLeft: fullscreen.left, fullscreenBottom: fullscreen.bottom, fullscreenTop: fullscreen.top };
+      floatingFullscreen: ["fullscreen-button", "fullscreen-hint"].filter((id) => document.getElementById(id)),
+      fullscreenRow: Boolean(document.querySelector('.menu-view[data-view="video"] .menu-page-list [data-action="fullscreen"]')) };
   })()`);
-  check("desktop: menu, heading and full-screen geometry is unchanged, with no settings chip",
+  check("desktop: menu and heading geometry is unchanged, with no settings chip and full screen in VIDEO",
     near(parseFloat(desktopGeometry.menuWidth), 392, 0.5) && near(parseFloat(desktopGeometry.headingSize), 26, 0.5) &&
     desktopGeometry.chips.length === 0 && desktopGeometry.playLayerControls.length === 0 &&
     desktopGeometry.lightingButtons === 3 &&
-    near(parseFloat(desktopGeometry.fullscreenLeft), 12, 0.5) &&
-    near(parseFloat(desktopGeometry.fullscreenBottom), 52, 0.5),
+    desktopGeometry.floatingFullscreen.length === 0 && desktopGeometry.fullscreenRow === true,
     desktopGeometry);
   const beforeKeys = await readEngine();
   await keyEvent("rawKeyDown", "w", "KeyW", 87);

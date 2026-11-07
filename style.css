@@ -840,8 +840,8 @@ body.is-game-mode #mobile-controls {
   pointer-events: none;
 }
 
-/* Every action target. The base size is a secondary action (58 px); the small
-   weapon/menu pair is 46 px; FIRE is 78 px. All above the 44 px minimum. */
+/* Every action target. The base size is a secondary action (58 px); WPN is
+   52 px and MENU 46 px; FIRE is 78 px. All above the 44 px minimum. */
 .mc-btn {
   position: absolute;
   display: flex;
@@ -908,6 +908,20 @@ body.is-game-mode #mobile-controls {
   border-radius: 50%;
 }
 
+/* CROUCH: beside JUMP, in the same row and at the same size -- the owner's
+   "add crouch button similar to pc C". It is a hold, like the key. Its left
+   edge stays outside the middle 40 % of the picture, where the look drag and
+   the crosshair live. */
+#mc-crouch {
+  right: calc(var(--mc-right) + 156px);
+  bottom: var(--mc-bottom);
+  border-radius: 50%;
+}
+
+#mc-crouch .mc-lbl {
+  letter-spacing: 0.02em;
+}
+
 /* USE: one thumb roll above FIRE. */
 #mc-use {
   right: var(--mc-right);
@@ -915,29 +929,42 @@ body.is-game-mode #mobile-controls {
   border-radius: 50%;
 }
 
-/* Weapon cycle: small, on the right edge, above the firing arc -- out of the
-   aiming path. */
-#mc-prev,
-#mc-next {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  font-size: 7px;
-}
-
-#mc-prev {
-  right: calc(var(--mc-right) + 52px);
-  bottom: calc(var(--mc-bottom) + 160px);
-}
-
-#mc-next {
+/* WPN: the next weapon, one control on the right edge above USE -- out of the
+   aiming path. It replaced the dead WPN pair (they pressed the inventory
+   keys; docs/mobile-hud-review.md). */
+#mc-weapon {
   right: var(--mc-right);
-  bottom: calc(var(--mc-bottom) + 160px);
+  bottom: calc(var(--mc-bottom) + 156px);
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
 }
 
-#mc-prev .mc-ico,
-#mc-next .mc-ico {
-  font-size: 22px;
+#mc-weapon .mc-ico {
+  font-size: 19px;
+}
+
+/* Said when a WPN tap had nothing to switch to. Beside the control, never a
+   target. */
+#mc-weapon-note {
+  position: absolute;
+  right: calc(var(--mc-right) + 62px);
+  bottom: calc(var(--mc-bottom) + 166px);
+  z-index: 3;
+  max-width: 220px;
+  padding: 7px 10px;
+  border: 1px solid rgba(198, 168, 102, 0.3);
+  border-radius: 4px;
+  background: rgba(6, 8, 10, 0.86);
+  color: #e8dfca;
+  font: 500 10.5px/1.35 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  letter-spacing: 0.02em;
+  pointer-events: none;
+  animation: hint-in 160ms ease both;
+}
+
+#mc-weapon-note[hidden] {
+  display: none;
 }
 
 /* Pause/menu: the only control in the top row (the owner's HUD review removed
@@ -975,6 +1002,7 @@ body.is-game-mode #mobile-controls {
    one tap away. */
 #mobile-controls.controls-hidden #mc-stick,
 #mobile-controls.controls-hidden #mc-actions,
+#mobile-controls.controls-hidden #mc-weapon-note,
 #mobile-controls.controls-hidden #mc-hint {
   display: none;
 }
@@ -1038,14 +1066,24 @@ body.is-game-mode #mobile-controls {
     width: 54px;
     height: 54px;
   }
+  #mc-crouch {
+    right: calc(var(--mc-right) + 142px);
+    width: 54px;
+    height: 54px;
+  }
   #mc-use {
     bottom: calc(var(--mc-bottom) + 82px);
     width: 54px;
     height: 54px;
   }
-  #mc-prev,
-  #mc-next {
-    bottom: calc(var(--mc-bottom) + 146px);
+  #mc-weapon {
+    bottom: calc(var(--mc-bottom) + 144px);
+    width: 48px;
+    height: 48px;
+  }
+  #mc-weapon-note {
+    bottom: calc(var(--mc-bottom) + 150px);
+    right: calc(var(--mc-right) + 58px);
   }
 }
 
@@ -1155,6 +1193,7 @@ body.touch-ui.mc-portrait:not(.menu-open):not(.is-game-mode) #rotate-overlay {
    pause control stays so the menus remain reachable. */
 body.mc-portrait #mc-stick,
 body.mc-portrait #mc-actions,
+body.mc-portrait #mc-weapon-note,
 body.mc-portrait #mc-hint {
   display: none;
 }

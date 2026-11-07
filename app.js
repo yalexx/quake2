@@ -1957,7 +1957,15 @@ var Module;
     // r_mode, fov, crosshair_scale -- come from it, with HD as the r_mode
     // default), then hand it to the engine. The arguments are read when
     // engine/index.js runs, which is after this.
-    engineArguments = buildArguments();
+    // Another page script may have appended its own arguments to
+    // Module.arguments before this point: the touch layer adds
+    // `+exec q2touch.cfg`, the cfg that binds USE, the weapon cycle and
+    // CROUCH (mobile-controls.js). Replacing the array dropped them, and from
+    // 5fa1aa7 to 1.2.3 the touch bindings never ran -- the WPN buttons moved
+    // the inventory cursor and USE was unbound (docs/mobile-hud-review.md).
+    // Keep them after the page's own line.
+    const appended = Array.isArray(Module.arguments) ? Module.arguments.slice() : [];
+    engineArguments = buildArguments().concat(appended);
     Module.arguments = engineArguments;
     try { window.quake2StartupArguments = engineArguments.slice(); } catch (error) { /* optional */ }
     syncSettings();

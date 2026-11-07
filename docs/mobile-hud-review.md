@@ -68,10 +68,13 @@ unbound.
    `execing q2touch.cfg`, and `[`/`]` no longer reach `invprev`/`invnext`.
 2. WPN is one control, at least 44 px, that switches to the next weapon the
    player carries: with more than one weapon, each tap changes the engine's
-   `weaponIndex` within 3 s.
+   `weaponIndex`. (A switch is the old weapon's lowering animation, about a
+   dozen game frames: about a second on a phone, 4-5 s in the gate's
+   headless software rendering at ~2.5 frames a second, so the gate allows
+   20 s.)
 3. With only the blaster (every fresh spawn without cheats), a tap is not
-   silent: a note on the pad says there is no other weapon yet, and
-   `weaponIndex` does not change.
+   silent: once 2 s and 20 drawn frames have passed with `weaponIndex`
+   unchanged, a note on the pad says there is no other weapon to switch to.
 
 Proved by input-gate checks on engine numbers (`weaponIndex` before/after).
 

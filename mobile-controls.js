@@ -6,11 +6,17 @@
 // exactly as it was.
 //
 // ---- How input reaches the engine ---------------------------------------
-// Movement, jump, use, the weapon cycle and pause are synthetic keydown/keyup
-// events in the same shape app.js's dispatchKey() builds
-// (window.quake2App.dispatchKey/tapKey).
+// Movement, jump, crouch, use, the weapon cycle and pause are synthetic
+// keydown/keyup events in the same shape app.js's dispatchKey() builds
+// (window.quake2App.dispatchKey/tapKey). CROUCH holds the PC's own crouch key,
+// c (default.cfg: bind c +movedown); WPN taps / (default.cfg: bind /
+// weapnext), so neither depends on a binding this page invents.
 //
 // Fire is mouse button 0, the button the engine's own config binds to +attack.
+// FIRE is also an aim surface: the thumb that holds it can slide and the view
+// turns with it, so the left thumb moves while the right thumb aims and fires
+// -- one two-finger gesture (the owner's HUD review, "fire+move"). A plain
+// drag on the look surface never fires.
 //
 // Look is a drag on #mc-look, a transparent capture surface over the whole
 // game picture. The surface takes the touch itself (pointer-events: auto), so
@@ -38,18 +44,20 @@
 // that request is refused here: Element.prototype.requestPointerLock is
 // wrapped, so the lock can never be taken while the touch presentation is on.
 //
-// The engine's own config binds no key to +use and no key to weapprev, so the
-// touch layer installs a small cfg file through Module.preRun (before the
-// engine's main runs) that binds the keys this layer presses. The file lives in
-// the engine's in-memory FS and this page never writes the player's
-// config.cfg. (The engine itself may save its runtime bindings when it writes
-// its own config on exit, exactly as it would for any bind made at its
-// console.) Desktop sessions never install it.
+// The engine's own config binds no key to +use, so the touch layer installs a
+// small cfg file through Module.preRun (before the engine's main runs) that
+// binds the keys this layer presses (+use on e, and the weapon cycle and
+// crouch again, so a player's own rebind cannot strand those controls), and
+// adds `+exec q2touch.cfg` to the engine's start-up line (app.js keeps it).
+// The file lives in the engine's in-memory FS and this page never writes the
+// player's config.cfg. (The engine itself may save its runtime bindings when
+// it writes its own config on exit, exactly as it would for any bind made at
+// its console.) Desktop sessions never install it.
 //
 // ---- Layout -------------------------------------------------------------
 // The thumbstick is bottom left. The right thumb gets a large FIRE button in
-// the bottom-right corner, with JUMP and USE in the same thumb arc and the
-// small weapon-cycle pair above them along the right edge; the centre-right of
+// the bottom-right corner, with JUMP and CROUCH in the same row, USE one roll
+// above FIRE and the WPN control above USE along the right edge; the middle of
 // the screen stays free for dragging to look. This is the layout Call of Duty
 // Mobile, PUBG Mobile, Fortnite and Apex Legends Mobile converge on: the
 // primary fire action is the biggest and lowest target, secondary actions sit
@@ -78,6 +86,17 @@
   var STICK_DEADZONE = 0.22;
   var STICK_RADIUS_FRACTION = 0.42;
   var HINT_MS = 9000;
+  // A weapon switch is the old weapon's lowering animation and then the new
+  // one's model: a handful of Quake 2 game frames (10 Hz), well under a second
+  // on a phone. The engine runs at most one game frame per drawn frame, so on
+  // a slow device the same switch takes longer in wall time (measured in
+  // headless software rendering: over 3 s). A WPN tap is judged to have had
+  // nothing to switch to only when both a wall-time window AND a count of
+  // drawn frames have passed with the engine's weapon unchanged; then the pad
+  // says so instead of doing nothing.
+  var WEAPON_SWITCH_MS = 2000;
+  var WEAPON_SWITCH_FRAMES = 20;
+  var WEAPON_NOTE_MS = 2200;
 
   var root = document.getElementById("mobile-controls");
   var lookSurface = document.getElementById("mc-look");
@@ -87,6 +106,7 @@
   var padRow = document.querySelector('[data-action="touch-pad"]');
   var padRowValue = document.getElementById("touch-pad-value");
   var hintElement = document.getElementById("mc-hint");
+  var weaponNote = document.getElementById("mc-weapon-note");
   var rotateOverlay = document.getElementById("rotate-overlay");
   var rotateButton = document.getElementById("rotate-action");
   var rotateNote = document.getElementById("rotate-note");
@@ -114,6 +134,12 @@
   var hintShownAt = 0;
   var keysHeld = Object.create(null); // action name -> descriptor
   var fireHeld = false;
+  var fireDrag = null; // { pointerId, x, y } -- the FIRE thumb, while it aims
+  var weaponWatch = 0;
+  var weaponWatchId = 0;
+  var weaponNoteTimer = 0;
+  var weaponTaps = 0;
+  var weaponSwitches = 0;
 
   function readStore(key) {
     try {
@@ -177,9 +203,14 @@
   };
   var ACTION_KEYS = {
     jump: { key: " ", code: "Space", vk: 32 },
+    // CROUCH: the PC's crouch key (default.cfg: bind c +movedown). A hold:
+    // keydown on press, keyup on release, exactly the key on a keyboard.
+    crouch: { key: "c", code: "KeyC", vk: 67 },
     use: { key: "e", code: "KeyE", vk: 69 },
-    prev: { key: "[", code: "BracketLeft", vk: 219 },
-    next: { key: "]", code: "BracketRight", vk: 221 },
+    // WPN: the next weapon the player carries (default.cfg: bind / weapnext).
+    // The old pair pressed [ and ], which default.cfg binds to the inventory
+    // cursor (invprev/invnext) -- it drew nothing, so the buttons looked dead.
+    weapon: { key: "/", code: "Slash", vk: 191 },
     pause: { key: "Escape", code: "Escape", vk: 27, ch: 27 },
   };
 
@@ -239,6 +270,9 @@
       pageY: y,
       movementX: 0,
       movementY: 0,
+      // A move while FIRE is held is a drag with the button down; the SDL
+      // layer reads the button state from the event it is handed.
+      buttons: fireHeld ? 1 : 0,
     }));
   }
 
@@ -274,17 +308,23 @@
     if (!lookCursor) primeLook(canvasCentre().x, canvasCentre().y);
   }
 
+  // One aim step, shared by the look surface and a FIRE slide: move the
+  // virtual cursor by the finger's own delta and tell the canvas.
+  function aimBy(dx, dy) {
+    if (!dx && !dy) return;
+    var cursor = lookCursor || primeLook(canvasCentre().x, canvasCentre().y);
+    var next = clampToCanvas(cursor.x + dx, cursor.y + dy);
+    lookCursor = next;
+    sendMouseMove(next.x, next.y);
+  }
+
   function lookMove(event) {
     if (event.pointerId !== lookPointer) return;
     event.preventDefault();
     var dx = event.clientX - lookLast.x;
     var dy = event.clientY - lookLast.y;
     lookLast = { x: event.clientX, y: event.clientY };
-    if (!dx && !dy) return;
-    var cursor = lookCursor || primeLook(canvasCentre().x, canvasCentre().y);
-    var next = clampToCanvas(cursor.x + dx, cursor.y + dy);
-    lookCursor = next;
-    sendMouseMove(next.x, next.y);
+    aimBy(dx, dy);
   }
 
   function lookUp(event) {
@@ -325,9 +365,86 @@
     }));
   }
 
-  function actionDown(action) {
+  // FIRE as an aim surface: the pointer that pressed it turns the view as it
+  // slides. The press itself turns nothing (it is sent at the look cursor).
+  function fireDragStart(event) {
+    if (!event || typeof event.clientX !== "number" || typeof event.clientY !== "number") return;
+    fireDrag = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+  }
+
+  function fireDragMove(event) {
+    if (!fireDrag || event.pointerId !== fireDrag.pointerId) return;
+    var dx = event.clientX - fireDrag.x;
+    var dy = event.clientY - fireDrag.y;
+    fireDrag.x = event.clientX;
+    fireDrag.y = event.clientY;
+    aimBy(dx, dy);
+  }
+
+  // ---- WPN ------------------------------------------------------------------
+  // One tap: the engine's weapnext. The engine's own weapon model index
+  // (`gunindex`, engine-state.js) tells whether anything changed; when it has
+  // not changed by WEAPON_SWITCH_MS the player carries nothing else to switch
+  // to (every fresh spawn without cheats: the blaster only), and the pad says
+  // so rather than leave a tap that does nothing. An unreadable engine state
+  // says nothing at all.
+  function engineWeaponIndex() {
+    try {
+      var engine = window.quake2Engine;
+      var state = engine && typeof engine.read === "function" ? engine.read() : null;
+      return state && typeof state.weaponIndex === "number" && state.weaponIndex > 0 ? state.weaponIndex : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function showWeaponNote() {
+    if (!weaponNote) return;
+    weaponNote.hidden = false;
+    clearTimeout(weaponNoteTimer);
+    weaponNoteTimer = setTimeout(hideWeaponNote, WEAPON_NOTE_MS);
+  }
+
+  function hideWeaponNote() {
+    clearTimeout(weaponNoteTimer);
+    if (weaponNote) weaponNote.hidden = true;
+  }
+
+  function nextWeapon() {
+    var before = engineWeaponIndex();
+    hideWeaponNote();
+    tapKey(ACTION_KEYS.weapon);
+    weaponTaps += 1;
+    clearTimeout(weaponWatch);
+    if (before === null) return;
+    var startedAt = Date.now();
+    var frames = 0;
+    var watchId = ++weaponWatchId;
+    var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    (function count() {
+      if (watchId !== weaponWatchId) return;
+      frames += 1;
+      if (frames < WEAPON_SWITCH_FRAMES) raf(count);
+    })();
+    (function watch() {
+      if (watchId !== weaponWatchId) return;
+      var now = engineWeaponIndex();
+      if (now !== null && now !== before) {
+        weaponSwitches += 1;
+        return;
+      }
+      if (Date.now() - startedAt >= WEAPON_SWITCH_MS && frames >= WEAPON_SWITCH_FRAMES) {
+        if (live) showWeaponNote();
+        return;
+      }
+      weaponWatch = setTimeout(watch, 100);
+    })();
+  }
+
+  function actionDown(action, event) {
     hideHint();
-    if (action === "fire") { fire(true); return; }
+    if (action === "fire") { fireDragStart(event); fire(true); return; }
+    if (action === "weapon") { nextWeapon(); return; }
     if (action === "pause") {
       // A pause must not leave a movement key down behind the menu.
       releaseKeys();
@@ -340,14 +457,15 @@
   }
 
   function actionUp(action) {
-    if (action === "fire") { fire(false); return; }
-    if (action === "pause") return; // it is a tap, not a hold
+    if (action === "fire") { fireDrag = null; fire(false); return; }
+    if (action === "pause" || action === "weapon") return; // taps, not holds
     var descriptor = ACTION_KEYS[action];
     if (descriptor) holdKey(action, descriptor, false);
   }
 
   function releaseAll() {
     releaseKeys();
+    fireDrag = null;
     fire(false);
     stickPointer = null;
     if (knob) knob.style.transform = "translate(0px, 0px)";
@@ -463,8 +581,15 @@
       buttonPointers[action] = event.pointerId;
       button.classList.add("is-down");
       try { button.setPointerCapture(event.pointerId); } catch (error) { /* no capture */ }
-      actionDown(action);
+      actionDown(action, event);
     });
+    if (action === "fire") {
+      button.addEventListener("pointermove", function (event) {
+        if (buttonPointers[action] !== event.pointerId) return;
+        event.preventDefault();
+        fireDragMove(event);
+      });
+    }
     function release(event) {
       if (buttonPointers[action] !== event.pointerId) return;
       event.preventDefault();
@@ -500,7 +625,12 @@
     var show = uiEnabled && live;
     if (root.hidden !== !show) root.hidden = !show;
     document.body.classList.toggle("mc-live", show);
-    if (!show) releaseAll();
+    if (!show) {
+      releaseAll();
+      weaponWatchId += 1;
+      clearTimeout(weaponWatch);
+      hideWeaponNote();
+    }
   }
 
   function setPlaying(playing) {
@@ -656,8 +786,8 @@
     return [
       "// ClawBox touch controls (session only; not written back)",
       'bind e "+use"',
-      'bind [ "weapprev"',
-      'bind ] "weapnext"',
+      'bind / "weapnext"',
+      'bind c "+movedown"',
       "",
     ].join("\n");
   }
@@ -784,6 +914,9 @@
         uiEnabled: uiEnabled, padOn: padOn, live: live, bindingsInstalled: bindingsInstalled,
         portrait: uiEnabled && isPortrait(), hintSeen: hintSeen,
         fireHeld: fireHeld, buttons: Object.keys(buttonPointers), keys: Object.keys(keysHeld),
+        fireAiming: fireDrag !== null,
+        weaponTaps: weaponTaps, weaponSwitches: weaponSwitches,
+        weaponNote: Boolean(weaponNote && !weaponNote.hidden),
         lookActive: lookPointer !== null,
         lookCursor: lookCursor ? { x: lookCursor.x, y: lookCursor.y } : null,
         pointerLock: !!document.pointerLockElement,
