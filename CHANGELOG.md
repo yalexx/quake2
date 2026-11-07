@@ -1,5 +1,69 @@
 # Changelog
 
+## 1.2.4 — the owner's mobile HUD review
+
+The owner marked up the 844x390 phone HUD (`design/mobile-hud-review.png`).
+`docs/mobile-hud-review.md` turns the marks into six numbered acceptance
+criteria, and every one is now measured in the live engine by
+`scripts/mobile-input-gate.mjs`. The verification report is
+`docs/release-1.2.4/README.md`.
+
+* **Full screen moved into the menu** ("full screen needs to be in the menu
+  not here"). The floating `Full screen` button and its hint are gone. VIDEO
+  has a `full screen` row (on/off). Inside the desktop's sandboxed window the
+  row reads `own window` and opens the app in a window that can fill the
+  display. `scripts/mobile-fullscreen-test.mjs` enters and leaves full screen
+  with a phone touch: 8/8.
+* **The PAD button is gone** ("remove this dpad button"). MENU is now the only
+  control in the top row. You can still put the on-screen pad away, from a
+  new OPTIONS row, `touch controls` (shown only on touch devices). A
+  "hidden" choice saved by the old button is dropped, so nobody is left with
+  an invisible pad.
+* **WPN works** ("the wpn buttons not doing anything"). The cause was a bug
+  introduced in `5fa1aa7`: `app.js` `boot()` replaced `Module.arguments` and
+  dropped the touch layer's `+exec q2touch.cfg`. As a result `[`/`]` kept
+  `default.cfg`'s `invprev`/`invnext`, so the two buttons only moved the
+  inventory cursor, which draws nothing, and USE (`e`) was unbound. `boot()`
+  now keeps arguments that page scripts add. WPN is now one control that
+  presses `/`, which `default.cfg` already binds to `weapnext`. Measured:
+  `weaponIndex` 105 → 82 → 95 over two taps. With only the blaster, a note
+  says there is nothing to switch to and the index stays put (61 → 61).
+* **CROUCH, like the PC's C.** A hold control beside JUMP, in the same row
+  and at the same size, bound to `c` (`+movedown`). Measured: the view drops
+  24 units while held (view height 22 → -2), x/y do not move, and it comes
+  back on release. Crouch-walking with the stick works too.
+* **Fire, move and aim in one two-finger gesture.** FIRE doubles as an aim
+  surface: the thumb holding it turns the view as it slides. Stick plus a
+  sliding FIRE moved the player 674 units, turned 14.7° and fired (ammo
+  159 → 128) in one gesture. A plain look drag still never fires: ±29.2° yaw
+  and ammo 177 → 177.
+* **Opacity.** Pad controls sit at 0.5 opacity at rest and jump to 1 under
+  the finger. When the pad is put away (OPTIONS, the menu, portrait) nothing
+  of it is drawn except MENU. No control reaches into the middle 40 % of the
+  picture at 844x390 or 932x430. The portrait rotate card is unchanged.
+
+A MENU tap the engine drops (seen right after a quick boot: the Escape went
+out, key_dest stayed 0) is now sent once more after 400 ms and 6 drawn
+frames. A tap on the pad also no longer turns into a click on the menu that
+opens under the finger.
+
+The input gate itself passes 45/45 on 1.2.4. The 1.2.3 tree fails it 31/34,
+because of the WPN/USE bug above and because 5b sampled the jump only after
+the button was released. 5b now samples during the hold too. The gate's console now waits
+out the page's own boot-time console watch, which had closed the arming
+console after a quick reload. New checks: L1–L3 (layout at three viewports),
+5a/5e (WPN), 5h/5i (crouch), 5j (MENU), 6d (fire+move+aim), A1 (aiming
+zone) and O1–O3 (opacity). 7b's second stick press now pushes back the way
+the first came, instead of into the wall the first press reached. `server.js` also serves `/apps/quake2/` from a checkout folder
+with a different name, so every suite can run in a worktree. The old
+`scripts/mobile-controls-test.mjs` (97/97) and `scripts/boot-probe.mjs`
+(17/17) now drive the new controls and check settings where 1.2.3 keeps them,
+in `config.cfg`.
+
+`scripts/store-package.mjs` builds the Store tarball reproducibly (the 1.0.0
+exclusions: `docs/`, `assets/`, `baseq2/pak9.pak`), boots the extracted copy
+on a spare port, and records its size and sha256. Nothing was published.
+
 ## Load Game, an audited menu, HD + RTX by default, and a measured frame loop
 
 The owner's five reports, fixed in one tree, each with a command that proves it:

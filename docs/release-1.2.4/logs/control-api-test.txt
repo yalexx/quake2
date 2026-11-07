@@ -1,0 +1,29 @@
+control API under test: 127.0.0.1:39869 (its own child process, never 4233)
+error-path API:         127.0.0.1:45391 (CDP pointed at the closed port 43437)
+
+PASS  GET /control/health -> 200 JSON, endpoint + game + framing -- cdp http://127.0.0.1:45983 reachable=true, game present=true, framed=false (null), screenshot from game-tab
+PASS  GET /control/status -> 200 JSON with framing, or 503 GAME_NOT_RUNNING -- framed=false, hostOrigin=null, screenshot from game-tab
+PASS  POST /control/status -> 200 JSON (the route exists on POST too) -- ok
+PASS  GET /control/state -> 200 JSON with the engine's own state, or 503 -- server.running=true, map="demo1", console 70 lines, saves [current, save0]
+PASS  POST /control/state {probe:true} -> 200 JSON, the engine was asked -- the engine answered viewpos/serverinfo (position {"x":128.0625,"y":-319.9375,"z":46.1875})
+PASS  POST /control/key with an empty key -> 400 BAD_REQUEST (rejected before the game) -- empty and missing key both refused
+PASS  POST /control/mouse with a non-number -> 400 BAD_REQUEST -- refused
+PASS  POST /control/click with an unknown button -> 400 BAD_REQUEST -- refused
+PASS  POST /control/attack with an unparsable ms -> 400 BAD_REQUEST -- refused
+PASS  and one longer than the hold the API will wait for -> 400 BAD_REQUEST -- refused
+PASS  a body over the 64 KiB cap -> 400, and the connection is answered -- 70 KiB refused
+PASS  a body that is not JSON -> 400 BAD_REQUEST -- refused
+PASS  an unknown control route -> 404 NOT_FOUND, JSON -- 404
+PASS  GET on a POST-only route -> 405 with an Allow header -- Allow: POST, OPTIONS
+PASS  OPTIONS on a control route -> 204 with the CORS headers -- 204
+PASS  POST /control/key {key:Shift} -> 200 JSON (a modifier: it changes no binding) -- tapped Shift
+PASS  POST /control/mouse {dx:0,dy:0} -> 200 JSON (a zero delta: nothing moves) -- the frame took a zero delta
+PASS  POST /control/click {button:middle} -> 200 JSON (unbound in Quake 2, so nothing fires) -- clicked the middle button
+PASS  GET /control/screenshot.png -> 200 image/png, a real PNG -- 1280x577, 847119 bytes, HEAD agreed
+PASS  a clipped capture is the size that was asked for -- a 400x40 clip came back 400x40; the status-bar strip 1280x40 (canvas-pixels) read 100
+PASS  GET /control/health with no browser -> 200 JSON, ok:false, cdp.reachable:false -- ok:false, reachable:false
+PASS  GET /control/status with no browser -> 502 CDP_UNREACHABLE, never a hung socket -- 502 in a bounded time
+PASS  POST /control/key with no browser -> 502 (the route reaches the bridge and reports it) -- 502
+
+control-api-test: PASS -- every route answered as its contract says
+exit=0

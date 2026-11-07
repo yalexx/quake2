@@ -97,6 +97,12 @@
   var WEAPON_SWITCH_MS = 2000;
   var WEAPON_SWITCH_FRAMES = 20;
   var WEAPON_NOTE_MS = 2200;
+  // MENU: the engine answers Escape on its next frame. A press it has not
+  // answered after both of these (key_dest still the game's) was dropped --
+  // measured right after a quick boot: the touch layer's Escape went out and
+  // key_dest never left 0 -- so it is sent once more.
+  var MENU_CONFIRM_MS = 400;
+  var MENU_CONFIRM_FRAMES = 6;
 
   var root = document.getElementById("mobile-controls");
   var lookSurface = document.getElementById("mc-look");
@@ -137,6 +143,8 @@
   var fireDrag = null; // { pointerId, x, y } -- the FIRE thumb, while it aims
   var weaponWatch = 0;
   var weaponWatchId = 0;
+  var menuWatchId = 0;
+  var menuRetries = 0;
   var weaponNoteTimer = 0;
   var weaponTaps = 0;
   var weaponSwitches = 0;
@@ -441,6 +449,43 @@
     })();
   }
 
+  // ---- MENU -----------------------------------------------------------------
+  function engineKeyDest() {
+    try {
+      var engine = window.quake2Engine;
+      var dest = engine && typeof engine.keyDest === "function" ? engine.keyDest() : null;
+      return typeof dest === "number" ? dest : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function openEngineMenu() {
+    tapKey(ACTION_KEYS.pause);
+    var watchId = ++menuWatchId;
+    var startedAt = Date.now();
+    var frames = 0;
+    var raf = window.requestAnimationFrame || function (fn) { return setTimeout(fn, 16); };
+    (function count() {
+      if (watchId !== menuWatchId) return;
+      frames += 1;
+      if (frames < MENU_CONFIRM_FRAMES) raf(count);
+    })();
+    (function watch() {
+      if (watchId !== menuWatchId) return;
+      // Anything but the game owning the keyboard means the engine took the
+      // press (its menu, or the console); an unreadable state says nothing.
+      if (engineKeyDest() !== 0) return;
+      if (Date.now() - startedAt >= MENU_CONFIRM_MS && frames >= MENU_CONFIRM_FRAMES) {
+        menuWatchId += 1;
+        menuRetries += 1;
+        tapKey(ACTION_KEYS.pause);
+        return;
+      }
+      setTimeout(watch, 50);
+    })();
+  }
+
   function actionDown(action, event) {
     hideHint();
     if (action === "fire") { fireDragStart(event); fire(true); return; }
@@ -449,7 +494,7 @@
       // A pause must not leave a movement key down behind the menu.
       releaseKeys();
       fire(false);
-      tapKey(ACTION_KEYS.pause);
+      openEngineMenu();
       return;
     }
     var descriptor = ACTION_KEYS[action];
@@ -852,6 +897,20 @@
     lookSurface.addEventListener("contextmenu", function (event) { event.preventDefault(); });
   }
 
+  // A touch on the pad must not turn into a click on whatever lies under the
+  // finger once the pad is gone. MENU is the case that matters: the menu can
+  // appear before the finger lifts (measured: the menu up 120 ms after the
+  // press, the lift at 150 ms), and the browser's compatibility click for
+  // that touch then lands on the panel that has just appeared under it.
+  // Cancelling the touch's default action on the layer stops the
+  // compatibility mouse events and that click; the pointer events that drive
+  // every control still arrive.
+  function cancelTouchDefault(event) {
+    if (event.cancelable) event.preventDefault();
+  }
+  root.addEventListener("touchstart", cancelTouchDefault, { passive: false });
+  root.addEventListener("touchend", cancelTouchDefault, { passive: false });
+
   stick.addEventListener("pointerdown", stickDown);
   stick.addEventListener("pointermove", stickMove);
   stick.addEventListener("pointerup", stickUp);
@@ -915,7 +974,7 @@
         portrait: uiEnabled && isPortrait(), hintSeen: hintSeen,
         fireHeld: fireHeld, buttons: Object.keys(buttonPointers), keys: Object.keys(keysHeld),
         fireAiming: fireDrag !== null,
-        weaponTaps: weaponTaps, weaponSwitches: weaponSwitches,
+        weaponTaps: weaponTaps, weaponSwitches: weaponSwitches, menuRetries: menuRetries,
         weaponNote: Boolean(weaponNote && !weaponNote.hidden),
         lookActive: lookPointer !== null,
         lookCursor: lookCursor ? { x: lookCursor.x, y: lookCursor.y } : null,

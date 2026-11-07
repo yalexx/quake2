@@ -1011,14 +1011,30 @@ async function run() {
     return { x: box.left + box.width / 2, y: box.top + box.height / 2, h: box.height };
   })()`);
   check("the OPTIONS apply control is finger-sized", applyBox && applyBox.h >= 44, applyBox);
+  // Since 1.2.3 an applied setting lives in the engine's own config.cfg (the
+  // page writes it to the store, then reloads); it no longer rides on the
+  // URL (app.js reloadWith says why: the start-up line has an argument
+  // budget). The store's config.cfg and a fresh document are the proof.
+  const configCvar = async (name) => {
+    const response = await fetch(baseUrl.replace(/\/?$/, "/") + "userdata/baseq2/config.cfg", { cache: "no-store" }).catch(() => null);
+    if (!response || !response.ok) return null;
+    let value = null;
+    for (const line of (await response.text()).split(/\r?\n/)) {
+      const match = /^\s*seta?\s+([^\s"]+)\s+(?:"([^"]*)"|(\S+))\s*$/i.exec(line);
+      if (match && match[1].toLowerCase() === name) value = match[2] !== undefined ? match[2] : match[3];
+    }
+    return value;
+  };
+  const applyOrigin = await evaluate("performance.timeOrigin");
   await tapPointSafe(applyBox.x, applyBox.y);
   await waitFor("the reload with the applied cvar", async () => {
-    const search = await evaluate("location.search");
-    return typeof search === "string" && search.includes("+set&s_volume&" + expectedVolume);
+    const origin = await evaluate("performance.timeOrigin").catch(() => null);
+    const value = await configCvar("s_volume");
+    return typeof origin === "number" && origin > applyOrigin + 1 && value !== null && Number(value).toFixed(1) === expectedVolume;
   }, 30000, 300);
-  const appliedSearch = await evaluate("location.search");
-  check("Apply carries the changed cvar on the start-up line",
-    appliedSearch.includes("+set&s_volume&" + expectedVolume), { value: expectedVolume, search: appliedSearch });
+  const appliedValue = await configCvar("s_volume");
+  check("Apply writes the changed cvar into the engine's config.cfg and reloads",
+    appliedValue !== null && Number(appliedValue).toFixed(1) === expectedVolume, { value: expectedVolume, config: appliedValue });
   await waitForFirstLive();
   await waitForGame("after applying a setting");
 
@@ -1034,14 +1050,16 @@ async function run() {
     return { x: box.left + box.width / 2, y: box.top + box.height / 2, h: box.height };
   })()`);
   check("the OPTIONS reset control is finger-sized", resetBox && resetBox.h >= 44, resetBox);
+  const resetOrigin = await evaluate("performance.timeOrigin");
   await tapPointSafe(resetBox.x, resetBox.y);
   await waitFor("the reload after Reset defaults", async () => {
-    const search = await evaluate("location.search");
-    return typeof search === "string" && search.includes("+set&s_volume&0.7");
+    const origin = await evaluate("performance.timeOrigin").catch(() => null);
+    const value = await configCvar("s_volume");
+    return typeof origin === "number" && origin > resetOrigin + 1 && value !== null && Number(value).toFixed(1) === "0.7";
   }, 30000, 300);
-  const resetSearch = await evaluate("location.search");
-  check("Reset defaults carries the default on the start-up line",
-    resetSearch.includes("+set&s_volume&0.7"), { search: resetSearch });
+  const resetValue = await configCvar("s_volume");
+  check("Reset defaults writes the default into config.cfg and reloads",
+    resetValue !== null && Number(resetValue).toFixed(1) === "0.7", { config: resetValue });
   await waitForFirstLive();
   await waitForGame("after resetting settings");
 

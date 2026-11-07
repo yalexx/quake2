@@ -161,3 +161,12 @@ this round does with it:
 | 5 fire+move | FIRE is drag-to-aim (`aimBy`, `buttons` on the moves, per-pointer fire holds) plus a second FIRE on the left edge; `docs/mobile-fire-move.md`. | **Reuse** drag-to-aim and per-pointer holds. The left FIRE goes: drag-to-aim already gives move + aim + fire with two thumbs, and the owner asked for fewer controls, not more. |
 | 6 opacity | Rest 0.6, idle fade to 0.24 after 4 s, labels only while pressed. | **Adapt**: rest 0.5, pressed 1, hidden not rendered; no extra idle fade, so a control never drops below the visible floor in criterion 6.1. |
 | harness | `server.js` also strips `/apps/quake2/` when the checkout folder is named otherwise (a worktree). | **Reuse**: every suite addresses `/apps/quake2/`. |
+
+## Status in 1.2.4
+
+All six criteria are implemented and measured in the final input gate run,
+45/45 (`docs/release-1.2.4/README.md` has the numbers for each one). One part
+is implemented but not measured: criterion 1.4, the `own window` path. No
+harness here produced a document that refuses full screen: the box's CSP
+`sandbox` header, applied by the menu audit's proxy, still let headless
+Chrome go full screen, so that audit took the enter/leave branch.

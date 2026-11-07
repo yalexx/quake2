@@ -1,0 +1,1761 @@
+{
+  "gate": "scripts/mobile-input-gate.mjs",
+  "at": "2026-11-07T12:29:47.172Z",
+  "mode": "phone",
+  "checkout": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66",
+  "node": "v24.22.2",
+  "url": "http://127.0.0.1:34397/apps/quake2/",
+  "partial": null,
+  "server": {
+    "port": 34397,
+    "pid": 2879509,
+    "dataDir": "/tmp/q2gate-data-L6r92I"
+  },
+  "chrome": {
+    "path": "/opt/google/chrome/chrome",
+    "pid": 2884251,
+    "debuggingPort": 39327,
+    "headless": false,
+    "display": ":90",
+    "profile": "/tmp/q2gate-chrome-NOQA3E"
+  },
+  "viewport": {
+    "width": 844,
+    "height": 390,
+    "deviceScaleFactor": 1
+  },
+  "fixture": {
+    "chosen": "demo2-dm",
+    "qualified": false,
+    "shortfall": "The brief's bar of 200+ units open in all 8 movement directions was not met by any candidate (demo2-dm: 4/8, minimum 36 units; demo3-dm: 3/8, minimum 0 units). The movement checks run on demo2-dm at its spawn; check 4's stick directions run under the engine's noclip, so their bar no longer depends on the level's clearance (the smallest measured here is 36 units).",
+    "ranked": [
+      {
+        "id": "demo2-dm",
+        "qualified": false,
+        "openDirections": 4,
+        "minClearance": 36
+      },
+      {
+        "id": "demo3-dm",
+        "qualified": false,
+        "openDirections": 3,
+        "minClearance": 0
+      }
+    ],
+    "candidates": [
+      {
+        "id": "demo2-dm",
+        "map": "demo2",
+        "mode": "deathmatch",
+        "query": "+set&cheats&1&+set&deathmatch&1&+set&maxclients&1&+map&demo2",
+        "spawn": "brief: +set&deathmatch&1&+set&maxclients&1&+map&demo2",
+        "bootMs": 7559,
+        "spawnPosition": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        },
+        "yaw": 0,
+        "keyDest": 0,
+        "dead": false,
+        "forward": {
+          "distance": 304,
+          "ms": 800,
+          "from": {
+            "x": -911.9375,
+            "y": -71.9375,
+            "z": -105.8125
+          },
+          "yaw": 0
+        },
+        "directions": {
+          "N": {
+            "distance": 304,
+            "forwardComponent": 304,
+            "rightComponent": 0,
+            "ms": 800,
+            "startedUnitsFromSpawn": 0,
+            "returnDistance": 10,
+            "returnTimeout": false
+          },
+          "NE": {
+            "distance": 151,
+            "forwardComponent": 146,
+            "rightComponent": 40,
+            "ms": 1600,
+            "startedUnitsFromSpawn": 10,
+            "returnDistance": 112,
+            "returnTimeout": true
+          },
+          "E": {
+            "distance": 36,
+            "forwardComponent": 0,
+            "rightComponent": 36,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 0,
+            "returnDistance": 6,
+            "returnTimeout": false
+          },
+          "SE": {
+            "distance": 67,
+            "forwardComponent": -52,
+            "rightComponent": 42,
+            "ms": 2000,
+            "startedUnitsFromSpawn": 6,
+            "returnDistance": 9,
+            "returnTimeout": false
+          },
+          "S": {
+            "distance": 58,
+            "forwardComponent": -58,
+            "rightComponent": 0,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 9,
+            "returnDistance": 27,
+            "returnTimeout": false
+          },
+          "SW": {
+            "distance": 312,
+            "forwardComponent": -49,
+            "rightComponent": -308,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 36,
+            "returnDistance": 26,
+            "returnTimeout": false
+          },
+          "W": {
+            "distance": 394,
+            "forwardComponent": 0,
+            "rightComponent": -394,
+            "ms": 1000,
+            "startedUnitsFromSpawn": 37,
+            "returnDistance": 29,
+            "returnTimeout": false
+          },
+          "NW": {
+            "distance": 330,
+            "forwardComponent": 266,
+            "rightComponent": -195,
+            "ms": 1400,
+            "startedUnitsFromSpawn": 28,
+            "returnDistance": 12,
+            "returnTimeout": false
+          }
+        },
+        "openDirections": 4,
+        "minClearance": 36,
+        "qualified": false,
+        "pass": false,
+        "endedUnitsFromSpawn": 22,
+        "checksBootMs": 7939,
+        "checksSpawn": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        }
+      },
+      {
+        "id": "demo3-dm",
+        "map": "demo3",
+        "mode": "deathmatch",
+        "query": "+set&cheats&1&+set&deathmatch&1&+set&maxclients&1&+map&demo3",
+        "spawn": "brief fallback: demo3 in deathmatch mode",
+        "bootMs": 8682,
+        "spawnPosition": {
+          "x": 152.0625,
+          "y": -423.9375,
+          "z": -457.8125
+        },
+        "yaw": 0,
+        "keyDest": 0,
+        "dead": false,
+        "forward": {
+          "distance": 317,
+          "ms": 1800,
+          "from": {
+            "x": 152.0625,
+            "y": -423.9375,
+            "z": -457.8125
+          },
+          "yaw": 0
+        },
+        "directions": {
+          "N": {
+            "distance": 317,
+            "forwardComponent": 317,
+            "rightComponent": 0,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 0,
+            "returnDistance": 10,
+            "returnTimeout": false
+          },
+          "NE": {
+            "distance": 282,
+            "forwardComponent": 282,
+            "rightComponent": 8,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 2,
+            "returnDistance": 15,
+            "returnTimeout": false
+          },
+          "E": {
+            "distance": 11,
+            "forwardComponent": 0,
+            "rightComponent": 11,
+            "ms": 1600,
+            "startedUnitsFromSpawn": 5,
+            "returnDistance": 9,
+            "returnTimeout": false
+          },
+          "SE": {
+            "distance": 4,
+            "forwardComponent": -4,
+            "rightComponent": 0,
+            "ms": 1400,
+            "startedUnitsFromSpawn": 9,
+            "returnDistance": 11,
+            "returnTimeout": false
+          },
+          "S": {
+            "distance": 0,
+            "forwardComponent": 0,
+            "rightComponent": 0,
+            "ms": 1200,
+            "startedUnitsFromSpawn": 11,
+            "returnDistance": 11,
+            "returnTimeout": false
+          },
+          "SW": {
+            "distance": 48,
+            "forwardComponent": 0,
+            "rightComponent": -48,
+            "ms": 1800,
+            "startedUnitsFromSpawn": 11,
+            "returnDistance": 24,
+            "returnTimeout": false
+          },
+          "W": {
+            "distance": 159,
+            "forwardComponent": 0,
+            "rightComponent": -159,
+            "ms": 2600,
+            "startedUnitsFromSpawn": 20,
+            "returnDistance": 12,
+            "returnTimeout": false
+          },
+          "NW": {
+            "distance": 314,
+            "forwardComponent": 275,
+            "rightComponent": -152,
+            "ms": 1600,
+            "startedUnitsFromSpawn": 1,
+            "returnDistance": 25,
+            "returnTimeout": false
+          }
+        },
+        "openDirections": 3,
+        "minClearance": 0,
+        "qualified": false,
+        "pass": false,
+        "endedUnitsFromSpawn": 21
+      },
+      {
+        "id": "demo3-sp",
+        "map": "demo3",
+        "mode": "single-player",
+        "query": "+set&cheats&1&+set&skill&1&+map&demo3",
+        "spawn": "demo3 player start (1688,1412) -- the spawn the brief names for demo3",
+        "bootMs": null,
+        "spawnPosition": null,
+        "yaw": null,
+        "keyDest": null,
+        "dead": null,
+        "forward": null,
+        "directions": {},
+        "openDirections": 0,
+        "minClearance": 0,
+        "qualified": false,
+        "pass": false,
+        "fail": "skipped: a deathmatch candidate already booted controllably, and a death there respawns with a trusted press"
+      }
+    ]
+  },
+  "map": {
+    "id": "demo2-dm",
+    "map": "demo2",
+    "mode": "deathmatch",
+    "spawnPosition": {
+      "x": -911.9375,
+      "y": -71.9375,
+      "z": -105.8125
+    },
+    "yaw": 0,
+    "query": "+set&cheats&1&+set&deathmatch&1&+set&maxclients&1&+map&demo2",
+    "checkSpot": {
+      "x": -911.9375,
+      "y": -71.9375,
+      "z": -105.8125
+    }
+  },
+  "deviations": [
+    "The boot query carries +set&cheats&1: this build's `give all` refuses without the server cvar cheats=1 (measured).",
+    "Open floor is measured from each candidate's spawn, the position the movement checks start from: a forward walk of more than 100 units ends against a wall by construction, so the eight directions cannot be measured at the spot it reaches (measured).",
+    "The brief's two deathmatch boots come first and demo3 in single player is measured only when no deathmatch candidate is controllable: a deathmatch death is one trusted FIRE press away from a respawn and an arming, a single-player death is not.",
+    "Check 4's stick directions run with the engine's noclip (cheats are on): the fixture spawn sits on a ledge above a pit and this box's engine speed makes even a 20-unit excursion fall in, so the stick's direction mapping is measured without the level's geometry. The map is reloaded before checks 5-8."
+  ],
+  "checks": [
+    {
+      "id": "5a",
+      "name": "WPN with only the blaster: the weapon index stays and the pad says there is nothing to switch to",
+      "pass": true,
+      "numbers": {
+        "before": 61,
+        "after": 61,
+        "taps": 1,
+        "noteShown": true,
+        "noteText": "No other weapon to switch to yet",
+        "noteBox": [
+          479,
+          138,
+          192,
+          30
+        ],
+        "ammo": [
+          0,
+          0
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:30:02.265Z"
+    },
+    {
+      "id": "setup",
+      "name": "engine is in game with a controllable player before the checks",
+      "pass": true,
+      "numbers": {
+        "keyDest": 0,
+        "dead": false,
+        "position": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:32:58.906Z"
+    },
+    {
+      "id": "setup-arm",
+      "name": "give all armed the player: ammo is readable and above zero",
+      "pass": true,
+      "numbers": {
+        "ammo": 200,
+        "weaponIndex": 105,
+        "keyDest": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:13.411Z"
+    },
+    {
+      "id": "L1",
+      "name": "layout 844x390 landscape: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px",
+      "pass": true,
+      "numbers": {
+        "viewport": {
+          "w": 844,
+          "h": 390
+        },
+        "floating": [],
+        "fullscreenRow": {
+          "inVideo": true,
+          "inPageList": true,
+          "value": "off"
+        },
+        "overlaps": [],
+        "small": [],
+        "missing": [],
+        "boxes": {
+          "#mc-stick": [
+            14,
+            196,
+            138,
+            138
+          ],
+          "#mc-fire": [
+            752,
+            256,
+            78,
+            78
+          ],
+          "#mc-jump": [
+            682,
+            276,
+            58,
+            58
+          ],
+          "#mc-crouch": [
+            616,
+            276,
+            58,
+            58
+          ],
+          "#mc-use": [
+            772,
+            186,
+            58,
+            58
+          ],
+          "#mc-weapon": [
+            778,
+            126,
+            52,
+            52
+          ],
+          "#mc-pause": [
+            14,
+            8,
+            46,
+            44
+          ]
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:17.361Z"
+    },
+    {
+      "id": "L2",
+      "name": "layout 932x430 landscape: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px",
+      "pass": true,
+      "numbers": {
+        "viewport": {
+          "w": 932,
+          "h": 430
+        },
+        "floating": [],
+        "fullscreenRow": {
+          "inVideo": true,
+          "inPageList": true,
+          "value": "off"
+        },
+        "overlaps": [],
+        "small": [],
+        "missing": [],
+        "boxes": {
+          "#mc-stick": [
+            14,
+            236,
+            138,
+            138
+          ],
+          "#mc-fire": [
+            840,
+            296,
+            78,
+            78
+          ],
+          "#mc-jump": [
+            770,
+            316,
+            58,
+            58
+          ],
+          "#mc-crouch": [
+            704,
+            316,
+            58,
+            58
+          ],
+          "#mc-use": [
+            860,
+            226,
+            58,
+            58
+          ],
+          "#mc-weapon": [
+            866,
+            166,
+            52,
+            52
+          ],
+          "#mc-pause": [
+            14,
+            8,
+            46,
+            44
+          ]
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:19.858Z"
+    },
+    {
+      "id": "A1",
+      "name": "ergonomics: no target reaches into the aiming zone (x 30-70 %) at 844x390 or 932x430",
+      "pass": true,
+      "numbers": {
+        "zone": [
+          {
+            "layout": "L1",
+            "x": [
+              253.2,
+              590.8
+            ]
+          },
+          {
+            "layout": "L2",
+            "x": [
+              279.6,
+              652.4
+            ]
+          }
+        ],
+        "hits": [],
+        "nearest": [
+          {
+            "layout": "L1",
+            "leftGroupEnds": 152,
+            "rightGroupStarts": 616
+          },
+          {
+            "layout": "L2",
+            "leftGroupEnds": 152,
+            "rightGroupStarts": 704
+          }
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:22.234Z"
+    },
+    {
+      "id": "O1",
+      "name": "opacity at idle: every pad control is drawn between 0.3 and 0.6, and the look surface is clear",
+      "pass": true,
+      "numbers": {
+        "opacity": {
+          "#mc-stick": 0.5,
+          "#mc-fire": 0.5,
+          "#mc-jump": 0.5,
+          "#mc-crouch": 0.5,
+          "#mc-use": 0.5,
+          "#mc-weapon": 0.5,
+          "#mc-pause": 0.5
+        },
+        "outOfRange": [],
+        "look": {
+          "background": "rgba(0, 0, 0, 0)",
+          "image": "none",
+          "opacity": "1"
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:23.095Z"
+    },
+    {
+      "id": "O2",
+      "name": "opacity pressed: the control under the finger is drawn at 1, the others stay at idle, and it returns to idle after release",
+      "pass": true,
+      "numbers": {
+        "#mc-crouch": {
+          "pressed": 1,
+          "pressedClasses": "mc-btn is-down",
+          "fireMeanwhile": 0.5,
+          "afterRelease": 0.5
+        },
+        "#mc-stick": {
+          "pressed": 1,
+          "pressedClasses": "is-active",
+          "fireMeanwhile": 0.5,
+          "afterRelease": 0.5
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:31.145Z"
+    },
+    {
+      "id": "1",
+      "name": "a tap away from the controls never fires or turns",
+      "pass": true,
+      "numbers": [
+        {
+          "at": [
+            422,
+            70
+          ],
+          "ammo": [
+            200,
+            200
+          ],
+          "yawDelta": 0,
+          "pitchDelta": 0,
+          "newEntities": 0,
+          "mousedown": 0,
+          "fireHeld": false
+        },
+        {
+          "at": [
+            253,
+            98
+          ],
+          "ammo": [
+            200,
+            200
+          ],
+          "yawDelta": 0,
+          "pitchDelta": 0,
+          "newEntities": 0,
+          "mousedown": 0,
+          "fireHeld": false
+        },
+        {
+          "at": [
+            591,
+            86
+          ],
+          "ammo": [
+            200,
+            200
+          ],
+          "yawDelta": 0,
+          "pitchDelta": 0,
+          "newEntities": 0,
+          "mousedown": 0,
+          "fireHeld": false
+        }
+      ],
+      "note": null,
+      "at": "2026-11-07T12:33:43.168Z"
+    },
+    {
+      "id": "2a",
+      "name": "FIRE press/hold fires: ammo falls and/or a new entity appears; the press does not turn the view",
+      "pass": true,
+      "numbers": {
+        "ammo": [
+          200,
+          190,
+          185,
+          185
+        ],
+        "ammoDrop": 15,
+        "muzzleEntities": 0,
+        "yawDelta": 0,
+        "pitchDelta": 0,
+        "touchDuring": {
+          "fireHeld": true,
+          "keys": []
+        },
+        "mousedownEvents": 1
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:53.255Z"
+    },
+    {
+      "id": "2b",
+      "name": "FIRE release stops firing (ammo is stable afterwards)",
+      "pass": true,
+      "numbers": {
+        "afterRelease": 185,
+        "settled": 185,
+        "settled2": 185,
+        "fireHeld": false
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:53.255Z"
+    },
+    {
+      "id": "2c",
+      "name": "pointercancel on held FIRE releases it and stops the shots",
+      "pass": true,
+      "numbers": {
+        "fireHeld": false,
+        "ammo": [
+          177,
+          177
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:33:59.580Z"
+    },
+    {
+      "id": "3a",
+      "name": "look drag left+up raises yaw and lowers pitch, without firing",
+      "pass": true,
+      "numbers": {
+        "yawDelta": 29.169,
+        "pitchDelta": -17.155,
+        "ammo": [
+          177,
+          177
+        ],
+        "newEntities": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:08.601Z"
+    },
+    {
+      "id": "3b",
+      "name": "look drag right+down lowers yaw and raises pitch, without firing",
+      "pass": true,
+      "numbers": {
+        "yawDelta": -29.169,
+        "pitchDelta": 17.155,
+        "ammo": [
+          177,
+          177
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:15.717Z"
+    },
+    {
+      "id": "3c",
+      "name": "a tap on the look surface fires nothing and turns nothing",
+      "pass": true,
+      "numbers": {
+        "ammo": [
+          177,
+          177
+        ],
+        "yawDelta": 0,
+        "pitchDelta": 0,
+        "mousedown": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:19.592Z"
+    },
+    {
+      "id": "4a",
+      "name": "stick pressed at the ring centre holds no keys and does not move the player",
+      "pass": true,
+      "numbers": {
+        "keys": [],
+        "movedUnits": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:28.622Z"
+    },
+    {
+      "id": "4b",
+      "name": "stick at 70% of the ring moves in the 8 expected directions",
+      "pass": true,
+      "numbers": {
+        "noclip": true,
+        "directions": {
+          "N": {
+            "distance": 89.5,
+            "forward": 89.5,
+            "right": 0,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -912,
+              "y": -72,
+              "z": -106
+            },
+            "to": {
+              "x": -822,
+              "y": -72,
+              "z": -106
+            },
+            "pass": true
+          },
+          "NE": {
+            "distance": 129,
+            "forward": 91.4,
+            "right": 91.1,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -822,
+              "y": -72,
+              "z": -106
+            },
+            "to": {
+              "x": -731,
+              "y": -163,
+              "z": -106
+            },
+            "pass": true
+          },
+          "E": {
+            "distance": 60,
+            "forward": 0,
+            "right": 60,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -731,
+              "y": -163,
+              "z": -106
+            },
+            "to": {
+              "x": -731,
+              "y": -223,
+              "z": -106
+            },
+            "pass": true
+          },
+          "SE": {
+            "distance": 59.8,
+            "forward": -42.3,
+            "right": 42.3,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -731,
+              "y": -223,
+              "z": -106
+            },
+            "to": {
+              "x": -773,
+              "y": -265,
+              "z": -106
+            },
+            "pass": true
+          },
+          "S": {
+            "distance": 102.5,
+            "forward": -102.5,
+            "right": 0,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -773,
+              "y": -265,
+              "z": -106
+            },
+            "to": {
+              "x": -876,
+              "y": -265,
+              "z": -106
+            },
+            "pass": true
+          },
+          "SW": {
+            "distance": 59.9,
+            "forward": -42.3,
+            "right": -42.5,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -876,
+              "y": -265,
+              "z": -106
+            },
+            "to": {
+              "x": -918,
+              "y": -223,
+              "z": -106
+            },
+            "pass": true
+          },
+          "W": {
+            "distance": 90,
+            "forward": 0,
+            "right": -90,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -918,
+              "y": -223,
+              "z": -106
+            },
+            "to": {
+              "x": -918,
+              "y": -133,
+              "z": -106
+            },
+            "pass": true
+          },
+          "NW": {
+            "distance": 60.5,
+            "forward": 42.8,
+            "right": -42.8,
+            "zDelta": 0,
+            "alive": true,
+            "from": {
+              "x": -918,
+              "y": -133,
+              "z": -106
+            },
+            "to": {
+              "x": -875,
+              "y": -90,
+              "z": -106
+            },
+            "pass": true
+          }
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:49.446Z"
+    },
+    {
+      "id": "4c",
+      "name": "stick release stops the player",
+      "pass": true,
+      "numbers": {
+        "movedAfterRelease": 0,
+        "noclip": true
+      },
+      "note": null,
+      "at": "2026-11-07T12:34:51.011Z"
+    },
+    {
+      "id": "5b",
+      "name": "buttons: JUMP raises z and the player lands again",
+      "pass": true,
+      "numbers": {
+        "zBefore": -105.8125,
+        "zMax": -75.8125,
+        "zAfter": -105.8125,
+        "roseUnits": 30,
+        "rose": true,
+        "landed": true
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:18.938Z"
+    },
+    {
+      "id": "5c",
+      "name": "buttons: USE holds and releases the engine's +use key, and the engine cfg that binds it actually executed",
+      "pass": true,
+      "numbers": {
+        "keylog": [
+          {
+            "type": "down",
+            "key": "e",
+            "vk": 69,
+            "synthetic": true
+          },
+          {
+            "type": "up",
+            "key": "e",
+            "vk": 69,
+            "synthetic": true
+          }
+        ],
+        "q2touchCfg": {
+          "text": "// ClawBox touch controls (session only; not written back)\nbind e \"+use\"\nbind / \"weapnext\"\nbind c \"+movedown\"\n"
+        },
+        "engineExecutedCfg": true,
+        "keyDest": 0,
+        "alive": true,
+        "note": "No door on demo2/demo3 is provable in this harness; the check proves the binding and the key the button presses instead."
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:22.346Z"
+    },
+    {
+      "id": "5d",
+      "name": "buttons: USE leaves the keyboard in the game with the player alive",
+      "pass": true,
+      "numbers": {
+        "keyDest": 0,
+        "dead": false,
+        "position": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        },
+        "keysHeldWhileUse": [
+          "use"
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:22.346Z"
+    },
+    {
+      "id": "5e",
+      "name": "WPN with the give-all loadout: each tap changes the engine's weapon index, with no 'nothing to switch' note",
+      "pass": true,
+      "numbers": {
+        "before": 105,
+        "switches": [
+          {
+            "before": 105,
+            "after": 82
+          },
+          {
+            "before": 82,
+            "after": 95
+          }
+        ],
+        "note": false,
+        "q2touchExecuted": true
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:28.132Z"
+    },
+    {
+      "id": "5h",
+      "name": "CROUCH beside JUMP holds c: the engine's view drops >= 15 units while held and returns after release",
+      "pass": true,
+      "numbers": {
+        "zStanding": -105.8125,
+        "zDucked": -129.8125,
+        "zAfter": -105.8125,
+        "drop": 24,
+        "xyDrift": 0,
+        "keysHeld": [
+          "crouch"
+        ],
+        "keylog": [
+          "down",
+          "up"
+        ],
+        "crouchBox": [
+          616,
+          276,
+          58,
+          58
+        ],
+        "jumpBox": [
+          682,
+          276,
+          58,
+          58
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:33.869Z"
+    },
+    {
+      "id": "5i",
+      "name": "CROUCH with the stick: a crouch-walk moves the player while the view stays low",
+      "pass": true,
+      "numbers": {
+        "zStanding": -105.8125,
+        "zLow": -129.8125,
+        "zWhileWalking": -129.3125,
+        "movedUnits": 34.5,
+        "keys": [
+          "crouch",
+          "forward"
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:40.680Z"
+    },
+    {
+      "id": "5j",
+      "name": "MENU: the menu is still open a second after the tap, and the tap's click never reached it",
+      "pass": true,
+      "numbers": {
+        "open": true,
+        "clicks": [],
+        "escapeResent": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:51.849Z"
+    },
+    {
+      "id": "5f",
+      "name": "buttons: PAUSE opens the engine menu with the pad hidden, and Resume returns the game",
+      "pass": true,
+      "numbers": {
+        "keyDestWhilePaused": 3,
+        "padDisplayWhileMenu": "none",
+        "menuOpenClass": true,
+        "keyDestAfterResume": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:35:53.718Z"
+    },
+    {
+      "id": "5g",
+      "name": "touch controls: no PAD button; OPTIONS > touch controls hides the pad (MENU stays) and shows it again",
+      "pass": true,
+      "numbers": {
+        "padOnBefore": true,
+        "rowBox": [
+          37,
+          173,
+          390,
+          44
+        ],
+        "rowOff": {
+          "value": "off",
+          "pressed": "false",
+          "inOptions": true
+        },
+        "padOnAfterOff": false,
+        "stickDisplayOff": "none",
+        "actionsDisplayOff": "none",
+        "targetsOff": [
+          "#mc-pause"
+        ],
+        "floating": [],
+        "rowOn": {
+          "value": "on",
+          "pressed": "true",
+          "inOptions": true
+        },
+        "padOnAfterOn": true,
+        "stickDisplayOn": "block",
+        "actionsDisplayOn": "block"
+      },
+      "note": null,
+      "at": "2026-11-07T12:36:16.593Z"
+    },
+    {
+      "id": "O3",
+      "name": "opacity with the pad hidden: the stick and every action control are not drawn and take no touch; MENU stays at idle strength",
+      "pass": true,
+      "numbers": {
+        "stick": {
+          "display": "none",
+          "w": 0
+        },
+        "actions": {
+          "display": "none",
+          "w": 0
+        },
+        "drawnTargets": [
+          {
+            "id": "#mc-pause",
+            "opacity": 0.5,
+            "box": [
+              14,
+              8,
+              46,
+              44
+            ]
+          }
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:36:16.593Z"
+    },
+    {
+      "id": "6a",
+      "name": "two fingers: stick + FIRE move the player and fire in the same window",
+      "pass": true,
+      "numbers": {
+        "movedUnits": 272,
+        "ammo": [
+          200,
+          188
+        ],
+        "keys": [
+          "forward"
+        ],
+        "fireHeld": true
+      },
+      "note": null,
+      "at": "2026-11-07T12:36:22.844Z"
+    },
+    {
+      "id": "6b",
+      "name": "two fingers: look + FIRE turn the view and fire in the same window",
+      "pass": true,
+      "numbers": {
+        "yawDelta": 28.92,
+        "pitchDelta": -12.27,
+        "ammo": [
+          184,
+          162
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:36:35.495Z"
+    },
+    {
+      "id": "6c",
+      "name": "two fingers: stick + look move the player and turn the view at once",
+      "pass": true,
+      "numbers": {
+        "movedUnits": 438.9,
+        "yawDelta": 19.54,
+        "pitchDelta": 0.5
+      },
+      "note": null,
+      "at": "2026-11-07T12:36:40.343Z"
+    },
+    {
+      "id": "6d",
+      "name": "one two-finger gesture: stick + FIRE sliding to aim moves >= 50 units, turns >= 5 deg and drops ammo",
+      "pass": true,
+      "numbers": {
+        "movedUnits": 674.2,
+        "yawDelta": 14.65,
+        "pitchDelta": -4.63,
+        "ammo": [
+          159,
+          128,
+          124
+        ],
+        "keys": [
+          "forward"
+        ],
+        "fireHeld": true,
+        "fireAiming": true,
+        "mousedowns": 1
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:01.071Z"
+    },
+    {
+      "id": "7a",
+      "name": "touchCancel on held FIRE releases it; ammo stops; the next press fires",
+      "pass": true,
+      "numbers": {
+        "fireHeldAfterCancel": false,
+        "ammoStable": true,
+        "ammo": [
+          124,
+          116,
+          116,
+          103
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:19.244Z"
+    },
+    {
+      "id": "7b",
+      "name": "touchCancel on held stick releases it; the player stops; the next press moves",
+      "pass": true,
+      "numbers": {
+        "movedWhileHeld": 197.3,
+        "keysAfterCancel": [],
+        "movedAfterCancel": 0,
+        "floorDrift": 0,
+        "stopBar": 39.5,
+        "cancelWindow": {
+          "from": {
+            "x": -107.8125,
+            "y": 476.6875,
+            "z": -145.8125
+          },
+          "to": {
+            "x": -107.8125,
+            "y": 476.6875,
+            "z": -145.8125
+          }
+        },
+        "movedOnNextPress": 210.1
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:30.917Z"
+    },
+    {
+      "id": "8a",
+      "name": "blur/tab hide: held stick + FIRE are released and the player/ammo stop",
+      "pass": true,
+      "numbers": {
+        "held": {
+          "keys": [
+            "forward"
+          ],
+          "fireHeld": true,
+          "ammo": 93
+        },
+        "afterHide": {
+          "keys": [],
+          "fireHeld": false
+        },
+        "visibilityAfterHide": "hidden",
+        "wentHidden": true,
+        "movedAfterHide": 0,
+        "ammoAfterHide": [
+          92,
+          92
+        ],
+        "events": [
+          "blur",
+          "blur",
+          "visibility:hidden"
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:41.470Z"
+    },
+    {
+      "id": "8b",
+      "name": "returning to the tab leaves no keys down and the next FIRE press works",
+      "pass": true,
+      "numbers": {
+        "visibility": "visible",
+        "keys": [],
+        "fireHeld": false,
+        "ammo": [
+          103,
+          92,
+          79
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:48.122Z"
+    },
+    {
+      "id": "9a",
+      "name": "portrait (390x844): rotate guide visible, pad hidden, pause reachable",
+      "pass": true,
+      "numbers": {
+        "portrait": true,
+        "rotateDisplay": "flex",
+        "rotateText": "↻ Rotate your device Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls. Use landscape If the screen does not turn, use your device's rotation setting.",
+        "stickDisplay": "none",
+        "actionsDisplay": "none",
+        "pauseDisplay": "flex"
+      },
+      "note": null,
+      "at": "2026-11-07T12:37:52.110Z"
+    },
+    {
+      "id": "L3",
+      "name": "layout 390x844 portrait: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px",
+      "pass": true,
+      "numbers": {
+        "viewport": {
+          "w": 390,
+          "h": 844
+        },
+        "floating": [],
+        "fullscreenRow": {
+          "inVideo": true,
+          "inPageList": true,
+          "value": "off"
+        },
+        "overlaps": [],
+        "small": [],
+        "missing": [],
+        "boxes": {
+          "#mc-pause": [
+            14,
+            8,
+            46,
+            44
+          ],
+          ".rotate-card": [
+            35,
+            275,
+            320,
+            293
+          ],
+          "#rotate-action": [
+            120,
+            458,
+            150,
+            46
+          ]
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:38:19.765Z"
+    },
+    {
+      "id": "9b",
+      "name": "portrait: a tap where FIRE would be fires nothing",
+      "pass": true,
+      "numbers": {
+        "ammo": [
+          79,
+          79
+        ],
+        "ammoReason": null,
+        "dead": false,
+        "yawDelta": 0,
+        "pitchDelta": 0,
+        "mousedown": 0,
+        "fireHeld": false
+      },
+      "note": null,
+      "at": "2026-11-07T12:38:21.442Z"
+    },
+    {
+      "id": "9c",
+      "name": "portrait: pause opens the menu and Resume returns to the game",
+      "pass": true,
+      "numbers": {
+        "keyDestPaused": 3,
+        "keyDestAfterResume": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:38:49.171Z"
+    },
+    {
+      "id": "10a",
+      "name": "desktop (1280x720, no touch emulation): the touch layer is absent",
+      "pass": true,
+      "numbers": {
+        "isTouchUi": false,
+        "touchUiClass": false,
+        "controls": {
+          "hidden": true,
+          "display": "none"
+        },
+        "viewport": {
+          "width": 1280,
+          "height": 720
+        }
+      },
+      "note": null,
+      "at": "2026-11-07T12:39:02.120Z"
+    },
+    {
+      "id": "10b",
+      "name": "desktop: a trusted click takes the pointer lock",
+      "pass": true,
+      "numbers": {
+        "pointerLockElement": "canvas",
+        "lockBefore": "canvas",
+        "lockAfterExit": "canvas",
+        "mode": "headful-xvfb"
+      },
+      "note": null,
+      "at": "2026-11-07T12:40:14.338Z"
+    },
+    {
+      "id": "10c",
+      "name": "desktop: trusted mouse moves change yaw and pitch",
+      "pass": true,
+      "numbers": {
+        "locked": {
+          "yawDelta": -19.8,
+          "pitchDelta": 6.6
+        },
+        "note": null
+      },
+      "note": null,
+      "at": "2026-11-07T12:40:14.338Z"
+    },
+    {
+      "id": "10d",
+      "name": "desktop: the left mouse button fires (ammo changes)",
+      "pass": true,
+      "numbers": {
+        "ammo": [
+          200,
+          191
+        ]
+      },
+      "note": null,
+      "at": "2026-11-07T12:40:18.886Z"
+    },
+    {
+      "id": "10e",
+      "name": "desktop: the keyboard moves the player",
+      "pass": true,
+      "numbers": {
+        "movedUnits": 306,
+        "keyDest": 0
+      },
+      "note": null,
+      "at": "2026-11-07T12:40:22.349Z"
+    }
+  ],
+  "numbers": {
+    "fixture": {
+      "id": "demo2-dm",
+      "forward": 304,
+      "directions": {
+        "N": {
+          "distance": 304,
+          "forwardComponent": 304,
+          "rightComponent": 0,
+          "ms": 800,
+          "startedUnitsFromSpawn": 0,
+          "returnDistance": 10,
+          "returnTimeout": false
+        },
+        "NE": {
+          "distance": 151,
+          "forwardComponent": 146,
+          "rightComponent": 40,
+          "ms": 1600,
+          "startedUnitsFromSpawn": 10,
+          "returnDistance": 112,
+          "returnTimeout": true
+        },
+        "E": {
+          "distance": 36,
+          "forwardComponent": 0,
+          "rightComponent": 36,
+          "ms": 1800,
+          "startedUnitsFromSpawn": 0,
+          "returnDistance": 6,
+          "returnTimeout": false
+        },
+        "SE": {
+          "distance": 67,
+          "forwardComponent": -52,
+          "rightComponent": 42,
+          "ms": 2000,
+          "startedUnitsFromSpawn": 6,
+          "returnDistance": 9,
+          "returnTimeout": false
+        },
+        "S": {
+          "distance": 58,
+          "forwardComponent": -58,
+          "rightComponent": 0,
+          "ms": 1800,
+          "startedUnitsFromSpawn": 9,
+          "returnDistance": 27,
+          "returnTimeout": false
+        },
+        "SW": {
+          "distance": 312,
+          "forwardComponent": -49,
+          "rightComponent": -308,
+          "ms": 1800,
+          "startedUnitsFromSpawn": 36,
+          "returnDistance": 26,
+          "returnTimeout": false
+        },
+        "W": {
+          "distance": 394,
+          "forwardComponent": 0,
+          "rightComponent": -394,
+          "ms": 1000,
+          "startedUnitsFromSpawn": 37,
+          "returnDistance": 29,
+          "returnTimeout": false
+        },
+        "NW": {
+          "distance": 330,
+          "forwardComponent": 266,
+          "rightComponent": -195,
+          "ms": 1400,
+          "startedUnitsFromSpawn": 28,
+          "returnDistance": 12,
+          "returnTimeout": false
+        }
+      },
+      "openDirections": 4,
+      "minClearance": 36,
+      "qualified": false,
+      "checkSpot": {
+        "walkedUnits": 0,
+        "from": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        },
+        "to": {
+          "x": -911.9375,
+          "y": -71.9375,
+          "z": -105.8125
+        },
+        "yaw": 0,
+        "note": "the movement checks run at the fixture spawn, where the 8 directions were measured"
+      }
+    },
+    "desktop": {
+      "mode": "headful-xvfb",
+      "pointerLocked": true,
+      "lockBefore": "canvas",
+      "lockAfterExit": "canvas",
+      "lockedDelta": {
+        "yaw": -19.79736328125,
+        "pitch": 6.5972900390625,
+        "roll": 0
+      },
+      "pageBefore": {
+        "lock": "canvas",
+        "body": "",
+        "engineLock": null,
+        "at": "canvas"
+      },
+      "pageDuring": {
+        "lock": "canvas",
+        "body": "",
+        "engineLock": null,
+        "at": "canvas"
+      },
+      "lockedMoves": [
+        {
+          "mx": 30,
+          "my": 10,
+          "cx": 640,
+          "cy": 217,
+          "locked": true,
+          "target": "canvas"
+        },
+        {
+          "mx": 30,
+          "my": 10,
+          "cx": 640,
+          "cy": 217,
+          "locked": true,
+          "target": "canvas"
+        },
+        {
+          "mx": 30,
+          "my": 10,
+          "cx": 640,
+          "cy": 217,
+          "locked": true,
+          "target": "canvas"
+        },
+        {
+          "mx": 30,
+          "my": 10,
+          "cx": 640,
+          "cy": 217,
+          "locked": true,
+          "target": "canvas"
+        },
+        {
+          "mx": 30,
+          "my": 10,
+          "cx": 640,
+          "cy": 217,
+          "locked": true,
+          "target": "canvas"
+        }
+      ]
+    },
+    "environment": {
+      "consoleErrors": 0,
+      "pageErrors": 0,
+      "consoleErrorSamples": [],
+      "pageErrorSamples": []
+    }
+  },
+  "screenshots": [
+    {
+      "name": "phone-landscape",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/phone-landscape.png",
+      "note": "landscape 844x390, pad live in game"
+    },
+    {
+      "name": "phone-look-drag",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/phone-look-drag.png",
+      "note": "landscape 844x390, look drag mid-gesture (finger down)"
+    },
+    {
+      "name": "phone-menu",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/phone-menu.png",
+      "note": "landscape 844x390, menu open over the game"
+    },
+    {
+      "name": "phone-pad-off",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/phone-pad-off.png",
+      "note": "landscape 844x390, touch controls off from OPTIONS: only MENU stays"
+    },
+    {
+      "name": "phone-portrait",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/phone-portrait.png",
+      "note": "portrait 390x844 with the rotate guide"
+    },
+    {
+      "name": "desktop-1280x720",
+      "file": "/home/yanko/Projects/quake2/.clawbox/worktrees/run-1kdcxd66/docs/release-1.2.4/mobile-input-gate/shots/desktop-1280x720.png",
+      "note": "desktop 1280x720, in game"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "notes": [
+    {
+      "kind": "engine-cfg",
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set r_mode 14 +set cl_gun 1 +set fov 90 +set crosshair_scale 3 +set cheats 1 +set deathmatch 1 +set maxclients 1 +map demo2 +exec q2touch.cfg",
+      "stage": "fixture:demo2-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "execing q2touch.cfg.",
+      "stage": "fixture:demo2-dm"
+    },
+    {
+      "kind": "fixture-reload",
+      "id": "demo2-dm",
+      "direction": "NE",
+      "returnDistance": 112,
+      "text": "the return walk from NE ended 112 units from the spawn, so the map was loaded again before the next direction; without it every later direction measured from that other room"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set r_mode 14 +set cl_gun 1 +set fov 90 +set crosshair_scale 3 +set cheats 1 +set deathmatch 1 +set maxclients 1 +map demo2 +exec q2touch.cfg",
+      "stage": "fixture:demo2-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "execing q2touch.cfg.",
+      "stage": "fixture:demo2-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set r_mode 14 +set cl_gun 1 +set fov 90 +set crosshair_scale 3 +set cheats 1 +set deathmatch 1 +set maxclients 1 +map demo3 +exec q2touch.cfg",
+      "stage": "fixture:demo3-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "execing q2touch.cfg.",
+      "stage": "fixture:demo3-dm"
+    },
+    {
+      "kind": "fixture-shortfall",
+      "id": "demo2-dm",
+      "openDirections": 4,
+      "minClearance": 36,
+      "text": "The brief's bar of 200+ units open in all 8 movement directions was not met by any candidate (demo2-dm: 4/8, minimum 36 units; demo3-dm: 3/8, minimum 0 units). The movement checks run on demo2-dm at its spawn; check 4's stick directions run under the engine's noclip, so their bar no longer depends on the level's clearance (the smallest measured here is 36 units)."
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set r_mode 14 +set cl_gun 1 +set fov 90 +set crosshair_scale 3 +set cheats 1 +set deathmatch 1 +set maxclients 1 +map demo2 +exec q2touch.cfg",
+      "stage": "fixture:reload-demo2-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "execing q2touch.cfg.",
+      "stage": "fixture:reload-demo2-dm"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "Startup args: +set vid_renderer gles3 +set r_retexturing 1 +set gl3_usefbo 1 +set r_mode 14 +set cl_gun 1 +set fov 90 +set crosshair_scale 3 +set cheats 1 +set deathmatch 1 +set maxclients 1 +map demo2 +exec q2touch.cfg",
+      "stage": "4"
+    },
+    {
+      "kind": "engine-cfg",
+      "text": "execing q2touch.cfg.",
+      "stage": "4"
+    },
+    {
+      "kind": "desktop-browser",
+      "text": "the desktop leg runs in a freshly launched Chrome so the phone emulation's stale cursor state cannot zero the mouse moves"
+    },
+    {
+      "kind": "desktop-fallback",
+      "text": "headless refused the pointer lock; the desktop leg was re-run headful under Xvfb"
+    }
+  ],
+  "chromes": [
+    {
+      "path": "/opt/google/chrome/chrome",
+      "pid": 2879521,
+      "debuggingPort": 37021,
+      "headless": true,
+      "display": null,
+      "profile": "/tmp/q2gate-chrome-l8ifbc"
+    },
+    {
+      "path": "/opt/google/chrome/chrome",
+      "pid": 2883534,
+      "debuggingPort": 33537,
+      "headless": true,
+      "display": null,
+      "profile": "/tmp/q2gate-chrome-XrB9cj"
+    },
+    {
+      "path": "/opt/google/chrome/chrome",
+      "pid": 2884251,
+      "debuggingPort": 39327,
+      "headless": false,
+      "display": ":90",
+      "profile": "/tmp/q2gate-chrome-NOQA3E"
+    }
+  ],
+  "desktop": {
+    "mode": "headful-xvfb"
+  },
+  "checksRun": 45,
+  "failures": 0,
+  "passed": true,
+  "consoleErrorCount": 0,
+  "pageErrorCount": 0,
+  "finishedAt": "2026-11-07T12:40:24.368Z"
+}

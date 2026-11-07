@@ -1,0 +1,103 @@
+fixture: booting demo2-dm (deathmatch, demo2)
+FIXTURE demo2-dm: keyDest 0 dead false at {"x":-911.9375,"y":-71.9375,"z":-105.8125} in 7559ms
+PASS 5a. WPN with only the blaster: the weapon index stays and the pad says there is nothing to switch to {"before":61,"after":61,"taps":1,"noteShown":true,"noteText":"No other weapon to switch to yet","noteBox":[479,138,192,30],"ammo":[0,0]}
+  N: d=303.9 fwd=303.9 right=0.0 t=800 start=0 back=9.8 PASS
+  NE: d=151.0 fwd=145.6 right=39.9 t=1600 start=10 back=111.7 FAIL
+fixture: the return from NE ended 112 units from the spawn; reloading demo2-dm before the next direction
+  E: d=35.9 fwd=0.0 right=35.9 t=1800 start=0 back=5.9 FAIL
+  SE: d=66.7 fwd=-51.9 right=42.0 t=2000 start=6 back=9.4 FAIL
+  S: d=57.9 fwd=-57.9 right=0.0 t=1800 start=9 back=27.4 FAIL
+  SW: d=311.7 fwd=-49.4 right=-307.8 t=1800 start=36 back=26.1 PASS
+  W: d=394.0 fwd=0.0 right=-394.0 t=1000 start=37 back=28.7 PASS
+  NW: d=329.7 fwd=266.1 right=-194.6 t=1400 start=28 back=12.1 PASS
+FIXTURE demo2-dm: not qualified -- 4/8 directions at 200+ units, forward 304 units, minimum clearance 36 units, ended 22 units from spawn
+fixture: booting demo3-dm (deathmatch, demo3)
+FIXTURE demo3-dm: keyDest 0 dead false at {"x":152.0625,"y":-423.9375,"z":-457.8125} in 8682ms
+  N: d=316.8 fwd=316.8 right=0.0 t=1800 start=0 back=10.4 PASS
+  NE: d=282.3 fwd=282.3 right=7.5 t=1800 start=2 back=15.5 PASS
+  E: d=10.9 fwd=0.0 right=10.9 t=1600 start=5 back=8.8 FAIL
+  SE: d=4.0 fwd=-4.0 right=0.0 t=1400 start=9 back=11.1 FAIL
+  S: d=0.0 fwd=0.0 right=0.0 t=1200 start=11 back=11.1 FAIL
+  SW: d=47.8 fwd=0.0 right=-47.8 t=1800 start=11 back=24.5 FAIL
+  W: d=159.4 fwd=0.0 right=-159.4 t=2600 start=20 back=12.1 FAIL
+  NW: d=314.4 fwd=275.4 right=-151.8 t=1600 start=1 back=25.4 PASS
+FIXTURE demo3-dm: not qualified -- 3/8 directions at 200+ units, forward 317 units, minimum clearance 0 units, ended 21 units from spawn
+fixture: booting demo3-sp (single-player, demo3)
+fixture: skipping demo3-sp -- skipped: a deathmatch candidate already booted controllably, and a death there respawns with a trusted press
+fixture: The brief's bar of 200+ units open in all 8 movement directions was not met by any candidate (demo2-dm: 4/8, minimum 36 units; demo3-dm: 3/8, minimum 0 units). The movement checks run on demo2-dm at its spawn; check 4's stick directions run under the engine's noclip, so their bar no longer depends on the level's clearance (the smallest measured here is 36 units).
+fixture: reloading demo2-dm for the checks
+fixture: the movement checks run at the fixture spawn {"x":-911.9375,"y":-71.9375,"z":-105.8125}
+PASS setup. engine is in game with a controllable player before the checks {"keyDest":0,"dead":false,"position":{"x":-911.9375,"y":-71.9375,"z":-105.8125}}
+arming: sv_cheats 1;give all, then select a weapon with ammo
+PASS setup-arm. give all armed the player: ammo is readable and above zero {"ammo":200,"weaponIndex":105,"keyDest":0}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/phone-landscape.png
+PASS L1. layout 844x390 landscape: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px {"viewport":{"w":844,"h":390},"floating":[],"fullscreenRow":{"inVideo":true,"inPageList":true,"value":"off"},"overlaps":[],"small":[],"missing":[],"boxes":{"#mc-stick":[14,196,138,138],"#mc-fire":[752,256,78,78],"#mc-jump":[682,276,58,58],"#mc-crouch":[616,276,58,58],"#mc-use":[772,186,58,58],"#mc-weapon":[778,126,52,52],"#mc-pause":[14,8,46,44]}}
+PASS L2. layout 932x430 landscape: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px {"viewport":{"w":932,"h":430},"floating":[],"fullscreenRow":{"inVideo":true,"inPageList":true,"value":"off"},"overlaps":[],"small":[],"missing":[],"boxes":{"#mc-stick":[14,236,138,138],"#mc-fire":[840,296,78,78],"#mc-jump":[770,316,58,58],"#mc-crouch":[704,316,58,58],"#mc-use":[860,226,58,58],"#mc-weapon":[866,166,52,52],"#mc-pause":[14,8,46,44]}}
+PASS A1. ergonomics: no target reaches into the aiming zone (x 30-70 %) at 844x390 or 932x430 {"zone":[{"layout":"L1","x":[253.2,590.8]},{"layout":"L2","x":[279.6,652.4]}],"hits":[],"nearest":[{"layout":"L1","leftGroupEnds":152,"rightGroupStarts":616},{"layout":"L2","leftGroupEnds":152,"rightGroupStarts":704}]}
+PASS O1. opacity at idle: every pad control is drawn between 0.3 and 0.6, and the look surface is clear {"opacity":{"#mc-stick":0.5,"#mc-fire":0.5,"#mc-jump":0.5,"#mc-crouch":0.5,"#mc-use":0.5,"#mc-weapon":0.5,"#mc-pause":0.5},"outOfRange":[],"look":{"background":"rgba(0, 0, 0, 0)","image":"none","opacity":"1"}}
+PASS O2. opacity pressed: the control under the finger is drawn at 1, the others stay at idle, and it returns to idle after release {"#mc-crouch":{"pressed":1,"pressedClasses":"mc-btn is-down","fireMeanwhile":0.5,"afterRelease":0.5},"#mc-stick":{"pressed":1,"pressedClasses":"is-active","fireMeanwhile":0.5,"afterRelease":0.5}}
+PASS 1. a tap away from the controls never fires or turns [{"at":[422,70],"ammo":[200,200],"yawDelta":0,"pitchDelta":0,"newEntities":0,"mousedown":0,"fireHeld":false},{"at":[253,98],"ammo":[200,200],"yawDelta":0,"pitchDelta":0,"newEntities":0,"mousedown":0,"fireHeld":false},{"at":[591,86],"ammo":[200,200],"yawDelta":0,"pitchDelta":0,"newEntities":0,"mousedown":0,"fireHeld":false}]
+PASS 2a. FIRE press/hold fires: ammo falls and/or a new entity appears; the press does not turn the view {"ammo":[200,190,185,185],"ammoDrop":15,"muzzleEntities":0,"yawDelta":0,"pitchDelta":0,"touchDuring":{"fireHeld":true,"keys":[]},"mousedownEvents":1}
+PASS 2b. FIRE release stops firing (ammo is stable afterwards) {"afterRelease":185,"settled":185,"settled2":185,"fireHeld":false}
+PASS 2c. pointercancel on held FIRE releases it and stops the shots {"fireHeld":false,"ammo":[177,177]}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/phone-look-drag.png
+PASS 3a. look drag left+up raises yaw and lowers pitch, without firing {"yawDelta":29.169,"pitchDelta":-17.155,"ammo":[177,177],"newEntities":0}
+PASS 3b. look drag right+down lowers yaw and raises pitch, without firing {"yawDelta":-29.169,"pitchDelta":17.155,"ammo":[177,177]}
+PASS 3c. a tap on the look surface fires nothing and turns nothing {"ammo":[177,177],"yawDelta":0,"pitchDelta":0,"mousedown":0}
+check 4: noclip on, so the stick excursions cannot fall off demo2
+check 4: noclip state {"keyDest":0,"dead":false,"z":-105.8125}
+PASS 4a. stick pressed at the ring centre holds no keys and does not move the player {"keys":[],"movedUnits":0}
+PASS 4b. stick at 70% of the ring moves in the 8 expected directions {"noclip":true,"directions":{"N":{"distance":89.5,"forward":89.5,"right":0,"zDelta":0,"alive":true,"from":{"x":-912,"y":-72,"z":-106},"to":{"x":-822,"y":-72,"z":-106},"pass":true},"NE":{"distance":129,"forward":91.4,"right":91.1,"zDelta":0,"alive":true,"from":{"x":-822,"y":-72,"z":-106},"to":{"x":-731,"y":-163,"z":-106},"pass":true},"E":{"distance":60,"forward":0,"right":60,"zDelta":0,"alive":true,"from":{"x":-731,"y":-163,"z":-106},"to":{"x":-731,"y":-223,"z":-106},"pass":true},"SE":{"distance":59.8,"forward":-42.3,"right":42.3,"zDelta":0,"alive":true,"from":{"x":-731,"y":-223,"z":-106},"to":{"x":-773,"y":-265,"z":-106},"pass":true},"S":{"distance":102.5,"forward":-102.5,"right":0,"zDelta":0,"alive":true,"from":{"x":-773,"y":-265,"z":-106},"to":{"x":-876,"y":-265,"z":-106},"pass":true},"SW":{"distance":59.9,"forward":-42.3,"right":-42.5,"zDelta":0,"alive":true,"from":{"x":-876,"y":-265,"z":-106},"to":{"x":-918,"y":-223,"z":-106},"pass":true},"W":{"distance":90,"forward":0,"right":-90,"zDelta":0,"alive":true,"from":{"x":-918,"y":-223,"z":-106},"to":{"x":-918,"y":-133,"z":-106},"pass":true},"NW":{"distance":60.5,"forward":42.8,"right":-42.8,"zDelta":0,"alive":true,"from":{"x":-918,"y":-133,"z":-106},"to":{"x":-875,"y":-90,"z":-106},"pass":true}}}
+PASS 4c. stick release stops the player {"movedAfterRelease":0,"noclip":true}
+check 4: reloaded the fixture for checks 5-8 at {"x":-911.9375,"y":-71.9375,"z":-105.8125} in 8184 ms
+re-arming before check 5 with a trusted console: sv_cheats 1;give all
+PASS 5b. buttons: JUMP raises z and the player lands again {"zBefore":-105.8125,"zMax":-75.8125,"zAfter":-105.8125,"roseUnits":30,"rose":true,"landed":true}
+PASS 5c. buttons: USE holds and releases the engine's +use key, and the engine cfg that binds it actually executed {"keylog":[{"type":"down","key":"e","vk":69,"synthetic":true},{"type":"up","key":"e","vk":69,"synthetic":true}],"q2touchCfg":{"text":"// ClawBox touch controls (session only; not written back)\nbind e \"+use\"\nbind / \"weapnext\"\nbind c \"+movedown\"\n"},"engineExecutedCfg":true,"keyDest":0,"alive":true,"note":"No door on demo2/demo3 is provable in this harness; the check proves the binding and the key the button presses instead."}
+PASS 5d. buttons: USE leaves the keyboard in the game with the player alive {"keyDest":0,"dead":false,"position":{"x":-911.9375,"y":-71.9375,"z":-105.8125},"keysHeldWhileUse":["use"]}
+PASS 5e. WPN with the give-all loadout: each tap changes the engine's weapon index, with no 'nothing to switch' note {"before":105,"switches":[{"before":105,"after":82},{"before":82,"after":95}],"note":false,"q2touchExecuted":true}
+PASS 5h. CROUCH beside JUMP holds c: the engine's view drops >= 15 units while held and returns after release {"zStanding":-105.8125,"zDucked":-129.8125,"zAfter":-105.8125,"drop":24,"xyDrift":0,"keysHeld":["crouch"],"keylog":["down","up"],"crouchBox":[616,276,58,58],"jumpBox":[682,276,58,58]}
+PASS 5i. CROUCH with the stick: a crouch-walk moves the player while the view stays low {"zStanding":-105.8125,"zLow":-129.8125,"zWhileWalking":-129.3125,"movedUnits":34.5,"keys":["crouch","forward"]}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/phone-menu.png
+PASS 5j. MENU: the menu is still open a second after the tap, and the tap's click never reached it {"open":true,"clicks":[],"escapeResent":0}
+PASS 5f. buttons: PAUSE opens the engine menu with the pad hidden, and Resume returns the game {"keyDestWhilePaused":3,"padDisplayWhileMenu":"none","menuOpenClass":true,"keyDestAfterResume":0}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/phone-pad-off.png
+PASS 5g. touch controls: no PAD button; OPTIONS > touch controls hides the pad (MENU stays) and shows it again {"padOnBefore":true,"rowBox":[37,173,390,44],"rowOff":{"value":"off","pressed":"false","inOptions":true},"padOnAfterOff":false,"stickDisplayOff":"none","actionsDisplayOff":"none","targetsOff":["#mc-pause"],"floating":[],"rowOn":{"value":"on","pressed":"true","inOptions":true},"padOnAfterOn":true,"stickDisplayOn":"block","actionsDisplayOn":"block"}
+PASS O3. opacity with the pad hidden: the stick and every action control are not drawn and take no touch; MENU stays at idle strength {"stick":{"display":"none","w":0},"actions":{"display":"none","w":0},"drawnTargets":[{"id":"#mc-pause","opacity":0.5,"box":[14,8,46,44]}]}
+PASS 6a. two fingers: stick + FIRE move the player and fire in the same window {"movedUnits":272,"ammo":[200,188],"keys":["forward"],"fireHeld":true}
+PASS 6b. two fingers: look + FIRE turn the view and fire in the same window {"yawDelta":28.92,"pitchDelta":-12.27,"ammo":[184,162]}
+PASS 6c. two fingers: stick + look move the player and turn the view at once {"movedUnits":438.9,"yawDelta":19.54,"pitchDelta":0.5}
+PASS 6d. one two-finger gesture: stick + FIRE sliding to aim moves >= 50 units, turns >= 5 deg and drops ammo {"movedUnits":674.2,"yawDelta":14.65,"pitchDelta":-4.63,"ammo":[159,128,124],"keys":["forward"],"fireHeld":true,"fireAiming":true,"mousedowns":1}
+PASS 7a. touchCancel on held FIRE releases it; ammo stops; the next press fires {"fireHeldAfterCancel":false,"ammoStable":true,"ammo":[124,116,116,103]}
+check 7b: attempt 1, the floor's own drift over 1.3 s is 0 units
+PASS 7b. touchCancel on held stick releases it; the player stops; the next press moves {"movedWhileHeld":197.3,"keysAfterCancel":[],"movedAfterCancel":0,"floorDrift":0,"stopBar":39.5,"cancelWindow":{"from":{"x":-107.8125,"y":476.6875,"z":-145.8125},"to":{"x":-107.8125,"y":476.6875,"z":-145.8125}},"movedOnNextPress":210.1}
+PASS 8a. blur/tab hide: held stick + FIRE are released and the player/ammo stop {"held":{"keys":["forward"],"fireHeld":true,"ammo":93},"afterHide":{"keys":[],"fireHeld":false},"visibilityAfterHide":"hidden","wentHidden":true,"movedAfterHide":0,"ammoAfterHide":[92,92],"events":["blur","blur","visibility:hidden"]}
+PASS 8b. returning to the tab leaves no keys down and the next FIRE press works {"visibility":"visible","keys":[],"fireHeld":false,"ammo":[103,92,79]}
+PASS 9a. portrait (390x844): rotate guide visible, pad hidden, pause reachable {"portrait":true,"rotateDisplay":"flex","rotateText":"↻ Rotate your device Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls. Use landscape If the screen does not turn, use your device's rotation setting.","stickDisplay":"none","actionsDisplay":"none","pauseDisplay":"flex"}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/phone-portrait.png
+PASS L3. layout 390x844 portrait: no full-screen or PAD control over the game, no two targets overlap, every target >= 44 px {"viewport":{"w":390,"h":844},"floating":[],"fullscreenRow":{"inVideo":true,"inPageList":true,"value":"off"},"overlaps":[],"small":[],"missing":[],"boxes":{"#mc-pause":[14,8,46,44],".rotate-card":[35,275,320,293],"#rotate-action":[120,458,150,46]}}
+PASS 9b. portrait: a tap where FIRE would be fires nothing {"ammo":[79,79],"ammoReason":null,"dead":false,"yawDelta":0,"pitchDelta":0,"mousedown":0,"fireHeld":false}
+PASS 9c. portrait: pause opens the menu and Resume returns to the game {"keyDestPaused":3,"keyDestAfterResume":0}
+PASS 10a. desktop (1280x720, no touch emulation): the touch layer is absent {"isTouchUi":false,"touchUiClass":false,"controls":{"hidden":true,"display":"none"},"viewport":{"width":1280,"height":720}}
+desktop: arming attempt 1 (keyDest 0, dead false, ammo 0)
+desktop: armed at keyDest 0 with ammo 200
+desktop: lock as the look check starts canvas
+desktop: page before the look moves {"lock":"canvas","body":"","engineLock":null,"at":"canvas"}
+desktop: page while locked (1) {"lock":"canvas","body":"","engineLock":null,"at":"canvas"}
+desktop: locked look moves (1) [{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"},{"mx":0,"my":0,"cx":0,"cy":-87,"locked":true,"target":"canvas"}]
+desktop: the locked moves turned nothing; releasing the lock and taking a fresh one with our own trusted click
+desktop: the relock left {"lock":null,"body":"menu-open","engineLock":null,"at":"DIV"}; closing the menu with a trusted Escape
+desktop: headless refused the pointer lock; retrying headful under Xvfb
+desktop: arming attempt 1 (keyDest 0, dead false, ammo 0)
+desktop: armed at keyDest 0 with ammo 200
+desktop: lock as the look check starts canvas
+desktop: page before the look moves {"lock":"canvas","body":"","engineLock":null,"at":"canvas"}
+desktop: page while locked (1) {"lock":"canvas","body":"","engineLock":null,"at":"canvas"}
+desktop: locked look moves (1) [{"mx":30,"my":10,"cx":640,"cy":217,"locked":true,"target":"canvas"},{"mx":30,"my":10,"cx":640,"cy":217,"locked":true,"target":"canvas"},{"mx":30,"my":10,"cx":640,"cy":217,"locked":true,"target":"canvas"},{"mx":30,"my":10,"cx":640,"cy":217,"locked":true,"target":"canvas"},{"mx":30,"my":10,"cx":640,"cy":217,"locked":true,"target":"canvas"}]
+PASS 10b. desktop: a trusted click takes the pointer lock {"pointerLockElement":"canvas","lockBefore":"canvas","lockAfterExit":"canvas","mode":"headful-xvfb"}
+PASS 10c. desktop: trusted mouse moves change yaw and pitch {"locked":{"yawDelta":-19.8,"pitchDelta":6.6},"note":null}
+PASS 10d. desktop: the left mouse button fires (ammo changes) {"ammo":[200,191]}
+PASS 10e. desktop: the keyboard moves the player {"movedUnits":306,"keyDest":0}
+  screenshot docs/release-1.2.4/mobile-input-gate/shots/desktop-1280x720.png
+
+PASSED: 45/45 checks
+report: docs/release-1.2.4/mobile-input-gate/report.json

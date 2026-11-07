@@ -1,0 +1,25 @@
+  server 127.0.0.1:35747 (temp store <tmp>)
+  box proxy 127.0.0.1:44057, Chrome CDP 127.0.0.1:37597
+  renderer: ANGLE (Google, Vulkan 1.3.0 (SwiftShader Device (Subzero) (0x0000C0DE)), SwiftShader driver)
+  ok   the shipped default is HD — 1280x720
+  ok   RTX is on by default — enabled true, quality performance
+  ok   the start-up line is inside the engine's argument limit — 23
+  ok   an idle page performs no status-bar read-backs — autoRead false, 0 reads, 0 attempts
+  ok   the on-demand status-bar reader still works — 1 read(s), health 100, ammo null, last read 293 ms
+  ok   stopping the reader stops the automatic reads — 0 new read(s)
+  game: 4.07 fps, frame p50 233 ms / p95 433 ms, task 260 ms/frame
+  game at 1366x768: 3.48 fps, task 286 ms/frame
+  ok   HD is no slower than 1366x768 on the same scene — 4.07 vs 3.48 fps
+  menu open: p50 409 ms to show, 1091 ms to paint
+  menu: 3.87 fps, task 273 ms/frame vs game 4.08 fps, 255 ms/frame
+  ok   the menu scrim carries no backdrop blur — none / undefined
+  ok   the menu keeps at least 80% of the game's frame rate — 3.87 vs 4.08 fps (95%)
+  ok   the menu adds no main-thread cost per drawn frame — 273 vs 255 ms (1.07x)
+  ok   the menu opens within a second and a half of the engine's own frame — 409 ms
+  menu with the old 2 px blur: 2.03 fps, task 568 ms/frame
+  ok   the old backdrop blur is what cost the menu its frame rate — 3.87 fps without vs 2.03 fps with (91% more without)
+  note numbers in <evidence>/final/perf/perf.json
+  ok   app.js threw nothing during the measurement — none
+
+13/13 checks passed
+exit=0

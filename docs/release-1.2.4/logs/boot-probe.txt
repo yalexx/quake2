@@ -1,0 +1,23 @@
+booting http://127.0.0.1:35093/apps/quake2/ (map demo1)
+first engine frame: keyDest=0 consoleOpen=false at 1156 ms (window.quake2BootFrame)
+  PASS the page left a first-frame record (window.quake2BootFrame) -- {"source":"window.quake2BootFrame"}
+  PASS (a) first engine frame: consoleOpen is false -- {"consoleOpen":false,"keyDest":0,"source":"window.quake2BootFrame"}
+  PASS (a) first engine frame: keyDest is the game (0) -- {"keyDest":0,"source":"window.quake2BootFrame"}
+after 5000 ms in game: keyDest=0 consoleOpen=false
+  PASS (b) after 5000 ms: consoleOpen is false -- {"consoleOpen":false,"keyDest":0,"keyName":"game"}
+  PASS (b) after 5000 ms: keyDest is the game (0) -- {"keyDest":0,"keyName":"game"}
+  PASS no frame in the observed boot ever had the console up -- {"game":34,"console":0,"menu":0,"other":0}
+  PASS every +set cvar of the app's start-up line is still passed with its value -- {"missing":[]}
+  PASS the level still starts (demo1 on the start-up line) -- {"map":"demo1"}
+  PASS the level is running, not a menu: entities are being sent -- {"entityCount":175}
+  PASS (c) document.fullscreenElement is null after load -- {"fullscreenElement":false,"fullscreenEnabled":true}
+  PASS (e) no full-screen control floats over the game -- {"floating":[],"row":{"hidden":false,"display":"flex","ariaPressed":"false","ariaLabel":"Enter full screen","title":"Enter full screen","classes":"setting","value":"off"}}
+  PASS (e) the VIDEO full-screen row either enters fullscreen or offers the app's own window -- {"fullscreenElement":true,"ownWindow":false,"row":{"hidden":false,"display":"flex","ariaPressed":"true","ariaLabel":"Leave full screen (Esc)","title":"Leave full screen (Esc)","classes":"setting is-on","value":"on"}}
+  PASS (e) the row's aria-pressed and value follow the fullscreen state -- {"hidden":false,"display":"flex","ariaPressed":"true","ariaLabel":"Leave full screen (Esc)","title":"Leave full screen (Esc)","classes":"setting is-on","value":"on"}
+  PASS (e) Esc leaves fullscreen -- {"fullscreenElement":false}
+  PASS (e) the row's aria-pressed and value follow Esc -- {"hidden":false,"display":"flex","ariaPressed":"false","ariaLabel":"Enter full screen","title":"Enter full screen","classes":"setting","value":"off"}
+  PASS (d) document.fullscreenElement is still null 3000 ms after the first canvas click -- {"fullscreenElement":false}
+  PASS a second canvas click does not take the screen either (no armed gesture request) -- {"after":false,"pointerLocked":true}
+
+all 17 checks passed -- report in <evidence>/final/boot-probe
+exit=0

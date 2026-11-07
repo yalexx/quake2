@@ -1,0 +1,15 @@
+PASS  initialize hands back a supported protocol and the server's name -- quake2-control 1.0.0 on 2025-06-18
+PASS  ping answers an empty result (the stream is still alive after a notification) -- {}
+PASS  tools/list returns every Quake 2 tool, each with a JSON schema -- quake2_key, quake2_mouse, quake2_click, quake2_attack, quake2_status, quake2_state, quake2_screenshot
+PASS  tools/call quake2_status answers a well-formed result (game open or not) -- status JSON, framed=false, screenshot from game-tab
+PASS  tools/call quake2_state answers a well-formed result (the read an agent lives on) -- state JSON, map="demo1", unavailable [health, armour, ammo]
+PASS  tools/call with an unknown tool is a tool result with isError:true, not a protocol error -- isError:true -- no such tool: quake2_not_a_tool
+PASS  tools/call with a bad argument is isError, and the stream survives it -- isError, then ping still answered
+PASS  an unknown method is a JSON-RPC -32601, not a crash -- -32601 method not found: quake2/nonsense
+PASS  a line that is not JSON is a -32700 parse error, and the server carries on -- -32700, then ping still answered
+PASS  a request line over the 1 MiB cap is a -32700, and the stream resynchronises after it -- -32700, then the line ended and ping still answered
+PASS  nothing but JSON-RPC ever reached stdout -- 13 lines, all JSON (diagnostics go to stderr, which had 0 bytes)
+PASS  closing stdin ends the server with exit code 0 -- exit 0
+
+mcp-smoke-test: PASS -- the MCP handshake, tools/list, tools/call and its error paths all hold
+exit=0

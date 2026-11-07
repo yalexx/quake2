@@ -1,0 +1,32 @@
+  server 127.0.0.1:45423 (temp store <tmp>)
+  box proxy 127.0.0.1:34761 (CSP sandbox), Chrome CDP 127.0.0.1:38679
+  ok   the app boots to HD — 1280x720
+  ok   RTX is on by default — enabled true, quality performance
+  ok   the page is in the game — key_dest 0, canvas block
+  ok   the main menu is the audited four entries — GAME, OPTIONS, VIDEO, QUIT
+  ok   GAME still carries load game, labelled and ordered as before — load game (loadgame, hint ›)
+  ok   the GAME rows keep the engine's order — easy, medium, hard, hard+, load game, save game, credits
+  ok   load game opens the page-drawn LOAD GAME view — load
+  ok   an empty store says so in the panel — 0 slot(s), empty hidden false, text "No saved games yet — save with F6 or Save game."
+  note save answer: ran true, echo true, console false
+  note made baseq2/save/loadproof on demo3 and copied it to the console-named slot _edge, then reloaded the page
+  ok   after a page reload the game is back on demo1 — demo1
+  ok   the saved slot is listed with its name and a load hint — [{"slot":"save0","hint":"load","label":"save0"},{"slot":"current","hint":"load","label":"current"},{"slot":"_edge","hint":"load","label":"_edge"},{"slot":"loadproof","hint":"load","label":"loadproof"}]
+  ok   a console-named slot that starts with an underscore is listed — save0, current, _edge, loadproof
+  ok   the slots are in the engine's order (save0, save1…, quick, current, named) — save0, current, _edge, loadproof
+  ok   the roving ring starts on the first slot — save0
+  ok   Enter on the focused slot loads it — ?+load&loadproof
+  ok   Enter restores the saved level (demo3) — demo3
+  note reloaded the page again; the next load is the click path
+  ok   clicking a slot shows 'Loading <slot>…' on the game layer — {"hidden":false,"text":"Loading loadproof…","menuOpen":false}
+  ok   the next boot carries +load loadproof on its start-up line — 90 +set crosshair_scale 3 +load loadproof
+  ok   and carries no +map of its own — none
+  ok   the click restores the save's own level — demo3
+  ok   the load boot still starts at HD — 1280x720
+  ok   New Game after a load drops +load and maps demo1 — ?+set&skill&1&+map&demo1
+  ok   app.js threw nothing — none
+  ok   the page logged no errors — none
+  note screenshots in <evidence>/final/load-menu
+
+23/23 checks passed
+exit=0

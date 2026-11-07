@@ -1,0 +1,50 @@
+  server 127.0.0.1:46163 (temp store <tmp>)
+  box proxy 127.0.0.1:35851, Chrome CDP 127.0.0.1:40141
+  ok   every button in the menu is a control — 38 buttons, all controls
+  ok   every action is one the page handles — all known
+  ok   every settings row names a cvar the engine registers — 15 rows, all found
+  ok   OPTIONS carries the audited rows, in order — effects volume, mouse speed, always run, invert mouse, lookstrafe, free look, crosshair, pause on minimized
+  ok   VIDEO carries the audited rows, in order — video mode, brightness, field of view, color intensity, overbrights, multisampling, texture filter
+  ok   the touch-controls row is in OPTIONS and not drawn on a desktop — {"view":"options","groupHidden":true,"drawn":false,"touchUi":false}
+  ok   the dead OGG-music, note and engine-fullscreen rows are gone — none
+  ok   main > game opens its view — game
+  ok   back from game returns to the main menu — main
+  ok   main > options opens its view — options
+  ok   back from options returns to the main menu — main
+  ok   main > video opens its view — video
+  ok   back from video returns to the main menu — main
+  ok   credits opens the credits — credits: CREDITS Quake II · id Software, 1997 Programming: John Carma
+  ok   save game writes the engine's quick slot to the store — present
+  ok   new game starts demo1 at the chosen skill — ?+set&skill&2&+map&demo1; map demo1; engine skill 2
+  ok   the start-up line stays inside the engine's argument limit after New Game — 26
+  ok   the lighting buttons turn the RTX look off, high and performance — off mode 0 (Original lighting); high mode 2 (RTX look · High); performance mode 1 (RTX look · Performance)
+  ok   Apply with nothing changed says so in the panel — {"hidden":false,"text":"Nothing to apply"}
+  ok   reset defaults restores the engine defaults and writes them — 6 (changed false), config "6"
+  ok   reset to default restores the VIDEO defaults — 1.6 (changed false)
+  ok   setting s_volume applies, persists and shows its new value — from 0.7 to 0.8 (changed true, hint "1 change"), stored "0.8", shown {"value":"0.8","label":"0.8","index":8,"changed":false}
+  ok   setting sensitivity applies, persists and shows its new value — from 6 to 6.5 (changed true, hint "1 change"), stored "6.5", shown {"value":"6.5","label":"6.5","index":13,"changed":false}
+  ok   setting cl_run applies, persists and shows its new value — from 1 to 0 (changed true, hint "1 change"), stored "0", shown {"value":"0","label":"no","index":0,"changed":false}
+  ok   setting m_pitch applies, persists and shows its new value — from 0.022 to -0.022 (changed true, hint "1 change"), stored "-0.022", shown {"value":"-0.022","label":"yes","index":1,"changed":false}
+  ok   setting lookstrafe applies, persists and shows its new value — from 0 to 1 (changed true, hint "1 change"), stored "1", shown {"value":"1","label":"yes","index":1,"changed":false}
+  ok   setting freelook applies, persists and shows its new value — from 1 to 0 (changed true, hint "1 change"), stored "0", shown {"value":"0","label":"no","index":0,"changed":false}
+  ok   setting crosshair applies, persists and shows its new value — from 1 to 2 (changed true, hint "1 change"), stored "2", shown {"value":"2","label":"dot","index":2,"changed":false}, crosshair draws 2
+  ok   setting vid_pauseonfocuslost applies, persists and shows its new value — from 0 to 1 (changed true, hint "1 change"), stored "1", shown {"value":"1","label":"no","index":1,"changed":false}
+  ok   setting r_mode applies, persists and shows its new value — from 14 to 17 (changed true, hint "1 change"), stored "17", shown {"value":"17","label":"1366x768","index":17,"changed":false}, drawing buffer 1366x768
+  ok   setting vid_gamma applies, persists and shows its new value — from 1.6 to 1.7 (changed true, hint "1 change"), stored "1.7", shown {"value":"1.7","label":"1.7","index":16,"changed":false}
+  ok   setting fov applies, persists and shows its new value — from 90 to 60 (changed true, hint "1 change"), stored "60", shown {"value":"60","label":"60","index":0,"changed":false}, start-up fov 60
+  ok   setting gl3_intensity applies, persists and shows its new value — from 2.0 to 2.1 (changed true, hint "1 change"), stored "2.1", shown {"value":"2.1","label":"2.1","index":20,"changed":false}
+  ok   setting gl3_overbrightbits applies, persists and shows its new value — from 1.3 to 1.4 (changed true, hint "1 change"), stored "1.4", shown {"value":"1.4","label":"1.4","index":13,"changed":false}
+  ok   setting r_msaa_samples applies, persists and shows its new value — from 0 to 2 (changed true, hint "1 change"), stored "2", shown {"value":"2","label":"2x","index":1,"changed":false}, GL samples 4
+  ok   setting gl_texturemode applies, persists and shows its new value — from GL_LINEAR_MIPMAP_LINEAR to GL_NEAREST (changed true, hint "1 change"), stored "GL_NEAREST", shown {"value":"GL_NEAREST","label":"pixelated","index":0,"changed":false}
+  ok   game mode engages from its row — {"active":true,"fullscreen":true,"reason":null}
+  ok   game mode leaves when asked — {"active":false}
+  ok   the Full screen row enters full screen — true
+  ok   full screen can be left — false
+  ok   quit stops the picture and says so — {"display":"none","status":"Quake 2 has quit.","menuHidden":true}
+  ok   the engine keeps its config in the store, written as `set` lines — 17 lines; no seta
+  ok   the engine itself holds every value this audit applied — 15 applied, 0 missing
+  ok   app.js threw nothing during the audit — none
+  note screenshots in <evidence>/final/menu-audit
+
+44/44 checks passed
+exit=0

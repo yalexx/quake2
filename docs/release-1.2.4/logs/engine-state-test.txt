@@ -1,0 +1,62 @@
+the page script loads and names its offsets
+  ok   engine-state.js defines window.quake2Engine
+  ok   and the offsets it reads are the ones it publishes
+a reading is the engine's own floats
+  ok   position comes back as the three floats that were written
+  ok   angles likewise
+  ok   key_dest 0 is the game, and not paused
+  ok   health and armour stay null; the weapon and ammo are read from the engine
+the current weapon and its ammo are the engine's own numbers
+  ok   weaponIndex comes back as the number written at gunindex
+  ok   ammo comes back as the number written at stats[3]
+  ok   nothing readable is reported with a null reason
+  ok   the ammo stat is int16, not bytes: 200 is not read as 200 mod 256
+  ok   a different weapon with the same ammo icon reads as the new gunindex
+  ok   an ammo icon the gunindex does not share is not published as the weapon
+  ok   the offsets the reader publishes are the ones it reads
+the strafe lean is not a death
+  ok   a roll of 0 is a lean, not a death
+  ok   a roll of 0.72 is a lean, not a death
+  ok   a roll of -0.72 is a lean, not a death
+  ok   a roll of 1 is a lean, not a death
+  ok   a roll of 1.43 is a lean, not a death
+  ok   a roll of 1.95 is a lean, not a death
+  ok   a roll of -2 is a lean, not a death
+  ok   a roll of 2 is a lean, not a death
+  ok   and the reading says what it derived `alive` from
+the death camera is
+  ok   a roll of 20.1 is a death
+  ok   a roll of 39 is a death
+  ok   a roll of 40 is a death
+  ok   a roll of -40 is a death
+  ok   a roll of 90 is a death
+the lean and the death are the two populations that were measured
+  ok   the largest strafe lean measured is alive and the death camera is dead
+  ok   the threshold is not inside either population
+a memory that cannot be read is not a zero
+  ok   a buffer without the offsets in it reports a reason rather than a value
+  ok   and it does not claim the player is alive or dead
+  ok   the weapon and ammo are null with a reason rather than a fabricated 0/0
+  ok   no engine at all is its own reason
+  ok   and the weapon and ammo are null with that reason
+a stats array that is not the player's is not read as one
+  ok   an implausible health stat makes the ammo null with a reason
+  ok   and the separately-read weapon is unaffected
+a weapon word that cannot be a model index is not published
+  ok   a negative gunindex makes the weapon null with a reason
+  ok   while the ammo is still the number in the stats array
+the key_dest reading is Quake 2's own order
+  ok   1 is the console, and it is a pause
+  ok   3 is the engine's own menu
+the bridge and the page must agree about the same roll
+  ok   a roll of 0 is read the same way by both
+  ok   a roll of 2 is read the same way by both
+  ok   a roll of -2 is read the same way by both
+  ok   a roll of 12 is read the same way by both
+  ok   a roll of 40 is read the same way by both
+  ok   a roll of -40 is read the same way by both
+  ok   the bridge's threshold is the one the two measured populations argue for
+  ok   with no roll to judge, the bridge falls back to the page rather than to an answer
+
+all 48 checks passed
+exit=0

@@ -1,0 +1,116 @@
+static checks
+  ok   served page answers 200 -- {"status":200,"url":"http://127.0.0.1:42703/apps/quake2/index.html"}
+  ok   touch control layer present in the served page -- "a #mobile-controls element; the pre-touch base has none"
+  ok   touch control script is loaded -- "a <script src=mobile-controls.js>"
+  ok   large FIRE control present -- "a #mc-fire element"
+  ok   portrait rotate guide present -- "a #rotate-overlay element"
+  ok   landscape guide has an action -- "a #rotate-action button"
+landscape 844x390
+  ok   first-show hint appears with the touch layer -- "Left stick moves · drag the right side to look · FIRE shoots, slide it to aim · JUMP, CROUCH & USE beside it"
+  ok   first-show hint names look and fire -- "Left stick moves · drag the right side to look · FIRE shoots, slide it to aim · JUMP, CROUCH & USE beside it"
+  ok   no settings control floats over the play layer -- "no chip and no visible lighting control over the game"
+  ok   the touch layer is live over the running game
+  ok   touch presentation is active on a coarse-pointer phone
+  ok   no page scroll and no horizontal overflow -- {"scroll":{"w":844,"h":390},"inner":{"w":844,"h":390}}
+  ok   canvas fills the usable viewport (letterboxed to the engine aspect) -- {"x":75.328125,"y":0,"w":693.328125,"h":390,"right":768.65625,"bottom":390}
+  ok   the pointer-lock prompt is hidden on touch
+  ok   the portrait guide is not shown in landscape
+  ok   no PAD, full-screen or WPN-pair control is left over the game -- []
+  ok   the top row carries MENU alone at 844x390 -- [{"id":"☰MENU","left":14,"right":60,"top":8,"bottom":52,"w":46,"h":44}]
+  ok   MENU, the action controls and the hint do not overlap -- "no pair of the seven boxes intersects"
+  ok   the first-show hint sits below the top control row -- {"hintTop":64,"rowBottom":52}
+  ok   FIRE is the large primary action (>= 72 px) -- {"w":78,"h":78}
+  ok   FIRE is larger than every secondary control -- [78,58,58,58,52,46]
+  ok   every touch target is at least 44 px -- [{"id":"◎FIRE","w":78,"h":78},{"id":"↑JUMP","w":58,"h":58},{"id":"↓CROUCH","w":58,"h":58},{"id":"◫USE","w":58,"h":58},{"id":"↻WPN","w":52,"h":52},{"id":"☰MENU","w":46,"h":44}]
+  ok   JUMP and USE sit inside FIRE's thumb arc -- {"jump":81,"use":81}
+  ok   WPN is one control, smaller than FIRE, above the firing arc -- {"weapon":{"x":778,"y":126,"left":778,"top":126,"right":830,"bottom":178,"w":52,"h":52,"display":"flex","text":"↻WPN","aria":"Next weapon"},"useTop":186}
+  ok   CROUCH sits beside JUMP, in its row and at its size -- {"crouch":{"x":616,"y":276,"left":616,"top":276,"right":674,"bottom":334,"w":58,"h":58,"display":"flex","text":"↓CROUCH","aria":"Crouch (hold)"},"jump":{"x":682,"y":276,"left":682,"top":276,"right":740,"bottom":334,"w":58,"h":58,"display":"flex","text":"↑JUMP","aria":"Jump"}}
+  ok   pause/menu is small and out of the aiming area -- {"w":46,"top":8}
+  ok   all controls fit inside the viewport -- null
+  ok   no control covers the engine status-bar band -- {"lowest":334,"viewportBottom":390}
+  ok   the right side stays mostly free for dragging to look -- {"coverage":0.121}
+  ok   the look area is the touch look surface above the canvas -- ["mc-look","canvas","touch-ui mc-live","HTML"]
+  ok   every control carries a visible label and an accessible name -- null
+  ok   the full-screen control is VIDEO's page-control row, not a button over the game -- {"view":"video","pageList":true}
+  ok   safe-area insets keep the controls off the notch and home indicator -- {"inner":{"w":844,"h":390},"stick":{"x":58,"y":176,"left":58,"top":176,"right":196,"bottom":314,"w":138,"h":138,"display":"block","text":"","aria":"Movement thumbstick"},"fire":{"x":708,"y":236,"left":708,"top":236,"right":786,"bottom":314,"w":78,"h":78,"display":"flex","text":"◎FIRE","aria":"Fire (slide to aim)"},"canvas":{"x":114.4375,"y":24,"w":615.109375,"h":346,"right":729.546875,"bottom":370}}
+  ok   the hint clears after the first control use
+  ok   WPN presses the engine's weapnext key (/) -- [{"type":"down","key":"/","synthetic":true},{"type":"up","key":"/","synthetic":true}]
+  ok   weapon switching leaves the game in control
+  ok   FIRE does not turn the view -- {"before":135,"after":135}
+  ok   JUMP lifts the player and gravity returns it -- {"start":46.1875,"peak":68.9375,"landed":46.1875}
+  multi pre-state: "{\"uiEnabled\":true,\"padOn\":true,\"live\":true,\"bindingsInstalled\":true,\"portrait\":false,\"hintSeen\":true,\"fireHeld\":false,\"buttons\":[],\"keys\":[],\"fireAiming\":false,\"weaponTaps\":1,\"weaponSwitches\":0,\"menuRetries\":0,\"weaponNote\":false,\"lookActive\":false,\"lookCursor\":{\"x\":421.9921875,\"y\":195},\"pointerLock\":false}"
+  multi fire-state: "{\"uiEnabled\":true,\"padOn\":true,\"live\":true,\"bindingsInstalled\":true,\"portrait\":false,\"hintSeen\":true,\"fireHeld\":true,\"buttons\":[\"fire\"],\"keys\":[\"forward\"],\"fireAiming\":true,\"weaponTaps\":1,\"weaponSwitches\":0,\"menuRetries\":0,\"weaponNote\":false,\"lookActive\":true,\"lookCursor\":{\"x\":301.9921875,\"y\":195},\"pointerLock\":false}"
+  ok   multi-touch: move, look and fire together -- {"moved":559.3,"yaw":29.2,"fired":[361],"dead":false}
+  ok   FIRE produces an engine effect (a new game entity) -- {"singlePress":[59],"heldMultitouch":[361]}
+  ok   a touch drag on the right changes yaw -- {"from":164.168701171875,"to":-147.1234130859375}
+  ok   a vertical touch drag changes pitch -- {"from":0,"to":-29.300537109375}
+  ok   the thumbstick moves the player -- {"from":{"x":128.0625,"y":-319.9375,"z":46.1875},"to":{"x":-31.8125,"y":-159.8125,"z":46.1875}}
+  ok   the pause control opens the menu -- {"menuOpen":true,"keyDest":3}
+  ok   the touch pad is put away behind the menu
+  ok   no horizontal overflow with the menu open -- {"scroll":{"w":844,"h":390},"inner":{"w":844,"h":390}}
+  ok   the landscape menu panel fits inside the viewport -- {"x":16,"y":11.5,"left":16,"top":11.5,"right":448,"bottom":378.5,"w":432,"h":367,"display":"block","text":"QuakeII BaseQ2 · single player GAME› OPTIONS› VIDEO› QUIT› GAME easynew game mediumnew game hardnew game hard+new game load game› save gameF6 credits› New Game starts demo1 at the chosen skill. Load game lists the saves this server keeps; save game writes the engine's quick slot, the same as F6. LOAD GAME No saved games yet — save with F6 or Save game. Could not read the save list. Reload the page and try again. VIDEO video mode1280x720 brightness1.6 field of view90 color intensity2.0 overbrights1.3 multisamplingoff texture filtertrilinear reset to default applyno changes full screenoff game modeoff video mode is the engine's own r_mode list (its 33 modes, then auto and custom); HD (1280x720) is the default and applying restarts the level at the chosen mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). Applying writes the values into the engine's config.cfg and restarts the level, so they survive later visits. full screen asks the browser for the whole screen and leaves it on a second tap (or Esc), with the page interface kept. Inside the ClawBox desktop's sandboxed window the browser forbids full screen; there the row reads own window and opens the app in a window that is allowed to fill the display. game mode (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop where the Window Management API is allowed it also blacks out each additional display. Esc leaves full screen and the mode. The engine's own vid_fullscreen row is not offered: in this browser build it does not enter full screen, so it was a control that did nothing. OPTIONS effects volume0.7 mouse speed6.0 always runyes invert mouseno lookstrafeno free lookyes crosshaircross pause on minimizedyes reset defaults LIGHTING Off Performance High RTX look · Performance RTX is on by default (Performance, the preset built for this device's frame budget; High adds the wide light halo). Off returns every light to the engine's original shading. The choice is kept for the next visit. TOUCH touch controlson applyno changes Applying writes the changed values into the engine's own config.cfg (userdata/baseq2/config.cfg) and restarts the level, so they hold on this and later visits. The engine's own menu applies each row immediately; this page has no console, so it needs the apply control. CREDITS Quake II · id Software, 1997 Programming: John Carmack, Michael Abrash, John Cash Design: Tim Willits, John Romero, Sandy Petersen Art: Adrian Carmack, Kevin Cloud, Paul Steed Music: Sonic Mayhem · Sound: Nine Inch Nails Engine: Yamagi Quake II (Qwasm2 WebAssembly build) ↑ ↓ selectEnter openEsc back Resume Back","aria":null}
+  ok   the VIDEO row is tappable (>= 44 px) -- {"h":44}
+  ok   a VIDEO settings row is tappable (>= 44 px) -- {"value":"1.6","index":"15","h":44,"x":232,"y":190}
+  ok   a VIDEO row changes a cvar by tap -- {"before":"1.6","after":"1.7","hint":"1 change"}
+  ok   the game-mode row is finger-sized and tappable -- {"h":44,"w":390,"x":37,"right":427,"top":173,"bottom":217,"action":"game-mode","inner":[844,390]}
+  ok   the settings menu carries the three lighting modes at 844x390 -- [{"id":"off","w":128.7,"h":44},{"id":"performance","w":129.7,"h":44},{"id":"high","w":129.7,"h":44}]
+  shot shots/landscape-844x390-settings.png
+  ok   a lighting tap inside the menu changes the RTX status -- {"before":{"text":"RTX look · Performance","mode":1},"after":{"text":"RTX look · High","mode":2}}
+  ok   the Off lighting mode is applied from the menu -- {"text":"Original lighting","mode":0}
+  ok   an OPTIONS row cycles a cvar by tap -- {"before":"0.7","after":"0.8","hint":"2 changes"}
+  ok   the OPTIONS apply control is finger-sized -- {"x":232,"y":194.875,"h":44}
+  ok   Apply writes the changed cvar into the engine's config.cfg and reloads -- {"value":"0.8","config":"0.8"}
+  ok   the OPTIONS reset control is finger-sized -- {"x":232,"y":195,"h":44}
+  ok   Reset defaults writes the default into config.cfg and reloads -- {"config":"0.7"}
+  ok   the pad can be hidden from OPTIONS, MENU stays, and the choice is stored -- {"actions":"none","stick":"none","pause":"flex","value":"off","stored":"off"}
+  ok   the hidden choice survives a reload -- {"actions":"none","pause":"flex","value":"off","stored":"off"}
+  ok   the pad comes back and the choice is stored -- {"actions":"block","value":"on","stored":"on"}
+  ok   the pad is on for the remaining measurements
+  shot shots/landscape-844x390.png
+landscape 932x430
+  ok   932x430: the on-screen pad is available
+  ok   932x430: no horizontal overflow -- {"scroll":{"w":932,"h":430},"inner":{"w":932,"h":430}}
+  ok   932x430: the canvas fits the viewport -- {"x":83.765625,"y":0,"w":764.4375,"h":430,"right":848.203125,"bottom":430}
+  ok   932x430: the touch pad is live in landscape
+  ok   932x430: FIRE stays large and inside the viewport -- {"x":840,"y":296,"left":840,"top":296,"right":918,"bottom":374,"w":78,"h":78,"display":"flex","text":"◎FIRE","aria":"Fire (slide to aim)"}
+  shot shots/landscape-932x430.png
+  ok   932x430: the lighting modes are finger-sized and fit the viewport -- [{"id":"off","w":128.7,"h":44},{"id":"performance","w":129.7,"h":44},{"id":"high","w":129.7,"h":44}]
+portrait 390x844
+  ok   portrait: the rotate guide is shown -- {"portrait":true,"display":"flex"}
+  ok   portrait: the guide says to rotate the device -- "↻ Rotate your device Quake 2 plays in landscape. Turn your phone or tablet sideways for the full picture and the on-screen controls. Use landscape If the screen does not turn, use your device's rotation setting."
+  ok   portrait: the game pad is put away but pause stays reachable -- {"stick":"none","actions":"none","pause":"flex"}
+  ok   portrait: no horizontal overflow -- {"scroll":{"w":390,"h":844},"inner":{"w":390,"h":844}}
+  shot shots/portrait-390x844-rotate.png
+  ok   portrait: the menu opens and the guide makes way -- {"menu":true,"guide":"none"}
+  ok   portrait: the menu has no horizontal overflow -- {"scroll":{"w":390,"h":844},"inner":{"w":390,"h":844}}
+  ok   portrait: the menu panel fits inside the viewport -- {"x":16,"y":229,"left":16,"top":229,"right":374,"bottom":615,"w":358,"h":386,"display":"block","text":"QuakeII BaseQ2 · single player GAME› OPTIONS› VIDEO› QUIT› GAME easynew game mediumnew game hardnew game hard+new game load game› save gameF6 credits› New Game starts demo1 at the chosen skill. Load game lists the saves this server keeps; save game writes the engine's quick slot, the same as F6. LOAD GAME No saved games yet — save with F6 or Save game. Could not read the save list. Reload the page and try again. VIDEO video mode1280x720 brightness1.7 field of view90 color intensity2.0 overbrights1.3 multisamplingoff texture filtertrilinear reset to default applyno changes full screenoff game modeoff video mode is the engine's own r_mode list (its 33 modes, then auto and custom); HD (1280x720) is the default and applying restarts the level at the chosen mode. field of view stops at 90 because this build draws no view weapon above it (measured: 91° and up drops the gun). Applying writes the values into the engine's config.cfg and restarts the level, so they survive later visits. full screen asks the browser for the whole screen and leaves it on a second tap (or Esc), with the page interface kept. Inside the ClawBox desktop's sandboxed window the browser forbids full screen; there the row reads own window and opens the app in a window that is allowed to fill the display. game mode (Alt+Enter while the game has the keyboard) is this page's native-game presentation: the game surface alone, every page control hidden, and the page black outside the picture. It asks for full screen on the display the game is on; on a desktop where the Window Management API is allowed it also blacks out each additional display. Esc leaves full screen and the mode. The engine's own vid_fullscreen row is not offered: in this browser build it does not enter full screen, so it was a control that did nothing. OPTIONS effects volume0.7 mouse speed6.0 always runyes invert mouseno lookstrafeno free lookyes crosshaircross pause on minimizedyes reset defaults LIGHTING Off Performance High RTX look · Performance RTX is on by default (Performance, the preset built for this device's frame budget; High adds the wide light halo). Off returns every light to the engine's original shading. The choice is kept for the next visit. TOUCH touch controlson applyno changes Applying writes the changed values into the engine's own config.cfg (userdata/baseq2/config.cfg) and restarts the level, so they hold on this and later visits. The engine's own menu applies each row immediately; this page has no console, so it needs the apply control. CREDITS Quake II · id Software, 1997 Programming: John Carmack, Michael Abrash, John Cash Design: Tim Willits, John Romero, Sandy Petersen Art: Adrian Carmack, Kevin Cloud, Paul Steed Music: Sonic Mayhem · Sound: Nine Inch Nails Engine: Yamagi Quake II (Qwasm2 WebAssembly build) ↑ ↓ selectEnter openEsc back Resume Back","aria":null}
+  shot shots/portrait-390x844-menu.png
+  ok   portrait: an OPTIONS row is tappable and changes a cvar -- {"before":{"value":"0.7","index":"7","h":44,"x":195,"y":145},"after":{"value":"0.8","changed":true}}
+  ok   portrait: the guide returns after the menu
+  ok   the landscape button runs the orientation-lock path and reports the outcome -- "\"If the screen does not turn, use your device's rotation setting.\""
+desktop 1280x720
+  ok   desktop: no touch layer is shown -- {"touchUi":false,"display":"none","live":false}
+  ok   desktop: the portrait guide is absent
+  ok   desktop: the pointer-lock prompt is still offered -- {"hidden":false,"text":"Click to capture the mouse"}
+  ok   desktop: canvas is letterboxed to the engine aspect at 1280x720 -- {"x":0,"y":0,"w":1280,"h":720,"right":1280,"bottom":720}
+  ok   desktop: no page scroll or overflow -- {"scroll":{"w":1280,"h":720},"inner":{"w":1280,"h":720}}
+  ok   desktop: menu and heading geometry is unchanged, with no settings chip and full screen in VIDEO -- {"menuWidth":"392px","headingSize":"26px","chips":[],"playLayerControls":[],"lightingButtons":3,"floatingFullscreen":[],"fullscreenRow":true}
+  ok   desktop: the keyboard still moves the player -- {"from":{"x":128.0625,"y":-319.9375,"z":46.1875},"to":{"x":38.9375,"y":-230.8125,"z":47.3849983215332}}
+  shot shots/desktop-1280x720.png
+  ok   a first real touch enables the layer on a fine-pointer device -- {"touchUi":true,"display":"block","live":true}
+use / the engine's own +use binding
+  ok   the on-screen pad is available before the USE test
+  ok   demo3 starts the player on the map -- {"x":1688.0625,"y":1412.0625,"z":-785.8125}
+  ok   the touch layer binds the engine's own +use key -- {"text":"// ClawBox touch controls (session only; not written back)\nbind e \"+use\"\nbind / \"weapnext\"\nbind c \"+movedown\"\n"}
+  use attempt: {"useDuring":{"state":{"uiEnabled":true,"padOn":true,"live":true,"bindingsInstalled":true,"portrait":false,"hintSeen":true,"fireHeld":false,"buttons":["use"],"keys":["use"],"fireAiming":false,"weaponTaps":0,"weaponSwitches":0,"menuRetries":0,"weaponNote":false,"lookActive":false,"lookCursor":null,"pointerLock":false},"dead":false,"keyDest":0,"focused":true},"useKeys":[{"type":"down","synthetic":true,"vk":69},{"type":"up","synthetic":true,"vk":69}],"before":{"x":1688.0625,"y":1412.0625,"z":-785.8125},"after":{"x":1688.0625,"y":1412.0625,"z":-785.8125}}
+  ok   USE presses the engine's own +use key (synthetic e, down and up) -- [{"type":"down","synthetic":true,"vk":69},{"type":"up","synthetic":true,"vk":69}]
+  ok   USE leaves the keyboard with the game -- {"during":0,"after":0}
+  ok   USE leaves the player alive and standing where it was -- {"before":{"x":1688.0625,"y":1412.0625,"z":-785.8125},"after":{"x":1688.0625,"y":1412.0625,"z":-785.8125},"dead":false}
+  ok   the touch pad is still on after USE
+  ok   touch key bindings were installed on the demo3 page -- [{"text":"execing config.cfg.","stage":"use","at":"2026-11-07T12:29:20.648Z"},{"text":"execing wasm.cfg.","stage":"use","at":"2026-11-07T12:29:20.648Z"},{"text":"Map: demo3\rpics\rmodels\rimages\rclients\rsky\r                                     \rexecing q2touch.cfg.","stage":"use","at":"2026-11-07T12:29:23.547Z"}]
+  ok   no console errors -- []
+  ok   no uncaught page exceptions -- []
+
+PASSED: 97/97 checks, 6 screenshot(s)
+report: <evidence>/final/mobile-controls/report.json
+exit=0

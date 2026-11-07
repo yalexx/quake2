@@ -499,18 +499,21 @@ function readLive() {
 
 // ---- The start-up line this app must keep --------------------------------
 //
-// Every pair is the app's own default (app.js buildArguments). Dropping any of
-// them to quiet the console would be a different bug; the probe pins them.
+// Every pair is the app's own default (app.js buildArguments) on a fresh
+// store. Dropping any of them to quiet the console would be a different bug;
+// the probe pins them. Since 1.2.3 the crosshair shape comes from config.cfg
+// and its tint and opacity are the renderer's own defaults, deliberately not
+// start-up pairs (the line has a ~48-argument budget; app.js says why), so
+// `crosshair`, `q2_crosshair_alpha` and `q2_crosshair_tint` are no longer
+// expected here; the HD default `r_mode 14` is.
 const EXPECTED_SETS = [
   ["vid_renderer", "gles3"],
   ["r_retexturing", "1"],
   ["gl3_usefbo", "1"],
+  ["r_mode", "14"],
   ["cl_gun", "1"],
   ["fov", "90"],
-  ["crosshair", "1"],
   ["crosshair_scale", "3"],
-  ["q2_crosshair_alpha", "0.45"],
-  ["q2_crosshair_tint", "ddb589"],
 ];
 
 function setArguments(args) {
@@ -710,14 +713,25 @@ async function run() {
   }
   // Back to the game before the canvas checks: Resume, if the menu is still
   // up (the browser's Esc out of full screen does not reach the page).
-  if ((await readLive()).menuOpen) {
-    const resume = await rect('.menu-foot [data-action="resume"]');
-    if (resume && resume.w > 0) await mouseClick(resume.left + resume.w / 2, resume.top + resume.h / 2);
+  const beforeResume = await readLive();
+  let resumeTarget = null;
+  if (beforeResume.menuOpen) {
+    // The footer sits at the end of the panel's own scroll area, below the
+    // fold in the long VIDEO view on a desktop window: bring it into view the
+    // way a player scrolls to it.
+    await evaluate(`(() => { const button = document.querySelector('.menu-foot [data-action="resume"]'); if (button) button.scrollIntoView({ block: "center" }); return true; })()`);
+    await sleep(300);
+    resumeTarget = await rect('.menu-foot [data-action="resume"]');
+    if (resumeTarget && resumeTarget.w > 0) await mouseClick(resumeTarget.left + resumeTarget.w / 2, resumeTarget.top + resumeTarget.h / 2);
   }
+  let lastLive = null;
   await waitFor("the game after Resume", async () => {
-    const live = await readLive();
-    return live.menuOpen === false && live.engine && live.engine.keyDest === 0;
-  }, 15000, 200);
+    lastLive = await readLive();
+    return lastLive.menuOpen === false && lastLive.engine && lastLive.engine.keyDest === 0;
+  }, 15000, 200).catch((error) => {
+    throw new Error(error.message + " (before: menuOpen " + beforeResume.menuOpen + ", keyDest " + (beforeResume.engine && beforeResume.engine.keyDest) +
+      "; Resume " + JSON.stringify(resumeTarget) + "; last: menuOpen " + (lastLive && lastLive.menuOpen) + ", keyDest " + (lastLive && lastLive.engine && lastLive.engine.keyDest) + ")");
+  });
 
   // ---- (d) no fullscreen after the first canvas click -------------------
   const canvas = await rect("#canvas");

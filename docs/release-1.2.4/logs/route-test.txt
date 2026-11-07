@@ -1,0 +1,237 @@
+maps in the archive
+  ok   demo1 is in the pack
+demo1's brush entities
+  ok   the models lump yields 34 inline models
+  ok   func_wall and func_explosive are static geometry
+  ok   the four doors, the lift and the fans are movers
+  ok   triggers are not geometry
+a mover placed by its origin
+  ok   the rotating fan carries an origin
+  ok   its world box is shifted onto that origin
+  ok   asking what is at the fan finds it
+static brush geometry is part of the level
+  ok   the world tree is open where the explosive wall stands
+  ok   the level is solid there anyway
+  ok   the rock either side of the gap is solid whatever stands in it
+  ok   the wall's own model says blocking at its centre
+the exit trigger volume
+  ok   its map is demo2 with landmark base1
+  ok   the aim point is inside the trigger volume
+  ok   the volume is the trigger_multiple's own box
+  ok   the mapper's marker sits outside it
+path() tells the truth about a route
+  ok   a route inside the start area is found
+  ok   it carries a distance
+  ok   no brush has to be opened for it
+path() names what blocks a route it cannot find
+  ok   spawn to the exit is NO_ROUTE in the static data
+  ok   it reports where the search stopped
+  ok   it names the brushes nearest that point
+  ok   each blocker says what it is and why it is in the way
+  ok   the message repeats the blocker names rather than saying only 'no route'
+jumps are opt-in
+  ok   asking for jumps is accepted and still honest
+  ok   a route that only walks reports no jump points
+the walker's own helpers
+  ok   brushesNear finds the door it is standing at
+  ok   brushesNear finds nothing in open air
+a route that crosses a mover says which one
+  ok   a route through the exit room crosses a mover
+  ok   and each crossing names the brush and the action
+every jump a route takes is inside maxJump
+  ok   a route across demo1's gap uses a jump
+  ok   and that jump is inside the maxJump asked for
+  ok   a 96-unit budget takes no jump over 96
+  ok   and that budget really does rule a jump out here
+  ok   nor does a 64-unit budget
+  ok   because 64 units cannot cross this gap at all
+the walker leaves a level the engine has already left
+  ok   a walk stops when the engine is on another map
+  ok   and does not restart the level it was walking
+  ok   the level it was walking is named
+  ok   a death on the same map is restarted
+  ok   and the restart names the level it expects
+  ok   the walk then stops if the level had changed
+the fighting walker
+  ok   looking the way you walk holds forward alone
+  ok   walking a quarter turn left holds the left strafe
+  ok   and a quarter turn right holds the right strafe
+  ok   a diagonal is forward plus the strafe
+  ok   and the other diagonal is the other strafe
+  ok   a soldier dead behind is not walked at sideways
+  ok   the turn is read the short way round the compass
+  ok   the wall across demo1's pocket is not walkable through
+  ok   but the way the plan actually goes out of it is
+  ok   and a soldier standing down the corridor is walkable to
+  ok   a line to nowhere is not walkable at all
+  ok   the level's own entity lump has the corridor soldier
+  ok   a level shot reaches a soldier on the corridor's own floor
+  ok   but not one two storeys up
+  ok   nor through the wall between two rooms
+  ok   a soldier standing where the route goes is a target
+  ok   and the list is ordered by what the fight costs
+  ok   every target is inside the arc and inside the range
+  ok   a soldier behind the way forward and out of answering range is not one
+  ok   but one behind and close enough to shoot back at is a target
+  ok   and the arc still holds for everything further off
+  ok   a soldier the caller has given up on is skipped
+  ok   and one further away than the range is not a target at all
+  ok   with no enemies the leg target is a point of the plan
+  ok   with a soldier on the route the leg aims at the soldier
+  ok   and it still carries the route point it displaced
+  ok   the aim is level with the player's own eye
+  ok   the soldier is counted against its own budget
+a leg that covers no ground
+  ok   clearWalk follows the floor down the route's own 52-unit step
+  ok   and down the longer chord from the start room to the west corridor
+  ok   a walk stopped in demo1's pocket aims at the plan's own way out
+  ok   and not at the point beyond it, through the 16-unit wall
+  ok   a leg that does not move the player is not progress
+  ok   so the walk re-plans instead of spending the attempt standing still
+  ok   and it says so rather than reporting an arrival
+a firing leg holds the trigger for the whole of it
+  ok   the trigger goes down before the turn and before any movement key
+  ok   the turn onto the soldier is taken with the mouse
+  ok   the walk starts before the turn, not after it
+  ok   and they are swapped for the ones the aim's own view wants
+  ok   the status bar is photographed while the player is still walking
+  ok   and no movement key is still down when the leg ends
+  ok   and still firing
+  ok   nothing comes up between the read and the trigger except the walk's own keys
+  ok   the leg's own record says which way it turned
+  ok   and how close the turn landed, to a hundredth of a degree
+  ok   a leg that fired says so
+a firing leg lifts its keys even when a press throws
+  ok   no movement key is left down by a press that threw
+a failed aim is retried against the view the player actually has
+  ok   the first aim is given the view the leg already read
+  ok   a miss is retried the bridge's own way
+  ok   and the retry measures again instead of reusing the spent view
+  ok   the leg's record is the retry's answer, not the first attempt's
+  ok   the walk's keys are computed from the view the retry left behind
+  ok   more restarts than attempts are lived through
+  ok   and the walk stops on its own restart budget, not on its attempts
+the weapon a fighting walker asks the engine for
+  ok   a life asks the engine for its weapon
+  ok   and the life after a restart asks again, at the attempt the player died on
+  ok   the walk fought, died and was put back on the spawn
+  ok   and asked the engine for its weapon once in every life it fought
+a missed respawn does not end the walk
+  ok   a respawn that comes back NOT_RESPAWNED is pressed again
+  ok   and the walk does not end on the one miss
+  ok   a player that will not come back ends on the restart budget, not on one refusal
+  ok   with three presses of fire spent on each of the three restarts it was allowed
+  ok   and one restart by name per death as the fire button's fallback
+the furthest reading is kept apart from the last one
+  ok   deepest is the closest reading, not the last
+  ok   and it says which attempt and leg took it there
+  ok   a trail with nothing in it has no deepest reading
+the status bar's numbers are readable
+  ok   each digit picture is the 16x24 the engine blits
+  ok   and every digit of the two families has ink in it
+  ok   a painted 100 reads back as 100
+  ok   a painted 43 reads back as 43
+  ok   a painted 7 reads back as 7
+  ok   a painted 0 reads back as 0
+  ok   a painted 88 reads back as 88
+  ok   a painted 19 reads back as 19
+  ok   a painted 155 reads back as 155
+  ok   a painted 62 reads back as 62
+  ok   a painted 296 reads back as 296
+  ok   a painted 267890 reads back as 267890
+  ok   a number on a dark background reads the same as one on a lit background
+  ok   an armour number is read as armour, not as health
+  ok   and a health number is read as health
+  ok   the health field is read from the field the engine draws it in
+  ok   ...and a number that is not in the field is not reported as being in it
+  ok   a real PNG decodes to the size its IHDR declares
+  ok   an RGB picture with no alpha channel comes back fully opaque
+  ok   and the pixels are the picture's, not one flat fill
+a turn that could not be taken does not retire the method that could not take it
+  ok   the engine's own states that take the keyboard off the game are the ones that block a turn
+  ok   a dead player's turns are still sent
+  ok   and the aim is reported as not taken rather than as taken badly
+  ok   the mouse is not retired by four misses the death camera caused
+  ok   the same bridge turns a live player after living through a death
+a method that cannot turn a live player is abandoned inside the call, not between calls
+  ok   the dead mouse gets two rounds before the keys are tried
+
+the play loop's compass matches the fight's
+  ok   bearingTo and combat.mjs's own compass agree
+  ok   shortestTurn takes the short way round
+the lead is the bolt's travel, and it is bounded
+  ok   a target standing still is aimed at where it stands
+  ok   a walking target is led by its own speed over the bolt's flight
+  ok   a bad velocity reading cannot throw the aim across the room
+what is a monster is decided by the entity, not by the map
+  ok   a monster model with a monster's box is a monster
+  ok   an item and a brush model are not
+  ok   the bolt that shares a monster's model index is not a monster
+  ok   the static fallback gives every monster an index of its own, so none is keyed on the same null twice
+the target ranking is distance and off-course, and the close override
+  ok   a soldier on the way forward beats one to the side
+  ok   nothing beyond engageRange is a target at all
+  ok   a soldier behind the walk is a target inside answerRange and not outside it
+the state machine takes its decisions from one reading
+  ok   nothing to shoot: walk the route
+  ok   the way forward is also where the view goes when nothing is in range
+  ok   a reachable monster is engaged, and it is what the view holds
+  ok   a monster whose line is blocked is not fired at
+  ok   the walk still goes on while the trigger is down
+  ok   hurt, with something shooting: back out, still firing
+  ok   healthy, the same reading engages
+  ok   a corpse is not a target and not a reason to stand still
+  ok   the death camera outranks everything
+  ok   standing in the exit volume stops the loop
+  ok   a walk that has stopped is recovered, not advanced
+  ok   no reading at all is not a reason to fire
+
+the second aim axis: pitch, in Quake 2's own sign
+  ok   a target level with the eye is zero pitch
+  ok   a target BELOW the eye is a POSITIVE pitch (Quake 2 looks down on positive)
+  ok   a target ABOVE the eye is a NEGATIVE pitch
+  ok   45 degrees down is -45 degrees of pitch
+  ok   the angle is measured on the ground plane, not the straight line
+  ok   a reading with no position has no pitch
+  ok   engaging carries the target's own pitch
+  ok   with the axis off, no pitch is asked for
+  ok   walking asks for a LEVEL view, so the walk does not drift up or down
+
+a shot at a point is the level's own geometry in three dimensions
+  ok   a beam to a point on the eye's own level is clear
+  ok   a beam that dives under the floor is blocked
+  ok   a beam to a point above the eye is clear
+  ok   a map with no geometry to ask has no wall to invent
+  ok   and a missing reading is never a reach
+
+the game DLL's edicts become a health, and never a guess
+  ok   a monster whose edict agrees gets the game's own health
+  ok   a monster whose edict does NOT agree is flagged, not believed
+  ok   the counts say how many disagreed and how many could not be matched
+  ok   a monster with no edict has NO health rather than a made-up zero
+  ok   a monster handed over with no position at all is flagged, not a crash
+  ok   health above zero is alive
+  ok   health at or below zero is dead -- the game's own state for it
+  ok   no edict is not an opinion about whether something is dead
+
+iteration mode puts the engine back, and says so truthfully
+  ok   the multiplier goes back to 1, never to whatever the baseline read
+  ok   `cheats 0` is always sent, and read back
+  ok   no reload is sent when cheats really did go off
+  ok   a restore that worked is not reported as latched
+  ok   the latched case reloads the level
+  ok   and then READS the reload back, which is what the broken version never did
+  ok   and the reload is what is reported, not the batch before it
+  ok   a reload that failed is reported as unverified, not as a fix
+  ok   and `cheats` is still reported as it was last READ -- 1, not 0
+  ok   timescale 1 is not a cheat, so its result counts
+  ok   `--timescale 5` turns the mode on and asks for 5
+  ok   no flag and no env is the normal path
+  ok   `QUAKE2_FAST_TIMESCALE` alone does not turn cheats on
+  ok   the render half can be left off on its own
+errors are named, never empty
+  ok   an unknown map throws MAP_NOT_FOUND
+  ok   and it names the maps that do exist
+
+all 196 checks passed
+exit=0

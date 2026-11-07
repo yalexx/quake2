@@ -1,0 +1,16 @@
+  server 127.0.0.1:32985 (temp store <tmp>)
+  game live at 844x390
+  ok   no full-screen control floats over the game any more -- {"button":false,"hint":false,"row":{"view":"video","pageList":true,"label":"full screen"}}
+  ok   the Full screen row is VIDEO's page control -- {"view":"video","pageList":true,"label":"full screen"}
+  ok   the Full screen row is finger-sized and the document allows full screen -- {"x":232,"y":195,"w":390,"h":44,"value":"off","status":{"supported":true,"blocked":false,"framed":false,"enabled":true,"requests":0,"lastRefusal":null,"fullscreen":false,"value":"off","label":"Enter full screen"}}
+  shot shots/phone-video-fullscreen-row.png
+  ok   a touch on the row enters full screen -- {"element":true,"value":"on","status":{"supported":true,"blocked":false,"framed":false,"enabled":true,"requests":1,"lastRefusal":null,"fullscreen":true,"value":"on","label":"Leave full screen (Esc)"}}
+  shot shots/phone-fullscreen-on.png
+  ok   a second touch on the row leaves full screen -- {"element":false,"value":"off"}
+  ok   Resume returns the game with the keyboard -- {"keyDest":0}
+  ok   no console errors -- []
+  ok   no uncaught page exceptions -- []
+
+PASSED: 8/8 checks, 2 screenshot(s)
+report: <evidence>/final/mobile-fullscreen/report.json
+exit=0

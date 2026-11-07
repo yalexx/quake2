@@ -1651,6 +1651,14 @@ async function checksTouch(base, candidate) {
     // PAUSE: the engine menu opens, the pad hides, Resume returns to the game.
     const pauseBox = await rect("#mc-pause");
     if (!pauseBox) throw new Error("no #mc-pause");
+    // Every click the page sees from here on, and where it landed: a MENU tap
+    // must not become a click on the menu that appears under the finger.
+    await evaluate(`(() => { window.__gateClicks = []; window.addEventListener("click", (event) => {
+      const target = event.target;
+      window.__gateClicks.push({ id: target && (target.id || target.className || target.tagName) || null,
+        inMenu: Boolean(target && target.closest && target.closest("#menu-layer")) });
+    }, true); return 1; })()`);
+    const menuStateBefore = await touchState();
     await tapAt(pauseBox.left + pauseBox.w / 2, pauseBox.top + pauseBox.h / 2, 80);
     let menuState = null;
     const menuOk = await waitFor("engine menu after PAUSE (keyDest 3)", async () => {
@@ -1662,6 +1670,17 @@ async function checksTouch(base, candidate) {
     await waitFor("the page menu to open", async () => dumpJson(`document.body.classList.contains("menu-open")`), 4000).catch(() => null);
     const padWhileMenu = await dumpJson(`(() => { const root = document.getElementById("mobile-controls"); return { display: root ? getComputedStyle(root).display : null, menuOpen: document.body.classList.contains("menu-open") }; })()`);
     if (options.phone) await capture("phone-menu", "landscape 844x390, menu open over the game");
+    // The menu must still be up a second later, with no click from the tap
+    // having reached it (the touch layer cancels the touch's compatibility
+    // click), and the touch layer says whether the engine needed the Escape
+    // sent a second time.
+    await sleep(1000);
+    const menuStill = await dumpJson(`({ open: document.body.classList.contains("menu-open"), clicks: window.__gateClicks || [] })`);
+    const menuStateAfter = await touchState();
+    check("5j", "MENU: the menu is still open a second after the tap, and the tap's click never reached it",
+      Boolean(menuOk) && menuStill.open === true && !menuStill.clicks.some((one) => one.inMenu),
+      { open: menuStill.open, clicks: menuStill.clicks,
+        escapeResent: menuStateAfter && menuStateBefore ? menuStateAfter.menuRetries - menuStateBefore.menuRetries : null });
     let resume = await rect('[data-action="resume"]');
     let resumed = null;
     if (resume) {
@@ -1929,13 +1948,17 @@ async function checksTouch(base, candidate) {
     // Next press works.  A CDP touch the page misses moves nothing at all (the
     // same drop the held press above retries), so a next press that registers
     // nothing is re-sent once instead of being read as the control failing.
+    // It pushes BACK, the way the held press just came: on a box that draws
+    // quickly the held press can carry the player to the wall ahead
+    // (measured: 316.8 units in 1.5 s, then 0.0 and 0.1 units on two forward
+    // presses against the wall), while the floor behind is known to be open.
     let movedAgain = 0;
     for (let attempt = 1; attempt <= 2; attempt++) {
       const ref = await readEngine();
       const id2 = nextTouchId();
       await touchEvent("touchStart", [point(id2, sx, sy)]);
       await sleep(120);
-      await touchEvent("touchMove", [point(id2, sx, sy - offset)]);
+      await touchEvent("touchMove", [point(id2, sx, sy + offset)]);
       await sleep(1800);
       const again = await readEngine();
       await touchEvent("touchEnd", []);
