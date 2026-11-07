@@ -40,7 +40,7 @@ Chrome this run started (its own server on 4472). The suites' stdout is in
 | 10 | `node scripts/mobile-fullscreen-test.mjs` | 8/8 checks |
 | 11 | `node scripts/mobile-controls-test.mjs` | 97/97 checks |
 | 12 | `node scripts/boot-probe.mjs` | 17/17 checks |
-| 13 | `node scripts/store-package.mjs --port 4471 --version 1.2.4` | PASSED, 9/9 checks: 49,952,039 bytes, sha256 `274a60be01f94d8994d65d2b9d339e5d77db591340577129b7b52ac1324dc380` |
+| 13 | `node scripts/store-package.mjs --port 4471 --version 1.2.4` | PASSED, 9/9 checks: 49,952,542 bytes, sha256 `af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10` |
 
 Suites 2–9 are desktop or server checks. They ran before the last change to
 `mobile-controls.js`, which is inert without a touch layer; `app.js` and
@@ -92,14 +92,14 @@ Suites 2–9 are desktop or server checks. They ran before the last change to
 
 | | |
 | --- | --- |
-| Contents | Every file git lists except `docs/`, `assets/` and `baseq2/pak9.pak` (the exclusions used since 1.0.0): 71,608,532 bytes raw |
-| Package | `quake2-store-1.2.4.tgz`, **49,952,039 bytes** (47.6 MiB) |
-| sha256 | `274a60be01f94d8994d65d2b9d339e5d77db591340577129b7b52ac1324dc380` |
-| Reproducible | A second build gave the same sha256. Every mtime is the newest commit that touched a packaged file, so a docs-only commit does not change it |
-| Boot | Extracted into an empty `quake-2` folder, its own `server.js` on port 4471: pak0 200 (47,498,591 bytes), pak10 200 (13,770,565 bytes), pak9 404 as intended. In a level 3.3 s after opening the bare URL, keyboard in the game, at 128.06 / −319.94 / 46.19 (demo1's start). The start-up line ends `+map demo1`, with no cheats. 0 console errors, 0 page exceptions |
+| Contents | Every file git lists except `docs/`, `assets/` and `baseq2/pak9.pak` (the exclusions used since 1.0.0): 71,608,784 bytes raw |
+| Package | `quake2-store-1.2.4.tgz`, **49,952,542 bytes** (47.6 MiB), built from `581c478` |
+| sha256 | `af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10` |
+| Reproducible | A second build gave the same sha256. Every mtime is the newest commit that touched a packaged file, so a docs-only commit (like the one that records this) does not change it |
+| Boot | Extracted into an empty `quake-2` folder, its own `server.js` on port 4471: pak0 200 (47,498,591 bytes), pak10 200 (13,770,565 bytes), pak9 404 as intended. In a level 3.1 s after opening the bare URL, keyboard in the game, at 128.06 / −319.94 / 64.06 (demo1's start). The start-up line ends `+map demo1`, with no cheats. 0 console errors, 0 page exceptions |
 
 The cap is the Store's 50 MiB (52,428,800 bytes) compressed. This package
-leaves 2,476,761 bytes (2.4 MiB) of room; 1.0.0 had 6.8 MiB. pak10 grew with
+leaves 2,476,258 bytes (2.4 MiB) of room; 1.0.0 had 6.8 MiB. pak10 grew with
 the 2x weapon skins. The next archive or art round has to be measured
 against this margin, or the package will be refused.
 

@@ -1,7 +1,7 @@
 {
-  "at": "2026-11-07T12:41:53.207Z",
+  "at": "2026-11-07T12:42:53.255Z",
   "version": "1.2.4",
-  "commit": "aa52a629c8766394900272d7e4674958c7a51682",
+  "commit": "581c478ad533675dfb4b702fb749416fa82af34f",
   "leftOut": [
     "/^docs\\//",
     "/^assets\\//",
@@ -9,21 +9,21 @@
   ],
   "package": {
     "files": 88,
-    "rawBytes": 71608532,
-    "bytes": 49952039,
-    "sha256": "274a60be01f94d8994d65d2b9d339e5d77db591340577129b7b52ac1324dc380",
-    "mtime": "2026-11-07T14:41:53+02:00",
+    "rawBytes": 71608784,
+    "bytes": 49952542,
+    "sha256": "af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10",
+    "mtime": "2026-11-07T14:42:53+02:00",
     "name": "quake2-store-1.2.4.tgz"
   },
   "boot": {
     "url": "http://127.0.0.1:<port>/apps/quake-2/",
     "port": 4471,
-    "bootMs": 3332,
+    "bootMs": 3059,
     "keyDest": 0,
     "position": {
       "x": 128.0625,
       "y": -319.9375,
-      "z": 46.1875
+      "z": 64.0625
     },
     "startup": [
       "+set",
@@ -58,7 +58,7 @@
       "name": "the package is under the Store's 50 MiB compressed cap",
       "pass": true,
       "detail": {
-        "bytes": 49952039,
+        "bytes": 49952542,
         "cap": 52428800
       }
     },
@@ -66,7 +66,7 @@
       "name": "the package is under the Store's 256 MiB raw cap",
       "pass": true,
       "detail": {
-        "rawBytes": 71608532,
+        "rawBytes": 71608784,
         "cap": 268435456
       }
     },
@@ -83,8 +83,8 @@
       "name": "the package is reproducible (a second build has the same sha256)",
       "pass": true,
       "detail": {
-        "first": "274a60be01f94d8994d65d2b9d339e5d77db591340577129b7b52ac1324dc380",
-        "second": "274a60be01f94d8994d65d2b9d339e5d77db591340577129b7b52ac1324dc380"
+        "first": "af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10",
+        "second": "af7899a93a82af88b0072fd987f87fdb428f106b0d7a711bfa5b51d5240e9a10"
       }
     },
     {
@@ -114,11 +114,11 @@
       "name": "the packaged app boots into a level with the keyboard in the game",
       "pass": true,
       "detail": {
-        "bootMs": 3332,
+        "bootMs": 3059,
         "position": {
           "x": 128.0625,
           "y": -319.9375,
-          "z": 46.1875
+          "z": 64.0625
         }
       }
     },
