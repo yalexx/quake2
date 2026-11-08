@@ -1399,6 +1399,60 @@ async function run() {
     { from: beforeKeys.position, to: afterKeys.position });
   await screenshot("desktop-1280x720.png");
 
+  // Desktop mouse look must keep working: the look accumulator that gained the
+  // touch hand-off is also what a pointer-locked mouse feeds, and a phone-only
+  // run would not notice a regression there. A trusted CDP click is the
+  // pointer-lock gesture; the moves after it are what the engine turns by
+  // (100 CSS px of travel is about 14 deg at 1280x720). This runs before the
+  // hybrid-laptop block below: that block's first touch enables the touch layer
+  // for the rest of the page, and a touch page refuses pointer lock by design.
+  stage = "desktop-look";
+  console.log("desktop mouse look (pointer lock)");
+  const lockBox = await rect("#canvas");
+  const lockX = lockBox.left + lockBox.w / 2;
+  const lockY = lockBox.top + lockBox.h / 2;
+  const lockId = () => evaluate("document.pointerLockElement ? document.pointerLockElement.id : null");
+  const clickCanvas = async () => {
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x: lockX, y: lockY, button: "left", buttons: 1, clickCount: 1 });
+    await sleep(80);
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x: lockX, y: lockY, button: "left", buttons: 0, clickCount: 1 });
+  };
+  await clickCanvas();
+  await sleep(1500);
+  const lockedId = await lockId();
+  check("desktop: a trusted click takes the pointer lock on the canvas", lockedId === "canvas", { pointerLockElement: lockedId });
+  // One warm-up move puts the engine's reference point on the canvas centre:
+  // the first move after a lock is a new reference, not a turn.
+  await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: lockX, y: lockY, button: "none", buttons: 0 });
+  await sleep(600);
+  const lockYawStart = await readYaw();
+  for (let i = 1; i <= 3; i++) {
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseMoved", x: lockX + i * 100, y: lockY, button: "none", buttons: 0 });
+    await sleep(140);
+  }
+  await sleep(1400);
+  const lockYawEnd = await readYaw();
+  const lockYawDelta = wrapDegrees(lockYawEnd - lockYawStart);
+  const stillLocked = await lockId();
+  check("desktop: pointer-locked mouse moves turn the view more than 5 deg",
+    Math.abs(lockYawDelta) > 5 && stillLocked === "canvas",
+    { yawBefore: round3(lockYawStart), yawAfter: round3(lockYawEnd), yawDelta: round3(lockYawDelta), pointerLockElement: stillLocked, movementXPx: 300 });
+  // Release the lock before the following checks. app.js reads a lost lock as
+  // the player's Escape and opens its panel (that is the pause), so put the
+  // game back in front of the keyboard: the hybrid-laptop check below needs a
+  // playing page before its first touch.
+  await evaluate("if (document.pointerLockElement) document.exitPointerLock(); 1");
+  await sleep(900);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const state = await readEngine();
+    if (state && state.keyDest === 0) break;
+    console.log("desktop: the released lock left keyDest " + (state && state.keyDest) + "; closing it with a trusted Escape");
+    await keyEvent("rawKeyDown", "Escape", "Escape", 27);
+    await sleep(120);
+    await keyEvent("keyUp", "Escape", "Escape", 27);
+    await sleep(1400);
+  }
+
   // A fine-pointer device that is touched for the first time mid-session must
   // bring the layer up (the hybrid-laptop path). This runs after the desktop
   // screenshot so the desktop presentation is photographed untouched.
