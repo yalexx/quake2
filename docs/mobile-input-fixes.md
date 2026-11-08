@@ -236,3 +236,143 @@ instead of the canvas itself — the capture surface is the point of the fix.
 
 No pak, WASM or art file was touched; nothing was added to the store package
 but source and this document.
+
+## Touch look: the view turns all the way round
+
+The owner's report on 1.2.4: dragging the picture turns the view only
+part-way, so you cannot turn fully round and come back the other way.
+Reproduced at both landscape sizes, fixed, and measured again on the live
+engine.
+
+### Why a swipe could not turn more than one canvas width
+
+The engine turns by the **distance between the positions of two successive
+synthetic `mousemove` events** on `#canvas`. It reads `pageX/pageY`; the
+event's `movementX`/`movementY` are ignored, so the touch layer keeps a
+virtual cursor and moves it by the finger's own delta. The gain is about a
+quarter of a degree per CSS pixel — 0.264 in the layer's own note, and the
+sweeps below measure ~0.243 at 844x390 and ~0.221 at 932x430, the gain
+following the canvas size.
+
+The old `aimBy()` moved that cursor by the finger delta and then ran the
+result through `clampToCanvas()`, which pinned both axes inside the canvas
+rect. Once a horizontal swipe reached an edge the cursor stopped, so the
+engine was told about no further travel: **one swipe could turn at most one
+canvas width (~169 deg at 844x390), and from the centre only about half of
+that**, and the next same-direction swipe started pinned at the edge with
+nowhere left to go. That is the bug, measured on the unfixed tree (t1's
+failing run, headless Chrome, identical across three runs):
+
+| viewport | direction | per-swipe yaw before the fix (deg) | total (deg) | first move (deg) |
+|---|---|---|---|---|
+| 844x390 | left | 83.815, 0, 0, 0 | 83.815 | 0 |
+| 844x390 | right | −97.542, −70.356, 0, 0 | −167.899 | 0 |
+| 932x430 | left | 83.947, 0, 0, 0 | 83.947 | 0 |
+| 932x430 | right | −88.434, −79.728, 0, 0 | −168.162 | 0 |
+
+In the left sweep every swipe after the first added exactly 0.000 deg: the
+cursor was pinned. The mirrored sweep got a second, shorter turn (−70.356 /
+−79.728 deg) only because the cursor still had that much canvas to walk back
+across; the two turns sum to one canvas width, and then it stopped too. The
+first-move check passed before the fix for the wrong reason: with the cursor
+pinned at the edge, a new swipe could not move it, so its first move measured
+0 deg.
+
+### The fix: unbounded travel, handed across the canvas without turning
+
+Probing the engine showed the rule the old code missed: a move turns the
+view by its start-to-destination distance **only while its start point is
+inside the canvas**. A move that starts outside turns nothing, yet still
+becomes the engine's new reference point. (Measured at both sizes, with and
+without FIRE held.)
+
+So horizontal travel is now unbounded. `aimBy()` accumulates the finger's
+delta in `lookPending` and lets the cursor walk past the canvas edge instead
+of clamping it. When the cursor passes a hand-off line 12 px beyond the edge,
+`handOff()` sends two moves:
+
+1. the segment's destination — this move started inside the canvas, so the
+   engine turns by its full delta;
+2. a re-seat 24 px inside the **far** edge — this move started outside the
+   canvas, so it turns **0.000 deg** and simply becomes the new reference
+   point.
+
+The next segment therefore starts on the far side with the view exactly
+where the turn left it: a re-seat adds no rotation and takes none away,
+however many times it happens inside one gesture. A move that would stop
+between the edge and the hand-off line is held in `lookPending` and carried
+by the next move, or flushed when the gesture ends (`pointerup`, FIRE
+release, `releaseAll()`), so the finger's last few pixels are neither lost
+nor turned twice. Vertical travel keeps the old clamp to the canvas rect,
+and `window.quake2Touch.state()` now reports `lookPending` and `lookReSeats`
+for introspection. `index.html` bumps the script's cache-bust to
+`mobile-controls.js?v=look125`, or the kiosk browser would keep serving the
+cached, clamped file.
+
+### Measured after the fix
+
+The same test, same swipes, on the fixed tree (t3's green run, read from the
+live engine with wrap-aware deltas):
+
+| viewport | direction | per-swipe yaw after the fix (deg) | total (deg) | first move (deg) |
+|---|---|---|---|---|
+| 844x390 | left | 97.284, 97.548, 97.416, 97.416 | **+389.663** | 1.978 |
+| 844x390 | right | −97.416, −97.284, −97.416, −97.679 | **−389.795** | −1.978 |
+| 932x430 | left | 88.303, 88.440, 88.176, 88.440 | **+353.359** | 1.719 |
+| 932x430 | right | −88.440, −88.308, −88.440, −88.308 | **−353.496** | −1.846 |
+
+Every swipe clears the 60 deg floor, every four-swipe sweep clears 350 deg
+(so a player passes 360 deg and can stop at any angle), and it works in both
+directions at both sizes. The 932x430 sweep is the tight one: the canvas is
+764 px wide, so four full-width swipes of 400 px each turn ~353 deg — the fix
+has to deliver every pixel of finger travel, which it does.
+
+A new gesture continues from the last cursor and is **not** re-primed, so its
+first 8 px turned 1.978 deg at 844x390 (−1.978 the other way) and 1.719 /
+−1.846 at 932x430: the ordinary gain for 8 px, under the 5 deg ceiling, with
+no jump at gesture start. The hand-off move itself measured 0.000 deg.
+
+### The rest of the input path is unchanged
+
+- **FIRE** still presses at the look cursor and fires only on hold; a FIRE
+  slide uses the same `aimBy()` accumulator, so it turns at the same gain and
+  the hand-off stays turn-neutral with the button held.
+- **Pitch** is still clamped by the engine: vertical finger travel is clamped
+  to the canvas rect exactly as before, and the engine keeps its own pitch
+  limit.
+- **Desktop mouse look is untouched.** The touch layer only binds on a touch
+  page. t3 added a guard to the suite: a real click still takes pointer lock
+  on the canvas, and 300 px of locked movement turned yaw −39.595 deg
+  (≈13.2 deg per 100 px, matching the gate's desktop leg) with the lock held.
+- Stick, jump, WPN, menu, the pad toggle, multi-touch, portrait rotate and the
+  hybrid-laptop path all pass their existing checks unchanged.
+
+### Verification (t3's run)
+
+```
+node scripts/mobile-controls-test.mjs
+# PASSED: 123/123 checks, exit 0, 0 console errors, 0 uncaught exceptions
+# screenshots: 844x390, 932x430, 390x844 (portrait) + desktop, settings, portrait menu
+node scripts/boot-probe.mjs        # 17/17, exit 0
+node scripts/control-api-test.mjs  # PASS, exit 0 (5 skips: no game open on 127.0.0.1:18801)
+node scripts/mobile-input-gate.mjs # 46/46, 0 failures, exit 0
+```
+
+The gate's look drags (3a/3b), "FIRE does not turn the view" (2a) and
+fire+move+aim (6d) all PASS. This tree's gate has 46 checks; the file is
+unchanged from 1.2.4's head, so the count is pre-existing (the 1.2.4 entry
+quotes an older 45). No script bound port 4231 — the suite, probes and gate
+each started their own server on a free port.
+
+### Files changed
+
+- `mobile-controls.js` — `aimBy()` drops the horizontal clamp for an
+  unbounded accumulator; `handOff()` and `flushLook()` re-seat the cursor
+  across the canvas without turning; `state()` reports `lookPending` and
+  `lookReSeats`.
+- `index.html` — cache-bust `mobile-controls.js?v=look125`.
+- `scripts/mobile-controls-test.mjs` — `runLookSweep()` at 844x390 and
+  932x430, both directions: four 400 px swipes, per-swipe >= 60 deg, total
+  >= 350 deg, first move < 5 deg; plus t3's desktop pointer-lock guard.
+- `docs/mobile-input-fixes.md` — this section.
+- `CHANGELOG.md` — the 1.2.5 entry.

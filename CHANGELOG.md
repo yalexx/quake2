@@ -1,5 +1,53 @@
 # Changelog
 
+## 1.2.5 — the view turns all the way round
+
+The owner's report on 1.2.4: a drag on the picture turns the view only
+part-way, and repeated swipes will not bring you back round the other way.
+Fixed in `mobile-controls.js`; the full before/after, mechanism and evidence
+are in `docs/mobile-input-fixes.md`.
+
+* **The symptom, measured.** Four identical 400 px swipes in one direction,
+  on the live engine at 844x390, turned **83.815, 0, 0, 0 deg** — the first
+  swipe turned part-way and every later one turned nothing. At 932x430 the
+  same sweep was **83.947, 0, 0, 0**. The mirrored sweep totalled at most
+  **−167.899 deg**, so the player could not come back round.
+* **The cause: a clamped virtual look cursor.** The engine turns by the
+  distance between successive synthetic `mousemove` positions on the canvas
+  (~0.26 deg per CSS px; `movementX/Y` are ignored). The touch layer moved a
+  virtual cursor by the finger's delta and `clampToCanvas()` pinned it inside
+  the canvas, so one gesture could turn at most one canvas width — about half
+  that from the centre — and a following swipe started pinned at the edge.
+* **The fix: unbounded travel with a turn-neutral re-seat.** Horizontal
+  travel is no longer clamped. When the cursor passes a point just beyond the
+  canvas edge it is handed across: one move whose start is inside the canvas
+  turns by its full delta, then one move to a seat 24 px inside the far edge
+  starts outside the canvas and turns **0.000 deg** (measured with and without
+  FIRE held), so the hand-off adds and removes nothing. Travel that would stop
+  at the edge is carried to the next move or flushed at gesture end, so no
+  finger travel is lost. Vertical travel keeps its old clamp. `index.html`
+  bumps the cache-bust to `mobile-controls.js?v=look125`.
+* **Measured after the fix.** Four 400 px swipes at 844x390 turned 97.284,
+  97.548, 97.416, 97.416 deg left (**+389.663** total) and −97.416, −97.284,
+  −97.416, −97.679 deg right (**−389.795**); at 932x430, 88.303, 88.440,
+  88.176, 88.440 (**+353.359**) and −88.440, −88.308, −88.440, −88.308
+  (**−353.496**). Every swipe clears 60 deg and every sweep clears 350 deg, in
+  both directions; the player passes a full turn and can stop at any angle.
+* **No jump at gesture start.** A new gesture continues from the last cursor
+  instead of re-priming it, so its first 8 px turned 1.978 deg at 844x390 and
+  1.719 / −1.846 at 932x430 — the ordinary gain for 8 px, under the 5 deg
+  ceiling.
+* **The rest of the input path is unchanged.** FIRE still presses at the look
+  cursor and turns nothing (a FIRE slide uses the same accumulator), pitch
+  stays engine-limited, and multi-touch, stick, jump, WPN, menu, the pad
+  toggle, the portrait overlay and desktop pointer-lock mouse look all pass —
+  the desktop lock still takes the canvas and 300 px turned −39.595 deg.
+* **Tests.** `scripts/mobile-controls-test.mjs` **123/123 checks**, exit 0,
+  0 console errors, 0 uncaught exceptions, with screenshots at 844x390,
+  932x430 and 390x844; `scripts/boot-probe.mjs` **17/17**;
+  `scripts/control-api-test.mjs` **PASS**; `scripts/mobile-input-gate.mjs`
+  **46/46, 0 failures**. Nothing bound port 4231.
+
 ## 1.2.4 — the owner's mobile HUD review
 
 The owner marked up the 844x390 phone HUD (`design/mobile-hud-review.png`).
