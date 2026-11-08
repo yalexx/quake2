@@ -1,0 +1,44 @@
+{
+  "viewport": "932x430",
+  "direction": "left",
+  "gesture": {
+    "from": [
+      700,
+      170
+    ],
+    "to": [
+      300,
+      170
+    ],
+    "steps": 7,
+    "stepMs": 40,
+    "swipes": 4
+  },
+  "inner": [
+    932,
+    430
+  ],
+  "startStack": [
+    "mc-look",
+    "canvas",
+    "touch-ui mc-live",
+    "HTML"
+  ],
+  "yaw": {
+    "before": 135,
+    "after": 128.359
+  },
+  "swipes": [
+    88.303,
+    88.44,
+    88.176,
+    88.44
+  ],
+  "total": 353.359,
+  "firstMoveDelta": 1.719,
+  "thresholds": {
+    "perSwipe": 60,
+    "total": 350,
+    "firstMove": 5
+  }
+}
