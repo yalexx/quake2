@@ -58,6 +58,7 @@ const report = {
   chrome: null,
   checks: [],
   screenshots: [],
+  lookSweeps: [],
   consoleErrors: [],
   pageInfo: [],
   browserNotes: [],
@@ -417,15 +418,138 @@ async function holdSelector(selector, milliseconds) {
   return box;
 }
 
-async function drag(x0, y0, x1, y1, steps = 7, stepMs = 40) {
+// A gesture in three steps, so a test can sample the engine mid-gesture.
+async function dragStart(x, y) {
   const id = nextTouchId();
-  await touchEvent("touchStart", [point(id, x0, y0)]);
-  for (let i = 1; i <= steps; i++) {
-    await touchEvent("touchMove", [point(id, x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps)]);
-    await sleep(stepMs);
-  }
+  await touchEvent("touchStart", [point(id, x, y)]);
+  return id;
+}
+
+async function dragMove(id, x, y) {
+  await touchEvent("touchMove", [point(id, x, y)]);
+}
+
+async function dragEnd(id) {
+  // The id completes the primitive's shape (dragStart/dragMove/dragEnd); the
+  // CDP touchEnd carries no points and ends every point the page holds.
+  void id;
   await touchEvent("touchEnd", []);
   await sleep(350);
+}
+
+async function drag(x0, y0, x1, y1, steps = 7, stepMs = 40) {
+  const id = await dragStart(x0, y0);
+  for (let i = 1; i <= steps; i++) {
+    await dragMove(id, x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps);
+    await sleep(stepMs);
+  }
+  await dragEnd(id);
+}
+
+// ---- Touch look: repeated same-direction swipes ---------------------------
+//
+// The engine turns by the clientX delta between successive synthetic
+// mousemoves, and mobile-controls.js moves a virtual mouse cursor across the
+// canvas with the finger. The gain is ~0.22-0.24 deg per CSS px at these two
+// sizes (it scales with the letterboxed canvas width), and the canvas is 16:9:
+// 693x390 inside 844x390, 764x430 inside 932x430. clampToCanvas() keeps the
+// cursor inside the canvas, so a swipe that reaches an edge stops turning and
+// the next swipe in the same direction starts pinned at that edge. Four
+// identical swipes therefore cannot sweep a full turn -- the bug this block
+// pins.
+const SWEEP_DIR = ARTIFACTS || OUT;
+const SWEEP_SWIPES = 4;
+const SWEEP_PER_SWIPE_DEG = 60;
+const SWEEP_TOTAL_DEG = 350;
+const SWEEP_FIRST_MOVE_DEG = 5;
+
+// angles.yaw as the engine reports it once it has stopped changing across two
+// reads ~120 ms apart (a turn is applied on the engine's next frame).
+async function readYaw(timeoutMs = 2000) {
+  const started = Date.now();
+  let last = null;
+  while (Date.now() - started < timeoutMs) {
+    const state = await readEngine();
+    const yaw = state && state.angles && typeof state.angles.yaw === "number" ? state.angles.yaw : null;
+    if (yaw !== null && last !== null && yaw === last) return yaw;
+    last = yaw;
+    await sleep(120);
+  }
+  if (last !== null) return last;
+  throw new Error("the engine never reported a yaw");
+}
+
+const round3 = (value) => Number(value.toFixed(3));
+
+// The engine's reported viewangles wrap at +-180 deg (measured: a turn past
+// +176.6 reports -169.4 on the next move), so a turn is the shortest signed
+// angle between two reads, not their raw difference. The per-swipe deltas are
+// summed for the sweep total: four >90 deg swipes pass +360 and the raw
+// difference would wrap back into a small number.
+function wrapDegrees(value) {
+  let wrapped = value % 360;
+  if (wrapped > 180) wrapped -= 360;
+  else if (wrapped <= -180) wrapped += 360;
+  return wrapped;
+}
+
+async function runLookSweep({ label, y, startX, endX, sign }) {
+  const directions = [
+    { name: "left", from: startX, to: endX, sign },
+    { name: "right", from: endX, to: startX, sign: -sign },
+  ];
+  for (const direction of directions) {
+    const stepSign = Math.sign(direction.to - direction.from);
+    const stack = await elementStack(direction.from, y);
+    const inner = await dumpJson("[innerWidth, innerHeight]");
+    const before = await readYaw();
+    const swipes = [];
+    let previous = before;
+    for (let i = 0; i < SWEEP_SWIPES; i++) {
+      await drag(direction.from, y, direction.to, y, 7, 40);
+      const now = await readYaw();
+      swipes.push(wrapDegrees(now - previous));
+      previous = now;
+    }
+    const total = swipes.reduce((sum, delta) => sum + delta, 0);
+    // A new gesture must not jump the view: one 8 px move turns at most 8 px
+    // worth (~2.1 deg), never the distance from wherever the last one ended.
+    const jumpBefore = await readYaw();
+    const jumpId = await dragStart(direction.from, y);
+    await dragMove(jumpId, direction.from + 8 * stepSign, y);
+    const jumpNow = await readYaw();
+    const firstMoveDelta = wrapDegrees(jumpNow - jumpBefore);
+    await dragEnd(jumpId);
+
+    const data = {
+      viewport: label,
+      direction: direction.name,
+      gesture: { from: [direction.from, y], to: [direction.to, y], steps: 7, stepMs: 40, swipes: SWEEP_SWIPES },
+      inner,
+      startStack: stack,
+      yaw: { before: round3(before), after: round3(previous) },
+      swipes: swipes.map(round3),
+      total: round3(total),
+      firstMoveDelta: round3(firstMoveDelta),
+      thresholds: { perSwipe: SWEEP_PER_SWIPE_DEG, total: SWEEP_TOTAL_DEG, firstMove: SWEEP_FIRST_MOVE_DEG },
+    };
+    fs.mkdirSync(SWEEP_DIR, { recursive: true });
+    fs.writeFileSync(path.join(SWEEP_DIR, `touch-look-sweep-${label}-${direction.name}.json`), JSON.stringify(data, null, 2) + "\n");
+    report.lookSweeps.push(data);
+    console.log("  sweep " + label + " " + direction.name + ": " + JSON.stringify(data));
+
+    swipes.forEach((delta, index) => {
+      check(label + ": " + direction.name + " swipe " + (index + 1) + " of " + SWEEP_SWIPES + " turns >= " + SWEEP_PER_SWIPE_DEG + " deg",
+        direction.sign * delta >= SWEEP_PER_SWIPE_DEG,
+        { delta: round3(delta), expectedSign: direction.sign === 1 ? "+" : "-" });
+    });
+    check(label + ": " + SWEEP_SWIPES + " " + direction.name + " swipes sweep >= " + SWEEP_TOTAL_DEG + " deg",
+      direction.sign * total >= SWEEP_TOTAL_DEG,
+      { total: round3(total), swipes: swipes.map(round3) });
+    check(label + ": a new " + direction.name + " swipe does not jump the view",
+      Math.abs(firstMoveDelta) < SWEEP_FIRST_MOVE_DEG,
+      { firstMoveDelta: round3(firstMoveDelta), firstMovePx: 8 });
+  }
 }
 
 async function keyEvent(type, key, code, vk) {
@@ -854,6 +978,15 @@ async function run() {
   check("a vertical touch drag changes pitch", Math.abs(afterPitch.angles.pitch - beforePitch.angles.pitch) > 5,
     { from: beforePitch.angles.pitch, to: afterPitch.angles.pitch });
 
+  // The sweep: four identical same-direction swipes, then the mirror. A fresh
+  // level resets the virtual look cursor to the canvas centre, so the first
+  // swipe of each direction has its full 400 px of travel available.
+  stage = "look-sweep-844";
+  console.log("look sweep 844x390 (left/right)");
+  await navigate(baseUrl, "demo1");
+  await waitForGame("before the look sweep (844x390)");
+  await runLookSweep({ label: "844x390", y: 160, startX: 640, endX: 240, sign: 1 });
+
   // Thumbstick. A fresh level puts the player back at the spawn, where the
   // stick has open floor in every direction the test uses.
   await navigate(baseUrl, "demo1");
@@ -1121,6 +1254,13 @@ async function run() {
   const wideFire = await rect("#mc-fire");
   check("932x430: FIRE stays large and inside the viewport", wideFire.w >= 72 && wideFire.right <= wide.inner.w + 0.5 && wideFire.bottom <= wide.inner.h + 0.5, wideFire);
   await screenshot("landscape-932x430.png");
+
+  // The same sweep on the wider phone, in its own fresh level.
+  stage = "look-sweep-932";
+  console.log("look sweep 932x430 (left/right)");
+  await navigate(baseUrl, "demo1");
+  await waitForGame("before the look sweep (932x430)");
+  await runLookSweep({ label: "932x430", y: 170, startX: 700, endX: 300, sign: 1 });
 
   // The settings sheet must fit the wider phone too.
   await tapSelector("#mc-pause");
