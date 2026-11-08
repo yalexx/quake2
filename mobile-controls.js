@@ -253,18 +253,43 @@
   // turns by the difference between two events. The touch layer is the only
   // source of those events on a phone, so it keeps a virtual cursor here, in
   // page coordinates, and moves it by the finger's own delta.
+  //
+  // Measured on this build (844x390 and 932x430): a move turns by the distance
+  // from its *start* point to its destination, but only while the start point
+  // is inside the canvas (to within a few pixels of slack). A move that starts
+  // outside the canvas turns nothing and still becomes the engine's new
+  // reference point. So a swipe may carry the cursor past the canvas edge --
+  // the engine keeps turning, with no ceiling of one canvas width -- and the
+  // cursor is then handed back to the far side in two moves: a move that starts
+  // inside the canvas and turns in full, and a move to a point on the far side
+  // that starts outside and therefore turns nothing. The hand-off point has to
+  // clear the edge by LOOK_HANDOFF_PX so the engine cannot still count it as
+  // inside.
   var lookCursor = null; // { x, y } -- last position the canvas was told about
   var lookPointer = null;
   var lookLast = null;
+  // Finger travel taken since the cursor was last told to the canvas. It is
+  // held only while a move would stop just past the canvas edge, where the
+  // engine's own inside test is not known to the pixel: the next move (or the
+  // end of the gesture) carries it past the edge in one go, so no travel is
+  // lost and no turn is invented.
+  var lookPending = { x: 0, y: 0 };
+  var lookReSeats = 0; // hand-offs done (state() introspection)
+  var LOOK_EDGE_INSET = 2; // a plain move stays this far inside the canvas
+  var LOOK_HANDOFF_PX = 12; // a hand-off point clears the edge by at least this
+  var LOOK_SEAT_INSET = 24; // a re-seat lands this far inside the far edge
 
   function clampToCanvas(x, y) {
     var box = canvasBox();
     if (!box) return { x: x, y: y };
-    var inset = 2;
     return {
-      x: Math.min(Math.max(x, box.left + inset), box.right - inset),
-      y: Math.min(Math.max(y, box.top + inset), box.bottom - inset),
+      x: Math.min(Math.max(x, box.left + LOOK_EDGE_INSET), box.right - LOOK_EDGE_INSET),
+      y: Math.min(Math.max(y, box.top + LOOK_EDGE_INSET), box.bottom - LOOK_EDGE_INSET),
     };
+  }
+
+  function clampLookY(y, box) {
+    return Math.min(Math.max(y, box.top + LOOK_EDGE_INSET), box.bottom - LOOK_EDGE_INSET);
   }
 
   function sendMouseMove(x, y) {
@@ -317,13 +342,89 @@
   }
 
   // One aim step, shared by the look surface and a FIRE slide: move the
-  // virtual cursor by the finger's own delta and tell the canvas.
+  // virtual cursor by the finger's own delta and tell the canvas. Vertical
+  // travel stays clamped to the canvas exactly as before; horizontal travel is
+  // unbounded and is re-seated across the canvas instead of being clamped.
   function aimBy(dx, dy) {
     if (!dx && !dy) return;
     var cursor = lookCursor || primeLook(canvasCentre().x, canvasCentre().y);
-    var next = clampToCanvas(cursor.x + dx, cursor.y + dy);
-    lookCursor = next;
-    sendMouseMove(next.x, next.y);
+    var box = canvasBox();
+    if (!box) {
+      var stuck = clampToCanvas(cursor.x + dx, cursor.y + dy);
+      lookCursor = stuck;
+      sendMouseMove(stuck.x, stuck.y);
+      return;
+    }
+    lookPending.x += dx;
+    lookPending.y += dy;
+    var x = cursor.x + lookPending.x;
+    var y = clampLookY(cursor.y + lookPending.y, box);
+    if (x >= box.left + LOOK_EDGE_INSET && x <= box.right - LOOK_EDGE_INSET) {
+      lookCursor = { x: x, y: y };
+      lookPending.x = 0;
+      lookPending.y = 0;
+      sendMouseMove(x, y);
+      return;
+    }
+    if (x <= box.left - LOOK_HANDOFF_PX || x >= box.right + LOOK_HANDOFF_PX) {
+      handOff(x, y, box);
+      return;
+    }
+    // The move would stop just past the edge. Hold it: the next move carries
+    // it past the hand-off line, or flushLook() sends it when the gesture ends.
+  }
+
+  // Send the last move of a segment (it starts inside the canvas, so the
+  // engine turns by its full delta) and then a move back to the far side of
+  // the canvas (it starts outside, so the engine takes it as the new reference
+  // and turns nothing). Measured: the hand-off move contributed 0.0 deg yaw
+  // and 0.0 deg pitch at both sizes, with and without FIRE held, and the next
+  // move turned by exactly its own delta.
+  function handOff(x, y, box) {
+    sendMouseMove(x, y);
+    var seatX = x > box.right ? box.left + LOOK_SEAT_INSET : box.right - LOOK_SEAT_INSET;
+    lookCursor = { x: seatX, y: y };
+    lookPending.x = 0;
+    lookPending.y = 0;
+    lookReSeats += 1;
+    sendMouseMove(seatX, y);
+  }
+
+  // End of a gesture: tell the canvas about any travel an edge held back.
+  function flushLook() {
+    if (!lookPending.x && !lookPending.y) return;
+    var cursor = lookCursor;
+    if (!cursor) {
+      lookPending.x = 0;
+      lookPending.y = 0;
+      return;
+    }
+    var box = canvasBox();
+    if (!box) {
+      lookCursor = { x: cursor.x + lookPending.x, y: cursor.y + lookPending.y };
+      lookPending.x = 0;
+      lookPending.y = 0;
+      return;
+    }
+    var x = cursor.x + lookPending.x;
+    var y = clampLookY(cursor.y + lookPending.y, box);
+    lookPending.x = 0;
+    lookPending.y = 0;
+    if (x >= box.left + LOOK_EDGE_INSET && x <= box.right - LOOK_EDGE_INSET) {
+      lookCursor = { x: x, y: y };
+      sendMouseMove(x, y);
+      return;
+    }
+    var dir = x > box.right ? 1 : -1;
+    var handX = (dir > 0 ? box.right : box.left) + dir * LOOK_HANDOFF_PX;
+    if ((dir > 0 && x < handX) || (dir < 0 && x > handX)) {
+      // The stop landed between the edge and the hand-off line: this move
+      // clears it. It turns only if the engine still counted the stop as
+      // inside, and then by at most LOOK_HANDOFF_PX.
+      sendMouseMove(x, y);
+      x = handX;
+    }
+    handOff(x, y, box);
   }
 
   function lookMove(event) {
@@ -340,6 +441,7 @@
     if (lookPointer === null) return;
     lookPointer = null;
     lookLast = null;
+    flushLook();
     if (lookSurface) {
       lookSurface.classList.remove("is-looking");
       if (event && lookSurface.hasPointerCapture && lookSurface.hasPointerCapture(event.pointerId)) {
@@ -502,7 +604,7 @@
   }
 
   function actionUp(action) {
-    if (action === "fire") { fireDrag = null; fire(false); return; }
+    if (action === "fire") { fireDrag = null; flushLook(); fire(false); return; }
     if (action === "pause" || action === "weapon") return; // taps, not holds
     var descriptor = ACTION_KEYS[action];
     if (descriptor) holdKey(action, descriptor, false);
@@ -511,6 +613,7 @@
   function releaseAll() {
     releaseKeys();
     fireDrag = null;
+    flushLook();
     fire(false);
     stickPointer = null;
     if (knob) knob.style.transform = "translate(0px, 0px)";
@@ -978,6 +1081,8 @@
         weaponNote: Boolean(weaponNote && !weaponNote.hidden),
         lookActive: lookPointer !== null,
         lookCursor: lookCursor ? { x: lookCursor.x, y: lookCursor.y } : null,
+        lookPending: { x: lookPending.x, y: lookPending.y },
+        lookReSeats: lookReSeats,
         pointerLock: !!document.pointerLockElement,
       };
     },
