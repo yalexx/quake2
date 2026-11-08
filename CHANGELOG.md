@@ -117,6 +117,12 @@ exact size, sha256 and boot record are in `docs/release-1.2.4/README.md`;
 this changelog is inside the package, so it does not quote its own hash.
 Nothing was published.
 
+The 1.2.5 package passed the same 9/9 checks and was published to the ClawBox
+Store on 2026-11-08 as version 1.2.5, with 1.2 MiB to spare under the cap. It
+boots demo1 with cheats 0 in 3.4 s, pak0 and pak10 200, pak9 404, and no
+console errors. Measured size, sha256, the Store's own record and the boot
+screenshot are in `docs/release-1.2.5/store-package/README.md`.
+
 ## Load Game, an audited menu, HD + RTX by default, and a measured frame loop
 
 The owner's five reports, fixed in one tree, each with a command that proves it:

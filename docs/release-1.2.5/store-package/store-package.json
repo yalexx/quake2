@@ -1,0 +1,149 @@
+{
+  "at": "2026-11-08T12:56:34.131Z",
+  "version": "1.2.5",
+  "commit": "bbbab03c7bac6bf64041aa57119f8afbf533a712",
+  "leftOut": [
+    "/^docs\\//",
+    "/^assets\\//",
+    "/^baseq2\\/pak9\\.pak$/"
+  ],
+  "package": {
+    "files": 88,
+    "rawBytes": 71626522,
+    "bytes": 49958615,
+    "sha256": "708e1717b5d521936282670146b050bc2dcdd184b91b19e0fb23dc4e5ed27131",
+    "mtime": "2026-11-08T13:52:29+02:00",
+    "name": "quake2-store-1.2.5.tgz"
+  },
+  "boot": {
+    "url": "http://127.0.0.1:<port>/apps/quake-2/",
+    "port": 4471,
+    "bootMs": 3363,
+    "keyDest": 0,
+    "position": {
+      "x": 128.0625,
+      "y": -319.9375,
+      "z": 46.1875
+    },
+    "startup": [
+      "+set",
+      "vid_renderer",
+      "gles3",
+      "+set",
+      "r_retexturing",
+      "1",
+      "+set",
+      "gl3_usefbo",
+      "1",
+      "+set",
+      "r_mode",
+      "14",
+      "+set",
+      "cl_gun",
+      "1",
+      "+set",
+      "fov",
+      "90",
+      "+set",
+      "crosshair_scale",
+      "3",
+      "+map",
+      "demo1"
+    ],
+    "status": "Running...",
+    "screenshot": "docs/release-1.2.5/store-package/boot.png"
+  },
+  "checks": [
+    {
+      "name": "the package is under the Store's 50 MiB compressed cap",
+      "pass": true,
+      "detail": {
+        "bytes": 49958615,
+        "cap": 52428800
+      }
+    },
+    {
+      "name": "the package is under the Store's 256 MiB raw cap",
+      "pass": true,
+      "detail": {
+        "rawBytes": 71626522,
+        "cap": 268435456
+      }
+    },
+    {
+      "name": "the package carries pak0 and pak10 and leaves pak9 out",
+      "pass": true,
+      "detail": {
+        "pak0": true,
+        "pak10": true,
+        "pak9": false
+      }
+    },
+    {
+      "name": "the package is reproducible (a second build has the same sha256)",
+      "pass": true,
+      "detail": {
+        "first": "708e1717b5d521936282670146b050bc2dcdd184b91b19e0fb23dc4e5ed27131",
+        "second": "708e1717b5d521936282670146b050bc2dcdd184b91b19e0fb23dc4e5ed27131"
+      }
+    },
+    {
+      "name": "the extracted package has no docs/, assets/ or pak9",
+      "pass": true,
+      "detail": null
+    },
+    {
+      "name": "the package's server answers pak0 and pak10, and 404s the left-out pak9",
+      "pass": true,
+      "detail": {
+        "pak0.pak": {
+          "status": 200,
+          "bytes": 47498591
+        },
+        "pak10.pak": {
+          "status": 200,
+          "bytes": 13770565
+        },
+        "pak9.pak": {
+          "status": 404,
+          "bytes": null
+        }
+      }
+    },
+    {
+      "name": "the packaged app boots into a level with the keyboard in the game",
+      "pass": true,
+      "detail": {
+        "bootMs": 3363,
+        "position": {
+          "x": 128.0625,
+          "y": -319.9375,
+          "z": 46.1875
+        }
+      }
+    },
+    {
+      "name": "its start-up line is map demo1 with cheats 0",
+      "pass": true,
+      "detail": {
+        "startupTail": [
+          "crosshair_scale",
+          "3",
+          "+map",
+          "demo1"
+        ]
+      }
+    },
+    {
+      "name": "no console errors and no page exceptions",
+      "pass": true,
+      "detail": {
+        "consoleErrors": [],
+        "pageErrors": []
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [],
+  "passed": true
+}
