@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.6 — the icons are RGBA
+
+Every icon and favicon in the tree was committed as a 24-bit RGB PNG
+(colour type 2). The Store accepts only 8-bit RGBA, so the package and the
+in-app favicon build both refused it. All nine files are re-encoded as
+colour type 6 with identical pixels; no game code changed.
+
 ## 1.2.5 — the view turns all the way round
 
 The owner's report on 1.2.4: a drag on the picture turns the view only
